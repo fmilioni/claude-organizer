@@ -1,4 +1,4 @@
-import { desc, eq } from 'drizzle-orm'
+import { and, desc, eq } from 'drizzle-orm'
 import { z } from 'zod'
 
 import { createId, type Database, schema } from '@claude-organizer/db'
@@ -88,4 +88,29 @@ export async function listCardCommits(db: Database, cardId: string) {
       desc(schema.cardCommits.committedAt),
       desc(schema.cardCommits.createdAt)
     )
+}
+
+/**
+ * Fetch a single attached commit by sha — with its (possibly null) diff. When
+ * the same sha is attached to several cards, `cardId` narrows it; otherwise the
+ * first match is returned (the diff is identical across cards).
+ */
+export async function getCommitBySha(
+  db: Database,
+  sha: string,
+  cardId?: string
+) {
+  const [row] = await db
+    .select()
+    .from(schema.cardCommits)
+    .where(
+      cardId
+        ? and(
+            eq(schema.cardCommits.sha, sha),
+            eq(schema.cardCommits.cardId, cardId)
+          )
+        : eq(schema.cardCommits.sha, sha)
+    )
+    .limit(1)
+  return row ?? null
 }

@@ -7,6 +7,8 @@ import {
   destroyCard,
   getCard,
   getCardByKey,
+  getCommitBySha,
+  listCardCommits,
   listCards,
   moveCardToBacklog,
   moveCardToSprint,
@@ -16,6 +18,27 @@ import {
 import type { Database } from '@claude-organizer/db'
 
 import { asJson } from './index'
+
+// get_card/get_card_by_key embed the card's commits as METADATA only (no diff):
+// the agent has the local git and can `git show <sha>`, and a squashed PR commit
+// is fetched on demand via get_commit_diff. Built in the MCP layer so the shared
+// Card DTO (and the web payload) stay lean.
+async function withCommits(
+  db: Database,
+  card: Awaited<ReturnType<typeof getCard>>
+) {
+  if (!card) return card
+  const commits = (await listCardCommits(db, card.id)).map(c => ({
+    id: c.id,
+    sha: c.sha,
+    message: c.message,
+    stat: c.stat,
+    committedAt: c.committedAt,
+    authorName: c.authorName,
+    createdAt: c.createdAt
+  }))
+  return { ...card, commits }
+}
 
 const cardStatus = z.enum([
   'backlog',
@@ -57,7 +80,7 @@ export function registerCardTools(server: McpServer, db: Database) {
         'Get a single card by its internal id (crd_xxx) with full descriptionMd.',
       inputSchema: { id: z.string() }
     },
-    async ({ id }) => asJson(await getCard(db, id))
+    async ({ id }) => asJson(await withCommits(db, await getCard(db, id)))
   )
 
   server.registerTool(
@@ -67,7 +90,23 @@ export function registerCardTools(server: McpServer, db: Database) {
         'Get a single card by its human-readable key (e.g. \'CO-12\') with full descriptionMd.',
       inputSchema: { key: z.string() }
     },
-    async ({ key }) => asJson(await getCardByKey(db, key))
+    async ({ key }) => asJson(await withCommits(db, await getCardByKey(db, key)))
+  )
+
+  server.registerTool(
+    'get_commit_diff',
+    {
+      description:
+        'Get the stored diff of a commit attached to a card, by its sha (optionally narrowed by cardId). Use it when the commit is gone from local git (e.g. squashed on merge). Returns the commit metadata plus `diff`; `diff` is null when it was cleared on archive.',
+      inputSchema: {
+        sha: z.string(),
+        cardId: z
+          .string()
+          .optional()
+          .describe('Narrow to one card when the same sha is attached to several.')
+      }
+    },
+    async ({ sha, cardId }) => asJson(await getCommitBySha(db, sha, cardId))
   )
 
   server.registerTool(
