@@ -1,5 +1,6 @@
 export * from './archive'
 export * from './blockers'
+export * from './cardCommits'
 export * from './cards'
 export * from './comments'
 export * from './docs'

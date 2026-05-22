@@ -51,6 +51,18 @@ export interface CommentRow {
   createdAt: string
 }
 
+export interface CardCommitRow {
+  id: string
+  cardId: string
+  sha: string
+  message: string
+  stat: string | null
+  diff: string | null
+  committedAt: string | null
+  authorName: string | null
+  createdAt: string
+}
+
 export interface DocRow {
   id: string
   projectId: string
@@ -99,6 +111,7 @@ export interface RoadmapRow {
 export type Project = ProjectRow
 export type Roadmap = RoadmapRow
 export type Comment = CommentRow
+export type CardCommit = CardCommitRow
 
 /** Tag as embedded in cards or listed for a project (createdAt not surfaced). */
 export interface Tag {

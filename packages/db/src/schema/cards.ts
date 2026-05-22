@@ -9,6 +9,7 @@ import {
   uniqueIndex
 } from 'drizzle-orm/pg-core'
 
+import { cardCommits } from './cardCommits'
 import { comments } from './comments'
 import { cardStatusEnum } from './enums'
 import { projects } from './projects'
@@ -63,5 +64,6 @@ export const cardsRelations = relations(cards, ({ one, many }) => ({
     references: [sprints.id]
   }),
   tags: many(cardTags),
-  comments: many(comments)
+  comments: many(comments),
+  commits: many(cardCommits)
 }))

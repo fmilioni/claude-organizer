@@ -7,6 +7,7 @@
 import type { InferSelectModel } from 'drizzle-orm'
 
 import type {
+  CardCommitRow,
   CardRow,
   CardStatus,
   CommentAuthor,
@@ -21,6 +22,7 @@ import type {
 } from '@claude-organizer/shared'
 
 import {
+  cardCommits,
   cards,
   cardStatusEnum,
   commentAuthorEnum,
@@ -59,6 +61,7 @@ export type SchemaConformance = [
   Assert<Equal<CardRow, Wire<InferSelectModel<typeof cards>>>>,
   Assert<Equal<SprintRow, Wire<InferSelectModel<typeof sprints>>>>,
   Assert<Equal<CommentRow, Wire<InferSelectModel<typeof comments>>>>,
+  Assert<Equal<CardCommitRow, Wire<InferSelectModel<typeof cardCommits>>>>,
   Assert<Equal<DocRow, Wire<Omit<InferSelectModel<typeof docs>, 'bodyTsv'>>>>,
   Assert<Equal<ProjectRow, Wire<InferSelectModel<typeof projects>>>>,
   Assert<Equal<TagRow, Wire<InferSelectModel<typeof tags>>>>,

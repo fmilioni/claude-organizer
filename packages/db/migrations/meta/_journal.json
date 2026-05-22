@@ -71,6 +71,13 @@
       "when": 1779406087679,
       "tag": "0009_thick_warpath",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1779456895868,
+      "tag": "0010_gigantic_shape",
+      "breakpoints": true
     }
   ]
 }

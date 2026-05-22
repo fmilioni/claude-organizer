@@ -7,6 +7,7 @@ import { createDb } from '@claude-organizer/db'
 import errorHandlerPlugin from './plugins/error-handler'
 import eventsPlugin from './plugins/events'
 import { registerBlockerRoutes } from './routes/blockers'
+import { registerCardCommitRoutes } from './routes/cardCommits'
 import { registerCardRoutes } from './routes/cards'
 import { registerCommentRoutes } from './routes/comments'
 import { registerDocRoutes } from './routes/docs'
@@ -44,6 +45,7 @@ app.decorate('db', db)
 registerProjectRoutes(app, db)
 registerSprintRoutes(app, db)
 registerCardRoutes(app, db)
+registerCardCommitRoutes(app, db)
 registerCommentRoutes(app, db)
 registerTagRoutes(app, db)
 registerBlockerRoutes(app, db)

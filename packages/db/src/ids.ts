@@ -9,6 +9,7 @@ export const idPrefixes = {
   sprint: 'spr',
   card: 'crd',
   comment: 'cmt',
+  commit: 'ccm',
   tag: 'tag',
   doc: 'doc'
 } as const
