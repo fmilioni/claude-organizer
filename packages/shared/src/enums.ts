@@ -24,3 +24,6 @@ export type CommentAuthor = (typeof COMMENT_AUTHORS)[number]
 
 export const DOC_KINDS = ['module', 'adr', 'guide', 'note'] as const
 export type DocKind = (typeof DOC_KINDS)[number]
+
+export const REPO_PROVIDERS = ['github', 'gitlab'] as const
+export type RepoProvider = (typeof REPO_PROVIDERS)[number]

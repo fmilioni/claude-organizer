@@ -1,4 +1,10 @@
-import type { CardStatus, CommentAuthor, DocKind, SprintStatus } from './enums'
+import type {
+  CardStatus,
+  CommentAuthor,
+  DocKind,
+  RepoProvider,
+  SprintStatus
+} from './enums'
 
 /*
  * Persisted-row types, in API wire form: timestamps are ISO `string`s (what the
@@ -84,6 +90,8 @@ export interface ProjectRow {
   description: string | null
   keyPrefix: string
   nextKeySeq: number
+  repoProvider: RepoProvider | null
+  repoWebUrl: string | null
   createdAt: string
   updatedAt: string
   archivedAt: string | null

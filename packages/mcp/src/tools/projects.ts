@@ -8,6 +8,7 @@ import {
   getProjectBySlug,
   listProjects,
   restoreProject,
+  setProjectRepo,
   updateProjectKeyPrefix
 } from '@claude-organizer/core'
 import type { Database } from '@claude-organizer/db'
@@ -120,5 +121,23 @@ export function registerProjectTools(server: McpServer, db: Database) {
     },
     async ({ projectId, confirmSlug }) =>
       asJson(await destroyProject(db, projectId, confirmSlug))
+  )
+
+  server.registerTool(
+    'set_project_repo',
+    {
+      description:
+        'Set (or clear) the project\'s source repository so commit hashes link to the provider\'s commit page. Pass `provider` (github|gitlab) + `repoWebUrl` (e.g. https://github.com/owner/repo), or null on both to clear. The skill calls this after detecting the git remote.',
+      inputSchema: {
+        projectId: z.string(),
+        provider: z.enum(['github', 'gitlab']).nullable(),
+        repoWebUrl: z
+          .url()
+          .nullable()
+          .describe('Repo web base, e.g. https://github.com/owner/repo (no .git).')
+      }
+    },
+    async ({ projectId, provider, repoWebUrl }) =>
+      asJson(await setProjectRepo(db, { projectId, provider, repoWebUrl }))
   )
 }

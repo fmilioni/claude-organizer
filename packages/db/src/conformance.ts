@@ -15,6 +15,7 @@ import type {
   DocKind,
   DocRow,
   ProjectRow,
+  RepoProvider,
   RoadmapRow,
   SprintRow,
   SprintStatus,
@@ -30,6 +31,7 @@ import {
   docKindEnum,
   docs,
   projects,
+  repoProviderEnum,
   roadmaps,
   sprints,
   sprintStatusEnum,
@@ -69,5 +71,6 @@ export type SchemaConformance = [
   Assert<Equal<CardStatus, (typeof cardStatusEnum.enumValues)[number]>>,
   Assert<Equal<SprintStatus, (typeof sprintStatusEnum.enumValues)[number]>>,
   Assert<Equal<CommentAuthor, (typeof commentAuthorEnum.enumValues)[number]>>,
-  Assert<Equal<DocKind, (typeof docKindEnum.enumValues)[number]>>
+  Assert<Equal<DocKind, (typeof docKindEnum.enumValues)[number]>>,
+  Assert<Equal<RepoProvider, (typeof repoProviderEnum.enumValues)[number]>>
 ]

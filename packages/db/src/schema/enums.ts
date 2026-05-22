@@ -24,3 +24,5 @@ export const docKindEnum = pgEnum('doc_kind', [
   'guide',
   'note'
 ])
+
+export const repoProviderEnum = pgEnum('repo_provider', ['github', 'gitlab'])

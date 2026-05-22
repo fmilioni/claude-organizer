@@ -2,6 +2,7 @@ import { eq, sql } from 'drizzle-orm'
 import { z } from 'zod'
 
 import { createId, type Database, schema } from '@claude-organizer/db'
+import { REPO_PROVIDERS } from '@claude-organizer/shared'
 
 import { archivedCondition, type ArchiveFilter } from './archive'
 import { InputError } from './errors'
@@ -127,6 +128,36 @@ export async function updateProjectKeyPrefix(
     .update(schema.projects)
     .set({ keyPrefix: newPrefix, updatedAt: sql`now()` })
     .where(eq(schema.projects.id, projectId))
+    .returning()
+  if (row) await notify(db, { type: 'project.changed', projectId: row.id })
+  return row ?? null
+}
+
+export const setProjectRepoInput = z.object({
+  projectId: z.string(),
+  provider: z.enum(REPO_PROVIDERS).nullable(),
+  repoWebUrl: z
+    .url()
+    .transform(u => u.replace(/\.git$/, '').replace(/\/+$/, ''))
+    .nullable()
+})
+export type SetProjectRepoInput = z.input<typeof setProjectRepoInput>
+
+/**
+ * Point a project at its source repository (or clear it with nulls) so the web
+ * can link a commit hash to the provider's commit page. The claude-organizer
+ * skill detects the git remote and calls this; there is no manual edit UI yet.
+ */
+export async function setProjectRepo(db: Database, input: SetProjectRepoInput) {
+  const parsed = setProjectRepoInput.parse(input)
+  const [row] = await db
+    .update(schema.projects)
+    .set({
+      repoProvider: parsed.provider,
+      repoWebUrl: parsed.repoWebUrl,
+      updatedAt: sql`now()`
+    })
+    .where(eq(schema.projects.id, parsed.projectId))
     .returning()
   if (row) await notify(db, { type: 'project.changed', projectId: row.id })
   return row ?? null
