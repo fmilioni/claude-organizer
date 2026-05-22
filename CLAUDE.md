@@ -37,7 +37,9 @@ overrides below, and points to the docs for the rest.
   follows the user's language.
 - **Commits**: one commit per card/task, **only after the user confirms** it
   works; the message is written **in English** and references the key (e.g.
-  `feat(tags): … (CO-4)`).
+  `feat(tags): … (CO-4)`). After committing, attach its diff to the card with
+  `pnpm attach-commit <sha>` (captured outside the AI context — never read or
+  paste the diff).
 - **Versioning**: every version (each `package.json`, the plugin manifests and
   the MCP server) stays in sync — to set it, run `pnpm bump <version>` (the
   unified bump script); never edit version fields by hand.

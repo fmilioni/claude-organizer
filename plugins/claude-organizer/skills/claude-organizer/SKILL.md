@@ -44,7 +44,8 @@ Comments routinely carry the decisive context: a card may be flagged _"consolida
 3. **Glance at the docs, then implement.** Scan the docs tree and read what's pertinent to this card's area — the relevant `module`, an `adr` that affects it, a `note` that might carry a constraint. Don't read unrelated docs (a back-end note for a front-end card), but do decide what's worth opening — important context often lives only there.
 4. **`add_comment(cardId, ...)`** to record what carries **signal** — decisions, scope changes, deviations (see _Comments_). This is the project's memory for the next session.
 5. **`set_card_status(id, "review")`** when you believe it's done — and post a **test plan** comment (see below). Then **wait for the user to validate**. Don't self-approve.
-6. **`set_card_status(id, "done")`** only after the user confirms.
+6. **Attach the commit's diff** — right after the commit lands (one commit per card, key in the message) and the user has confirmed. Run the project's capture script with the hash; this repo exposes `pnpm attach-commit <sha>` (or `python3 scripts/attach-commit.py <sha>`). It runs `git show` and POSTs the diff straight to the API, so the card's **Changes** section shows what it produced. The diff is captured **outside your context on purpose** — **never read it or paste it into a comment** (it would burn tokens and add noise; see _Comments_). Skip only if the project wires no such script.
+7. **`set_card_status(id, "done")`** only after the user confirms.
 
 ## Git — agree on the flow before you start
 
