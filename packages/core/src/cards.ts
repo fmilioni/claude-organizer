@@ -167,8 +167,8 @@ export async function createCard(db: Database, input: CreateCardInput) {
         title: parsed.title,
         summary: parsed.summary,
         descriptionMd: parsed.descriptionMd,
-        // A card with no sprint lands in the backlog (its own status); a card
-        // created straight into a sprint starts in `todo`.
+        // A card with no sprint lands in the backlog (its own status); one
+        // created straight into a sprint starts on the board instead.
         status: parsed.status ?? (parsed.sprintId ? 'todo' : 'backlog'),
         priority: parsed.priority ?? 0,
         dueDate: parsed.dueDate
