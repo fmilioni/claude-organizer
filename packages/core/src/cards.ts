@@ -277,6 +277,12 @@ export async function archiveCard(db: Database, id: string) {
     .where(eq(schema.cards.id, id))
     .returning()
   if (row) {
+    // Free the heavy diff blobs; keep the commit metadata (hash, message,
+    // stat…). Restoring does NOT bring the diff back — re-run attach-commit.
+    await db
+      .update(schema.cardCommits)
+      .set({ diff: null })
+      .where(eq(schema.cardCommits.cardId, id))
     await notify(db, {
       type: 'card.changed',
       projectId: row.projectId,

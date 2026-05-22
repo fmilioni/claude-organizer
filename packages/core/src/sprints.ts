@@ -1,4 +1,4 @@
-import { and, eq, isNull, sql } from 'drizzle-orm'
+import { and, eq, inArray, isNull, sql } from 'drizzle-orm'
 import { z } from 'zod'
 
 import { createId, type Database, schema } from '@claude-organizer/db'
@@ -114,6 +114,20 @@ export async function archiveSprint(db: Database, id: string) {
     .where(eq(schema.sprints.id, id))
     .returning()
   if (row) {
+    // Drop the diffs of every commit on this sprint's cards (the cards stay
+    // active; only the heavy blobs go). Re-run attach-commit to restore one.
+    await db
+      .update(schema.cardCommits)
+      .set({ diff: null })
+      .where(
+        inArray(
+          schema.cardCommits.cardId,
+          db
+            .select({ id: schema.cards.id })
+            .from(schema.cards)
+            .where(eq(schema.cards.sprintId, id))
+        )
+      )
     await notify(db, {
       type: 'sprint.changed',
       projectId: row.projectId,
