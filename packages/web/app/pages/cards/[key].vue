@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { Card, CardStatus } from '~/types/card'
 import { cardStatusMeta, cardStatusSelectOrder } from '~/types/card'
+import type { CardCommit } from '~/types/cardCommit'
 import type { Comment } from '~/types/comment'
 import type { Sprint } from '~/types/sprint'
 import type { Tag } from '~/types/tag'
@@ -26,6 +27,7 @@ function goBack() {
 
 const card = ref<Card | null>(null)
 const comments = ref<Comment[]>([])
+const commits = ref<CardCommit[]>([])
 const sprints = ref<Sprint[]>([])
 const allCards = ref<Card[]>([])
 const cardLoading = ref(true)
@@ -46,6 +48,10 @@ async function fetchComments(cardId: string) {
   })
 }
 
+async function fetchCommits(cardId: string) {
+  return api<CardCommit[]>(`/cards/${cardId}/commits`)
+}
+
 async function fetchSprints(projectId: string) {
   return api<Sprint[]>('/sprints', { query: { projectId } })
 }
@@ -62,11 +68,13 @@ async function loadCard() {
   const fresh = await fetchCard()
   card.value = fresh
   if (fresh) {
-    [comments.value, sprints.value, allCards.value] = await Promise.all([
-      fetchComments(fresh.id),
-      fetchSprints(fresh.projectId),
-      fetchProjectCards(fresh.projectId)
-    ])
+    [comments.value, commits.value, sprints.value, allCards.value]
+      = await Promise.all([
+        fetchComments(fresh.id),
+        fetchCommits(fresh.id),
+        fetchSprints(fresh.projectId),
+        fetchProjectCards(fresh.projectId)
+      ])
   }
   cardLoading.value = false
 }
@@ -82,6 +90,11 @@ async function refreshCard() {
 async function refreshComments() {
   if (!card.value) return
   comments.value = await fetchComments(card.value.id)
+}
+
+async function refreshCommits() {
+  if (!card.value) return
+  commits.value = await fetchCommits(card.value.id)
 }
 
 useProjectData(() => card.value?.projectId ?? null, loadCard, {
@@ -101,6 +114,11 @@ useProjectData(() => card.value?.projectId ?? null, loadCard, {
       && event.cardId === card.value.id
     ) {
       refreshComments()
+    } else if (
+      event.type === 'commit.changed'
+      && event.cardId === card.value.id
+    ) {
+      refreshCommits()
     } else if (event.type === 'project.changed') {
       refreshCard()
     }
@@ -323,6 +341,28 @@ function authorLabel(author: 'ai' | 'user') {
 function formatDate(iso: string) {
   return new Date(iso).toLocaleString()
 }
+
+// Each commit's diff starts collapsed; clicking the header toggles it.
+const expandedCommits = ref(new Set<string>())
+function toggleCommit(id: string) {
+  const next = new Set(expandedCommits.value)
+  if (next.has(id)) next.delete(id)
+  else next.add(id)
+  expandedCommits.value = next
+}
+function shortSha(sha: string) {
+  return sha.slice(0, 8)
+}
+function commitSubject(message: string) {
+  return message.split('\n', 1)[0] ?? ''
+}
+// Last line of `git --stat` ("N files changed, …") — a compact summary for the
+// collapsed row; the full stat shows when expanded.
+function statSummary(stat: string | null) {
+  if (!stat) return ''
+  const lines = stat.trim().split('\n')
+  return lines[lines.length - 1]?.trim() ?? ''
+}
 </script>
 
 <template>
@@ -445,6 +485,59 @@ function formatDate(iso: string) {
               placeholder="No description. Click to edit."
               editor-placeholder="Write a description… (markdown supported)"
             />
+          </section>
+
+          <section v-if="commits.length">
+            <h2 class="text-xs font-semibold text-muted uppercase tracking-wide mb-3">
+              Changes
+              <span class="text-default ml-1">({{ commits.length }})</span>
+            </h2>
+            <ul class="space-y-2">
+              <li
+                v-for="c in commits"
+                :key="c.id"
+                class="border border-default rounded-md overflow-hidden"
+              >
+                <button
+                  type="button"
+                  class="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-elevated/50 transition"
+                  @click="toggleCommit(c.id)"
+                >
+                  <UIcon
+                    :name="expandedCommits.has(c.id) ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'"
+                    class="shrink-0 text-muted"
+                  />
+                  <span class="font-mono text-xs font-semibold text-primary shrink-0">
+                    {{ shortSha(c.sha) }}
+                  </span>
+                  <span class="min-w-0 flex-1 truncate text-sm">
+                    {{ commitSubject(c.message) }}
+                  </span>
+                  <span
+                    v-if="statSummary(c.stat)"
+                    class="hidden sm:block text-xs text-muted/70 shrink-0 font-mono"
+                  >
+                    {{ statSummary(c.stat) }}
+                  </span>
+                  <span
+                    v-if="c.committedAt"
+                    class="text-xs text-muted/70 shrink-0"
+                  >
+                    {{ formatDate(c.committedAt) }}
+                  </span>
+                </button>
+                <div
+                  v-if="expandedCommits.has(c.id)"
+                  class="border-t border-default p-3 space-y-3"
+                >
+                  <pre
+                    v-if="c.stat"
+                    class="text-xs font-mono text-muted whitespace-pre overflow-x-auto"
+                  >{{ c.stat }}</pre>
+                  <DiffView v-if="c.diff" :diff="c.diff" />
+                </div>
+              </li>
+            </ul>
           </section>
 
           <section v-if="!card.parentId">
