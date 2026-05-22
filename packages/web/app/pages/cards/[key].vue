@@ -356,13 +356,21 @@ function shortSha(sha: string) {
 function commitSubject(message: string) {
   return message.split('\n', 1)[0] ?? ''
 }
-// Last line of `git --stat` ("N files changed, …") — a compact summary for the
-// collapsed row; the full stat shows when expanded.
-function statSummary(stat: string | null) {
-  if (!stat) return ''
-  const lines = stat.trim().split('\n')
-  return lines[lines.length - 1]?.trim() ?? ''
+// Parse the last line of `git --stat` ("N files changed, X insertions(+), Y
+// deletions(-)") into counts for the GitHub-style badges on the collapsed row.
+function parseStat(stat: string | null) {
+  const lines = (stat ?? '').trim().split('\n')
+  const last = lines[lines.length - 1] ?? ''
+  const num = (re: RegExp) => Number(last.match(re)?.[1] ?? 0)
+  return {
+    files: num(/(\d+) files? changed/),
+    additions: num(/(\d+) insertions?\(\+\)/),
+    deletions: num(/(\d+) deletions?\(-\)/)
+  }
 }
+const commitStats = computed(() =>
+  Object.fromEntries(commits.value.map(c => [c.id, parseStat(c.stat)]))
+)
 </script>
 
 <template>
@@ -513,11 +521,18 @@ function statSummary(stat: string | null) {
                   <span class="min-w-0 flex-1 truncate text-sm">
                     {{ commitSubject(c.message) }}
                   </span>
-                  <span
-                    v-if="statSummary(c.stat)"
-                    class="hidden sm:block text-xs text-muted/70 shrink-0 font-mono"
-                  >
-                    {{ statSummary(c.stat) }}
+                  <span class="hidden sm:flex items-center gap-1.5 shrink-0 font-mono text-xs">
+                    <span v-if="commitStats[c.id]?.files" class="text-muted/70">
+                      {{ commitStats[c.id]?.files }} {{ commitStats[c.id]?.files === 1 ? "file" : "files" }}
+                    </span>
+                    <span
+                      v-if="commitStats[c.id]?.additions"
+                      class="text-success bg-success/10 rounded px-1"
+                    >+{{ commitStats[c.id]?.additions }}</span>
+                    <span
+                      v-if="commitStats[c.id]?.deletions"
+                      class="text-error bg-error/10 rounded px-1"
+                    >-{{ commitStats[c.id]?.deletions }}</span>
                   </span>
                   <span
                     v-if="c.committedAt"
@@ -528,12 +543,8 @@ function statSummary(stat: string | null) {
                 </button>
                 <div
                   v-if="expandedCommits.has(c.id)"
-                  class="border-t border-default p-3 space-y-3"
+                  class="border-t border-default p-3"
                 >
-                  <pre
-                    v-if="c.stat"
-                    class="text-xs font-mono text-muted whitespace-pre overflow-x-auto"
-                  >{{ c.stat }}</pre>
                   <DiffView v-if="c.diff" :diff="c.diff" />
                 </div>
               </li>
