@@ -19,7 +19,7 @@
     "dev:mcp": "pnpm --filter @claude-organizer/mcp dev",
     "dev": "pnpm db:up && pnpm -r --parallel --filter './packages/*' dev",
     "build": "pnpm -r build",
-    "attach-commit": "node scripts/attach-commit.mjs",
+    "attach-commit": "node plugins/claude-organizer/skills/claude-organizer/scripts/attach-commit.mjs",
     "bump": "node scripts/bump-version.mjs",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm --filter @claude-organizer/core test",
