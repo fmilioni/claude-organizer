@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { buildCommitUrl } from '@claude-organizer/shared'
+
 import type { Card, CardStatus } from '~/types/card'
 import { cardStatusMeta, cardStatusSelectOrder } from '~/types/card'
 import type { CardCommit } from '~/types/cardCommit'
@@ -371,6 +373,27 @@ function parseStat(stat: string | null) {
 const commitStats = computed(() =>
   Object.fromEntries(commits.value.map(c => [c.id, parseStat(c.stat)]))
 )
+
+const projectStore = useProjectStore()
+const cardProject = computed(
+  () => projectStore.projects.find(p => p.id === card.value?.projectId) ?? null
+)
+// The hash links to the provider's commit page when the project has a repo
+// configured (the skill sets it); buildCommitUrl returns null otherwise.
+function commitUrl(sha: string) {
+  return buildCommitUrl(
+    cardProject.value?.repoProvider ?? null,
+    cardProject.value?.repoWebUrl ?? null,
+    sha
+  )
+}
+// mdi glyph for the configured provider — monochrome (currentColor), so it
+// follows the link color and stays visible in dark mode.
+const providerIcon = computed(() =>
+  cardProject.value?.repoProvider === 'gitlab'
+    ? 'i-mdi-gitlab'
+    : 'i-mdi-github'
+)
 </script>
 
 <template>
@@ -506,18 +529,34 @@ const commitStats = computed(() =>
                 :key="c.id"
                 class="border border-default rounded-md overflow-hidden"
               >
-                <button
-                  type="button"
-                  class="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-elevated/50 transition"
+                <div
+                  role="button"
+                  tabindex="0"
+                  class="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-elevated/50 transition cursor-pointer"
                   @click="toggleCommit(c.id)"
+                  @keydown.enter.prevent="toggleCommit(c.id)"
+                  @keydown.space.prevent="toggleCommit(c.id)"
                 >
                   <UIcon
                     :name="expandedCommits.has(c.id) ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'"
                     class="shrink-0 text-muted"
                   />
-                  <span class="font-mono text-xs font-semibold text-primary shrink-0">
+                  <a
+                    v-if="commitUrl(c.sha)"
+                    :href="commitUrl(c.sha)!"
+                    target="_blank"
+                    rel="noopener"
+                    class="font-mono text-xs font-semibold text-primary shrink-0 inline-flex items-center gap-1 hover:underline"
+                    :title="`Open commit on ${cardProject?.repoProvider}`"
+                    @click.stop
+                  >
                     {{ shortSha(c.sha) }}
-                  </span>
+                    <UIcon :name="providerIcon" class="size-3.5" />
+                  </a>
+                  <span
+                    v-else
+                    class="font-mono text-xs font-semibold text-primary shrink-0"
+                  >{{ shortSha(c.sha) }}</span>
                   <span class="min-w-0 flex-1 truncate text-sm">
                     {{ commitSubject(c.message) }}
                   </span>
@@ -540,12 +579,16 @@ const commitStats = computed(() =>
                   >
                     {{ formatDate(c.committedAt) }}
                   </span>
-                </button>
+                </div>
                 <div
                   v-if="expandedCommits.has(c.id)"
                   class="border-t border-default p-3"
                 >
                   <DiffView v-if="c.diff" :diff="c.diff" />
+                  <p v-else class="text-xs text-muted italic">
+                    Diff not stored (cleared when the card or sprint was archived).
+                    {{ commitUrl(c.sha) ? "Open it on the provider via the hash above" : "Re-run attach-commit" }} to see the changes.
+                  </p>
                 </div>
               </li>
             </ul>
