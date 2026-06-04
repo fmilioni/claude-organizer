@@ -131,12 +131,25 @@ export function useAutoSave<T extends { id: string }, K extends string>(
     }, debounceMs)
   }
 
+  // Persist any pending edit immediately, skipping the debounce — for when the
+  // editor is dismissed (blur/click-outside) before the timer fires. `save`
+  // captures the entity synchronously, so the caller may detach it right after.
+  function flush() {
+    if (debounceTimer) {
+      clearTimeout(debounceTimer)
+      debounceTimer = null
+    }
+    const body = buildDirty()
+    if (body) void save(body)
+  }
+
   watch(() => configs.map(({ key }) => editing[key]), scheduleSave)
 
   return {
     editing: editing as Record<K, string>,
     saving,
     justSaved,
-    save
+    save,
+    flush
   }
 }

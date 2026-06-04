@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useProjectStore } from '~/stores/project'
-import type { IntakeItem } from '~/types/intake'
+import type { IntakeItem, IntakeStatus } from '~/types/intake'
 
 const store = useProjectStore()
 const { currentProject, currentProjectId } = storeToRefs(store)
@@ -18,17 +18,37 @@ const adding = ref(false)
 // out of the reloaded lists so a realtime echo can't clobber an in-flight edit.
 const current = ref<IntakeItem | null>(null)
 
-const { editing, saving, justSaved } = useAutoSave<IntakeItem, 'bodyMd'>(
+const { editing, saving, justSaved, flush } = useAutoSave<IntakeItem, 'bodyMd'>(
   current,
   {
     resource: 'intake',
-    fields: ['bodyMd'],
+    // `required`: a blank body is never PATCHed (the API rejects min(1)); the
+    // inline hint tells the user to archive/destroy instead of emptying it.
+    fields: [{ key: 'bodyMd', mode: 'required' }],
     onSaved: (updated) => {
       const item = pending.value.find(i => i.id === updated.id)
       if (item) item.bodyMd = updated.bodyMd
     }
   }
 )
+
+function startEdit(item: IntakeItem) {
+  current.value = item
+  editing.bodyMd = item.bodyMd ?? ''
+}
+function stopEdit() {
+  // Force the pending save before detaching: click-outside often lands inside
+  // the 800ms debounce window, and nulling `current` first would strand the edit.
+  flush()
+  current.value = null
+}
+const bodyModel = (item: IntakeItem) =>
+  current.value?.id === item.id ? editing.bodyMd : (item.bodyMd ?? '')
+function onBodyInput(item: IntakeItem, value: string) {
+  if (current.value?.id === item.id) editing.bodyMd = value
+}
+const isEmptyEdit = (item: IntakeItem) =>
+  current.value?.id === item.id && !editing.bodyMd.trim()
 
 async function loadInbox() {
   if (!currentProjectId.value) {
@@ -83,13 +103,9 @@ function onQuickAddKeydown(e: KeyboardEvent) {
   }
 }
 
-async function archiveItem(id: string) {
-  if (current.value?.id === id) current.value = null
-  await api(`/intake/${id}`, { method: 'PATCH', body: { status: 'archived' } })
-  await loadInbox()
-}
-async function restoreItem(id: string) {
-  await api(`/intake/${id}`, { method: 'PATCH', body: { status: 'pending' } })
+async function setStatus(id: string, status: IntakeStatus) {
+  if (current.value?.id === id) stopEdit()
+  await api(`/intake/${id}`, { method: 'PATCH', body: { status } })
   await loadInbox()
 }
 
@@ -142,14 +158,11 @@ const plannedKeys = (item: IntakeItem) =>
       </div>
 
       <div v-else class="max-w-3xl mx-auto w-full space-y-6">
-        <div class="space-y-2">
-          <UTextarea
+        <div class="space-y-2" @keydown="onQuickAddKeydown">
+          <MarkdownEditor
             v-model="newBody"
-            :rows="3"
-            autoresize
-            class="w-full"
-            placeholder="Capture a raw demand… (markdown supported, ⌘/Ctrl+Enter to add)"
-            @keydown="onQuickAddKeydown"
+            min-height="80px"
+            placeholder="Capture a raw demand… (markdown, ⌘/Ctrl+Enter to add)"
           />
           <div class="flex justify-end">
             <UButton
@@ -170,94 +183,87 @@ const plannedKeys = (item: IntakeItem) =>
           <div v-if="!pending.length" class="text-sm text-muted/60 italic">
             No pending demands. Capture one above.
           </div>
-          <UCard
+          <div
             v-for="item in pending"
             :key="item.id"
-            :ui="{ body: 'sm:p-4' }"
+            class="group relative"
           >
-            <div class="flex items-start gap-2">
-              <div class="flex-1 min-w-0">
-                <MarkdownEditor
-                  v-if="current?.id === item.id"
-                  v-model="editing.bodyMd"
-                  autofocus
-                  min-height="80px"
-                  placeholder="Describe the demand… (markdown)"
-                />
-                <div
-                  v-else
-                  class="cursor-text rounded-md px-3 py-2 min-h-10 hover:bg-elevated/30"
-                  @click="current = item"
-                >
-                  <AppMarkdown v-if="item.bodyMd" :value="item.bodyMd" />
-                  <span v-else class="text-sm text-muted/50 italic">Empty demand</span>
-                </div>
-              </div>
-              <div class="flex items-center gap-0.5 shrink-0">
-                <UButton
-                  v-if="current?.id === item.id"
-                  icon="i-lucide-check"
-                  size="xs"
-                  color="neutral"
-                  variant="ghost"
-                  aria-label="Done editing"
-                  @click="current = null"
-                />
-                <UButton
-                  icon="i-lucide-archive"
-                  size="xs"
-                  color="neutral"
-                  variant="ghost"
-                  aria-label="Archive"
-                  @click="archiveItem(item.id)"
-                />
-                <UButton
-                  icon="i-lucide-trash-2"
-                  size="xs"
-                  color="neutral"
-                  variant="ghost"
-                  aria-label="Destroy"
-                  @click="destroyTarget = item"
-                />
-              </div>
+            <InlineEditable
+              type="markdown"
+              bordered
+              min-height="80px"
+              placeholder="Empty demand"
+              editor-placeholder="Describe the demand… (markdown)"
+              :model-value="bodyModel(item)"
+              @update:model-value="(v: string) => onBodyInput(item, v)"
+              @edit-start="startEdit(item)"
+              @edit-stop="stopEdit"
+            />
+            <p v-if="isEmptyEdit(item)" class="mt-1.5 text-xs text-error">
+              A demand can't be empty — archive or destroy it instead.
+            </p>
+            <div
+              v-if="current?.id !== item.id"
+              class="absolute top-2 right-2 flex items-center gap-0.5 rounded-md bg-default/80 backdrop-blur-sm opacity-0 transition group-hover:opacity-100 focus-within:opacity-100"
+            >
+              <UButton
+                icon="i-lucide-archive"
+                size="xs"
+                color="neutral"
+                variant="ghost"
+                aria-label="Archive"
+                @click="setStatus(item.id, 'archived')"
+              />
+              <UButton
+                icon="i-lucide-trash-2"
+                size="xs"
+                color="neutral"
+                variant="ghost"
+                aria-label="Destroy"
+                @click="destroyTarget = item"
+              />
             </div>
-          </UCard>
+          </div>
         </div>
 
         <div v-if="planned.length" class="space-y-2">
           <h2 class="text-xs font-semibold uppercase text-muted tracking-wide">
             Planned ({{ planned.length }})
           </h2>
-          <UCard v-for="item in planned" :key="item.id" :ui="{ body: 'sm:p-4' }">
-            <div class="flex items-start gap-2">
-              <div class="flex-1 min-w-0 space-y-1.5">
-                <AppMarkdown :value="item.bodyMd" class="text-sm" />
-                <div class="flex items-center gap-1.5 text-xs text-muted">
-                  <UBadge color="success" variant="subtle" size="sm" label="Planned" />
-                  <span>→</span>
-                  <AppMarkdown :value="plannedKeys(item)" />
-                </div>
-              </div>
-              <div class="flex items-center gap-0.5 shrink-0">
-                <UButton
-                  icon="i-lucide-archive"
-                  size="xs"
-                  color="neutral"
-                  variant="ghost"
-                  aria-label="Archive"
-                  @click="archiveItem(item.id)"
-                />
-                <UButton
-                  icon="i-lucide-trash-2"
-                  size="xs"
-                  color="neutral"
-                  variant="ghost"
-                  aria-label="Destroy"
-                  @click="destroyTarget = item"
-                />
+          <div
+            v-for="item in planned"
+            :key="item.id"
+            class="group relative rounded-md border border-default px-3 py-2"
+          >
+            <div class="space-y-1.5 pr-14">
+              <AppMarkdown :value="item.bodyMd" :class="PROSE" />
+              <div class="flex items-center gap-1.5 text-xs text-muted">
+                <UBadge color="success" variant="subtle" size="sm" label="Planned" />
+                <span>→</span>
+                <AppMarkdown :value="plannedKeys(item)" />
               </div>
             </div>
-          </UCard>
+            <div
+              class="absolute top-2 right-2 flex items-center gap-0.5 rounded-md bg-default/80 backdrop-blur-sm opacity-0 transition group-hover:opacity-100 focus-within:opacity-100"
+            >
+              <UButton
+                icon="i-lucide-archive"
+                size="xs"
+                color="neutral"
+                variant="ghost"
+                aria-label="Archive"
+                @click="setStatus(item.id, 'archived')"
+              />
+              <UButton
+                icon="i-lucide-trash-2"
+                size="xs"
+                color="neutral"
+                variant="ghost"
+                aria-label="Destroy"
+                @click="destroyTarget = item"
+              />
+            </div>
+          </div>
         </div>
 
         <div v-if="archived.length">
@@ -278,7 +284,7 @@ const plannedKeys = (item: IntakeItem) =>
                   color="neutral"
                   variant="ghost"
                   aria-label="Restore"
-                  @click="restoreItem(item.id)"
+                  @click="setStatus(item.id, 'pending')"
                 />
                 <UButton
                   icon="i-lucide-trash-2"

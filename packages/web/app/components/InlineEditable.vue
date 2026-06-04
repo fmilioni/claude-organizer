@@ -28,19 +28,27 @@ const props = withDefaults(
 )
 
 const model = defineModel<string>({ default: '' })
+// Optional lifecycle for consumers that drive shared state off the toggle (e.g.
+// the inbox list points its single auto-save buffer at whichever item is open).
+const emit = defineEmits<{
+  (e: 'edit-start'): void
+  (e: 'edit-stop'): void
+}>()
 const editing = ref(false)
 const root = ref<HTMLElement | null>(null)
 
 function enterEdit(e: MouseEvent) {
   if ((e.target as HTMLElement).closest('a')) return // let card links navigate
   editing.value = true
+  emit('edit-start')
 }
 function stopEdit() {
   editing.value = false
+  emit('edit-stop')
 }
 function onOutside(e: MouseEvent) {
   if (root.value && !root.value.contains(e.target as Node)) {
-    editing.value = false
+    stopEdit()
   }
 }
 // The markdown editor has a toolbar (and link popovers), so @blur is unreliable;
