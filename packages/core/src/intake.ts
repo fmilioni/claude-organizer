@@ -173,6 +173,97 @@ export async function restoreIntakeItem(db: Database, id: string) {
   return row ?? null
 }
 
+/** Intake items (the only statuses that carry keys) referencing any of `keys`. */
+async function findIntakeItemsByCardKeys(
+  db: Database,
+  projectId: string,
+  keys: string[]
+) {
+  const keySet = new Set(keys)
+  const items = await db
+    .select()
+    .from(schema.intakeItems)
+    .where(
+      and(
+        eq(schema.intakeItems.projectId, projectId),
+        inArray(schema.intakeItems.status, ['planned', 'archived'])
+      )
+    )
+  return items.filter(i =>
+    parseCardKeys(i.plannedCardKeys).some(k => keySet.has(k))
+  )
+}
+
+/**
+ * Cascade a card's archive/restore onto the items referencing it: an item with
+ * no active (non-archived) card left is archived; one that regains an active
+ * card is restored. Idempotent — only writes when the derived state differs.
+ */
+export async function syncIntakeForCard(
+  db: Database,
+  projectId: string,
+  key: string
+) {
+  const items = await findIntakeItemsByCardKeys(db, projectId, [key])
+  for (const item of items) {
+    const itemKeys = parseCardKeys(item.plannedCardKeys)
+    const states = await cardStatesByKeys(db, projectId, itemKeys)
+    const hasActive = itemKeys.some(k => {
+      const s = states.get(k)
+      return s !== undefined && !s.archived
+    })
+    if (!hasActive && item.status !== 'archived') {
+      await archiveIntakeItem(db, item.id)
+    } else if (hasActive && item.status === 'archived') {
+      await restoreIntakeItem(db, item.id)
+    }
+  }
+}
+
+/**
+ * Prune destroyed card keys from referencing items: an item left with no keys
+ * is destroyed; otherwise the CSV is rewritten and its archived/planned state
+ * re-derived from the remaining cards (keeps "archived ⟺ no active card" true).
+ */
+export async function pruneIntakeForDestroyedCards(
+  db: Database,
+  projectId: string,
+  keys: string[]
+) {
+  const removed = new Set(keys)
+  const items = await findIntakeItemsByCardKeys(db, projectId, keys)
+  for (const item of items) {
+    const remaining = parseCardKeys(item.plannedCardKeys).filter(
+      k => !removed.has(k)
+    )
+    if (remaining.length === 0) {
+      await destroyIntakeItem(db, item.id)
+      continue
+    }
+    const states = await cardStatesByKeys(db, projectId, remaining)
+    const hasActive = remaining.some(k => {
+      const s = states.get(k)
+      return s !== undefined && !s.archived
+    })
+    const set: Record<string, unknown> = {
+      plannedCardKeys: remaining.join(','),
+      updatedAt: sql`now()`
+    }
+    if (hasActive) {
+      set.status = 'planned'
+      set.archivedAt = null
+    } else if (item.status !== 'archived') {
+      set.status = 'archived'
+      set.archivedAt = sql`now()`
+    }
+    await db
+      .update(schema.intakeItems)
+      .set(set)
+      .where(eq(schema.intakeItems.id, item.id))
+    await notifyChanged(db, item)
+  }
+}
+
 export async function destroyIntakeItem(db: Database, id: string) {
   const [row] = await db
     .delete(schema.intakeItems)

@@ -7,6 +7,7 @@ import { archivedCondition, type ArchiveFilter } from './archive'
 import { listBlockedBy, listBlocking, pendingBlockerCounts } from './blockers'
 import { InputError } from './errors'
 import { notify } from './events'
+import { pruneIntakeForDestroyedCards, syncIntakeForCard } from './intake'
 import { listCardTags, tagsByCardIds } from './tags'
 
 const cardStatus = z.enum([
@@ -283,6 +284,7 @@ export async function archiveCard(db: Database, id: string) {
       .update(schema.cardCommits)
       .set({ diff: null })
       .where(eq(schema.cardCommits.cardId, id))
+    await syncIntakeForCard(db, row.projectId, row.key)
     await notify(db, {
       type: 'card.changed',
       projectId: row.projectId,
@@ -300,6 +302,7 @@ export async function restoreCard(db: Database, id: string) {
     .where(eq(schema.cards.id, id))
     .returning()
   if (row) {
+    await syncIntakeForCard(db, row.projectId, row.key)
     await notify(db, {
       type: 'card.changed',
       projectId: row.projectId,
@@ -316,25 +319,34 @@ export async function restoreCard(db: Database, id: string) {
  * explicitly here (hierarchy is one level deep).
  */
 export async function destroyCard(db: Database, id: string) {
-  const row = await db.transaction(async (tx) => {
+  const result = await db.transaction(async (tx) => {
     const [card] = await tx
-      .select({ id: schema.cards.id, projectId: schema.cards.projectId })
+      .select({
+        id: schema.cards.id,
+        projectId: schema.cards.projectId,
+        key: schema.cards.key
+      })
       .from(schema.cards)
       .where(eq(schema.cards.id, id))
       .limit(1)
     if (!card) return null
+    const subs = await tx
+      .select({ key: schema.cards.key })
+      .from(schema.cards)
+      .where(eq(schema.cards.parentId, id))
     await tx.delete(schema.cards).where(eq(schema.cards.parentId, id))
     await tx.delete(schema.cards).where(eq(schema.cards.id, id))
-    return card
+    return { card, keys: [card.key, ...subs.map(s => s.key)] }
   })
-  if (row) {
+  if (result) {
+    await pruneIntakeForDestroyedCards(db, result.card.projectId, result.keys)
     await notify(db, {
       type: 'card.deleted',
-      projectId: row.projectId,
-      cardId: row.id
+      projectId: result.card.projectId,
+      cardId: result.card.id
     })
   }
-  return row ?? null
+  return result?.card ?? null
 }
 
 // --- Hierarchy (parent story / sub-tasks) ---
