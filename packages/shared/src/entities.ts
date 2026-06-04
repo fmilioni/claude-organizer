@@ -132,7 +132,15 @@ export type Project = ProjectRow
 export type Roadmap = RoadmapRow
 export type Comment = CommentRow
 export type CardCommit = CardCommitRow
-export type IntakeItem = IntakeItemRow
+
+/**
+ * Intake item as returned by the API. `completed` is derived at read time for
+ * planned items: true when ≥1 referenced card is non-archived and all
+ * non-archived referenced cards are `done` (archived/destroyed cards ignored).
+ */
+export interface IntakeItem extends IntakeItemRow {
+  completed?: boolean
+}
 
 /** Tag as embedded in cards or listed for a project (createdAt not surfaced). */
 export interface Tag {

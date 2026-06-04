@@ -1,8 +1,12 @@
-import { and, desc, eq, sql } from 'drizzle-orm'
+import { and, desc, eq, inArray, sql } from 'drizzle-orm'
 import { z } from 'zod'
 
 import { createId, type Database, schema } from '@claude-organizer/db'
-import { INTAKE_STATUSES, type IntakeStatus } from '@claude-organizer/shared'
+import {
+  type CardStatus,
+  INTAKE_STATUSES,
+  type IntakeStatus
+} from '@claude-organizer/shared'
 
 import { notify } from './events'
 
@@ -28,6 +32,53 @@ async function notifyChanged(db: Database, row: { id: string, projectId: string 
   })
 }
 
+export function parseCardKeys(csv: string | null): string[] {
+  return (csv ?? '')
+    .split(',')
+    .map(k => k.trim())
+    .filter(Boolean)
+}
+
+interface CardState {
+  status: CardStatus
+  archived: boolean
+}
+
+/** Resolve card keys → their live status/archived, scoped to the project. */
+export async function cardStatesByKeys(
+  db: Database,
+  projectId: string,
+  keys: string[]
+): Promise<Map<string, CardState>> {
+  const map = new Map<string, CardState>()
+  if (keys.length === 0) return map
+  const rows = await db
+    .select({
+      key: schema.cards.key,
+      status: schema.cards.status,
+      archivedAt: schema.cards.archivedAt
+    })
+    .from(schema.cards)
+    .where(
+      and(eq(schema.cards.projectId, projectId), inArray(schema.cards.key, keys))
+    )
+  for (const r of rows) {
+    map.set(r.key, { status: r.status, archived: r.archivedAt !== null })
+  }
+  return map
+}
+
+/** Completed = ≥1 referenced card is non-archived and all such are `done`. */
+function deriveCompleted(
+  plannedCardKeys: string | null,
+  states: Map<string, CardState>
+): boolean {
+  const active = parseCardKeys(plannedCardKeys)
+    .map(k => states.get(k))
+    .filter((c): c is CardState => c !== undefined && !c.archived)
+  return active.length > 0 && active.every(c => c.status === 'done')
+}
+
 export async function listIntakeItems(
   db: Database,
   projectId: string,
@@ -37,11 +88,18 @@ export async function listIntakeItems(
   if (options.status) {
     conditions.push(eq(schema.intakeItems.status, options.status))
   }
-  return db
+  const items = await db
     .select()
     .from(schema.intakeItems)
     .where(and(...conditions))
     .orderBy(desc(schema.intakeItems.createdAt))
+
+  const keys = [...new Set(items.flatMap(i => parseCardKeys(i.plannedCardKeys)))]
+  const states = await cardStatesByKeys(db, projectId, keys)
+  return items.map(item => ({
+    ...item,
+    completed: deriveCompleted(item.plannedCardKeys, states)
+  }))
 }
 
 export async function createIntakeItem(db: Database, input: CreateIntakeItemInput) {
