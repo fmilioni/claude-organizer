@@ -42,7 +42,7 @@ const toolbarItems: EditorToolbarItem[] = [
       :autofocus="autofocus ? 'end' : false"
       :placeholder="placeholder"
       :style="{ minHeight }"
-      :ui="{ base: `px-3 py-2 [&_*:first-child]:!mt-0 [&_*:last-child]:!mb-0 ${PROSE}` }"
+      :ui="{ base: `px-3! py-2 [&_[data-type=horizontalRule]]:my-4! [&_[data-type=horizontalRule]]:py-0! [&_[data-type=horizontalRule]_hr]:my-0 ${PROSE}` }"
     >
       <UEditorToolbar
         :editor="editor"
