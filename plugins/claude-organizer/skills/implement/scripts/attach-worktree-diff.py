@@ -136,10 +136,12 @@ def human_bytes(n):
 
 
 def stat_summary(raw):
-    """Summary line counted from the assembled patch (tracked + untracked).
+    """Summary line counted from the full pre-prune ``raw`` (tracked + untracked).
 
-    Covers everything in ``diff``, unlike ``git diff HEAD --stat`` (tracked
-    only). The web parses only this last line for its badges.
+    NOT the displayed (pruned) ``diff`` — so the badge equals the real commit's
+    ``git show --stat`` once it lands (pruned lockfiles/binaries stay counted),
+    and covers untracked files that ``git diff HEAD --stat`` (tracked only)
+    would miss. The web parses only this last line for its badges.
     """
     files = len(re.findall(r"^diff --git ", raw, re.MULTILINE))
     add = 0

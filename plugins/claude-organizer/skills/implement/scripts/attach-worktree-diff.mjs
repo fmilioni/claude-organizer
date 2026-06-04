@@ -125,8 +125,10 @@ function humanBytes(n) {
   return `${(n / 1024 / 1024).toFixed(1)} MB`
 }
 
-// Summary line counted from the assembled patch (tracked + untracked) so it
-// covers everything in `diff`, unlike `git diff HEAD --stat` (tracked only).
+// Summary line counted from the full pre-prune `raw` (tracked + untracked) —
+// NOT the displayed (pruned) `diff` — so the badge equals the real commit's
+// `git show --stat` once it lands (pruned lockfiles/binaries stay counted), and
+// covers untracked files that `git diff HEAD --stat` (tracked only) would miss.
 // The web parses only this last line for its file/insertion/deletion badges.
 function statSummary(raw) {
   const files = (raw.match(/^diff --git /gm) || []).length
