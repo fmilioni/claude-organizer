@@ -44,3 +44,14 @@ export function freshProject(db: Database, keyPrefix = 'CO') {
     keyPrefix
   })
 }
+
+/**
+ * A globally-unique key prefix. Card keys are unique only per project
+ * (`cards_project_key_uk`), so a key like `CO-1` repeats across the many
+ * default-prefix projects parallel test files create. Tests that resolve a card
+ * BY KEY (`attachCardCommit`, `getCardByKey`) must use this, or the lookup may
+ * hit another file's same-key card and flake.
+ */
+export function uniqueKeyPrefix() {
+  return `T${randomUUID().replace(/-/g, '').slice(0, 7).toUpperCase()}`
+}

@@ -3,13 +3,15 @@ import { describe, expect, it } from 'vitest'
 import { WORKING_TREE_SHA } from '@claude-organizer/shared'
 
 import { attachCardCommit, createCard, listCardCommits } from '../src/index'
-import { freshProject, useTestDb } from './helpers'
+import { freshProject, uniqueKeyPrefix, useTestDb } from './helpers'
 
 const ctx = useTestDb()
 
 describe('listCardCommits ordering', () => {
   it('floats the working-tree sentinel (null committedAt) above real commits', async () => {
-    const project = await freshProject(ctx.db)
+    // attachCardCommit resolves the card by key alone; a unique prefix keeps
+    // this card's key from colliding with another parallel file's card.
+    const project = await freshProject(ctx.db, uniqueKeyPrefix())
     const card = await createCard(ctx.db, {
       projectId: project.id,
       title: 'Card'
