@@ -1,4 +1,4 @@
-import { and, desc, eq } from 'drizzle-orm'
+import { and, desc, eq, sql } from 'drizzle-orm'
 import { z } from 'zod'
 
 import { createId, type Database, schema } from '@claude-organizer/db'
@@ -131,7 +131,10 @@ export async function listCardCommits(db: Database, cardId: string) {
     .from(schema.cardCommits)
     .where(eq(schema.cardCommits.cardId, cardId))
     .orderBy(
-      desc(schema.cardCommits.committedAt),
+      // Explicit NULLS FIRST locks what Postgres' DESC default gives for free:
+      // the working-tree sentinel (null committedAt) must float to the top,
+      // independent of the DB or an accidental NULLS LAST edit.
+      sql`${schema.cardCommits.committedAt} desc nulls first`,
       desc(schema.cardCommits.createdAt)
     )
 }

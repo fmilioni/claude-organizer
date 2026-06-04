@@ -590,6 +590,10 @@ const providerIcon = computed(() =>
                   class="border-t border-default p-3"
                 >
                   <DiffView v-if="c.diff" :diff="c.diff" />
+                  <p v-else-if="isWorking(c.sha)" class="text-xs text-muted italic">
+                    Working-tree diff not stored. Re-run attach-worktree-diff to
+                    see the uncommitted changes.
+                  </p>
                   <p v-else class="text-xs text-muted italic">
                     Diff not stored (cleared when the card or sprint was archived).
                     {{ commitUrl(c.sha) ? "Open it on the provider via the hash above" : "Re-run attach-commit" }} to see the changes.
