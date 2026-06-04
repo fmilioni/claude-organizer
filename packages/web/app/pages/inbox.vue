@@ -72,9 +72,22 @@ async function loadInbox() {
   }
 }
 
+// A planned item's `completed` is derived from its cards' status, so a card
+// moving to/from `done` (a card.changed with no intake write) must re-bucket it.
+// Archive/destroy already cascade through inbox.* events; here we only need the
+// read-derived path, and only when the card is actually referenced.
+function isPlannedCard(key: string | undefined) {
+  if (!key) return false
+  return planned.value.some(i =>
+    (i.plannedCardKeys ?? '').split(',').includes(key)
+  )
+}
+
 useProjectData(currentProjectId, loadInbox, {
   onEvent: (event) => {
     if (event.type === 'inbox.changed' || event.type === 'inbox.deleted') {
+      loadInbox()
+    } else if (event.type === 'card.changed' && isPlannedCard(event.cardKey)) {
       loadInbox()
     }
   }
@@ -124,8 +137,8 @@ async function confirmDestroy() {
   }
 }
 
-const plannedKeys = (item: IntakeItem) =>
-  (item.plannedCardKeys ?? '').split(',').filter(Boolean).join(', ')
+const plannedActive = computed(() => planned.value.filter(i => !i.completed))
+const plannedCompleted = computed(() => planned.value.filter(i => i.completed))
 </script>
 
 <template>
@@ -226,44 +239,35 @@ const plannedKeys = (item: IntakeItem) =>
           </div>
         </div>
 
-        <div v-if="planned.length" class="space-y-2">
+        <div v-if="plannedActive.length" class="space-y-2">
           <h2 class="text-xs font-semibold uppercase text-muted tracking-wide">
-            Planned ({{ planned.length }})
+            Planned ({{ plannedActive.length }})
           </h2>
-          <div
-            v-for="item in planned"
+          <IntakePlannedItem
+            v-for="item in plannedActive"
             :key="item.id"
-            class="group relative rounded-md border border-default px-3 py-2"
+            :item="item"
+            @archive="setStatus(item.id, 'archived')"
+            @destroy="destroyTarget = item"
+          />
+        </div>
+
+        <div v-if="plannedCompleted.length">
+          <ArchivedDisclosure
+            :count="plannedCompleted.length"
+            label="Completed"
+            icon="i-lucide-circle-check-big"
           >
-            <div class="space-y-1.5 pr-14">
-              <AppMarkdown :value="item.bodyMd" :class="PROSE" />
-              <div class="flex items-center gap-1.5 text-xs text-muted">
-                <UBadge color="success" variant="subtle" size="sm" label="Planned" />
-                <span>→</span>
-                <AppMarkdown :value="plannedKeys(item)" />
-              </div>
-            </div>
-            <div
-              class="absolute top-2 right-2 flex items-center gap-0.5 rounded-md bg-default/80 backdrop-blur-sm opacity-0 transition group-hover:opacity-100 focus-within:opacity-100"
-            >
-              <UButton
-                icon="i-lucide-archive"
-                size="xs"
-                color="neutral"
-                variant="ghost"
-                aria-label="Archive"
-                @click="setStatus(item.id, 'archived')"
-              />
-              <UButton
-                icon="i-lucide-trash-2"
-                size="xs"
-                color="neutral"
-                variant="ghost"
-                aria-label="Destroy"
-                @click="destroyTarget = item"
+            <div class="space-y-2">
+              <IntakePlannedItem
+                v-for="item in plannedCompleted"
+                :key="item.id"
+                :item="item"
+                @archive="setStatus(item.id, 'archived')"
+                @destroy="destroyTarget = item"
               />
             </div>
-          </div>
+          </ArchivedDisclosure>
         </div>
 
         <div v-if="archived.length">
