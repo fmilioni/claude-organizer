@@ -1,6 +1,6 @@
 import { gunzipSync, gzipSync } from 'node:zlib'
 
-import { and, eq, inArray, or } from 'drizzle-orm'
+import { and, eq, inArray } from 'drizzle-orm'
 import { z } from 'zod'
 
 import { createId, type Database, schema } from '@claude-organizer/db'
@@ -281,42 +281,48 @@ async function restoreAsNew(db: Database, data: BackupData): Promise<string[]> {
     const D: Record<string, string> = {}
 
     // A slug is unique by constraint; keyPrefix we keep distinct too so future
-    // keys stay unambiguous. Bump a numeric suffix on both until free — also
-    // against identities allocated earlier in this same run (a scope=all backup
-    // can carry projects whose roots collide). The suffixed keyPrefix is capped
-    // at 10 chars so it stays valid for future card creation.
+    // keys stay unambiguous. Each field is suffixed independently — only the one
+    // that actually collides moves — checking both the destination DB and the
+    // identities allocated earlier in this same run (a scope=all backup can carry
+    // projects whose roots collide). Both the base and the suffixed forms are
+    // capped to createProject's limits (slug ≤ 60, keyPrefix ≤ 10).
     const takenSlugs = new Set<string>()
     const takenPrefixes = new Set<string>()
+    const slugTaken = async (s: string) =>
+      takenSlugs.has(s)
+      || (
+        await tx
+          .select({ id: schema.projects.id })
+          .from(schema.projects)
+          .where(eq(schema.projects.slug, s))
+          .limit(1)
+      ).length > 0
+    const prefixTaken = async (k: string) =>
+      takenPrefixes.has(k)
+      || (
+        await tx
+          .select({ id: schema.projects.id })
+          .from(schema.projects)
+          .where(eq(schema.projects.keyPrefix, k))
+          .limit(1)
+      ).length > 0
     async function uniqueIdentity(slug: string, keyPrefix: string) {
-      let s = slug
-      let k = keyPrefix
-      let n = 1
-      for (;;) {
-        const free
-          = !takenSlugs.has(s)
-            && !takenPrefixes.has(k)
-            && !(
-              await tx
-                .select({ id: schema.projects.id })
-                .from(schema.projects)
-                .where(
-                  or(
-                    eq(schema.projects.slug, s),
-                    eq(schema.projects.keyPrefix, k)
-                  )
-                )
-                .limit(1)
-            ).length
-        if (free) {
-          takenSlugs.add(s)
-          takenPrefixes.add(k)
-          return { slug: s, keyPrefix: k }
-        }
-        n++
-        s = `${slug}-${n}`
+      // Clamp the base up front: a backup's text columns carry no length limit,
+      // so an over-long identity must be trimmed to createProject's bounds even
+      // when it doesn't collide.
+      let s = slug.slice(0, 60)
+      for (let n = 2; await slugTaken(s); n++) {
+        const suffix = `-${n}`
+        s = `${slug.slice(0, 60 - suffix.length)}${suffix}`
+      }
+      let k = keyPrefix.slice(0, 10)
+      for (let n = 2; await prefixTaken(k); n++) {
         const suffix = String(n)
         k = `${keyPrefix.slice(0, 10 - suffix.length)}${suffix}`
       }
+      takenSlugs.add(s)
+      takenPrefixes.add(k)
+      return { slug: s, keyPrefix: k }
     }
 
     const rows = <T2>(key: string) => (data[key] ?? []) as T2[]
