@@ -22,6 +22,7 @@
     "@claude-organizer/auth": "workspace:*",
     "@claude-organizer/core": "workspace:*",
     "@claude-organizer/db": "workspace:*",
+    "@claude-organizer/shared": "workspace:*",
     "@modelcontextprotocol/sdk": "1.29.0",
     "better-auth": "1.6.11",
     "zod": "4.4.3"

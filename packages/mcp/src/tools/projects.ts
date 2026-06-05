@@ -13,9 +13,14 @@ import {
 } from '@claude-organizer/core'
 import type { Database } from '@claude-organizer/db'
 
+import { filterProjectsByScope, type McpScope } from '../scope'
 import { asJson } from './index'
 
-export function registerProjectTools(server: McpServer, db: Database) {
+export function registerProjectTools(
+  server: McpServer,
+  db: Database,
+  scope: McpScope | null
+) {
   server.registerTool(
     'list_projects',
     {
@@ -33,7 +38,12 @@ export function registerProjectTools(server: McpServer, db: Database) {
       }
     },
     async ({ includeArchived, archivedOnly }) =>
-      asJson(await listProjects(db, { includeArchived, archivedOnly }))
+      asJson(
+        filterProjectsByScope(
+          await listProjects(db, { includeArchived, archivedOnly }),
+          scope
+        )
+      )
   )
 
   server.registerTool(

@@ -19,6 +19,7 @@ import { getSystemSettings } from '@claude-organizer/core'
 import type { Database } from '@claude-organizer/db'
 
 import { createMcpServer } from './create-server'
+import { type McpScope, resolveMcpScope } from './scope'
 
 interface HttpServerOptions {
   db: Database
@@ -73,14 +74,21 @@ export function startHttpServer({ db, port }: HttpServerOptions): Server {
   // discover the authorization server and start the OAuth flow.
   const wwwAuthenticate = `Bearer resource_metadata="${getMcpResourceUrl()}${PROTECTED_RESOURCE_PATH}"`
 
-  async function requireAuth(req: IncomingMessage): Promise<boolean> {
+  // Resolves the request's identity. `ok` gates access; `userId` (null in sem-auth
+  // mode) drives the project scope built when a session's server is created.
+  async function authenticate(
+    req: IncomingMessage
+  ): Promise<{ ok: boolean, userId: string | null }> {
     const { authEnabled } = await getSystemSettings(db)
-    if (!authEnabled) return true
+    if (!authEnabled) return { ok: true, userId: null }
     const session = await auth.api.getMcpSession({
       headers: fromNodeHeaders(req.headers)
     })
     // getMcpSession looks the token up but doesn't enforce expiry — guard here.
-    return Boolean(session && session.accessTokenExpiresAt.getTime() > Date.now())
+    if (!session || session.accessTokenExpiresAt.getTime() <= Date.now()) {
+      return { ok: false, userId: null }
+    }
+    return { ok: true, userId: session.userId }
   }
 
   async function handle(req: IncomingMessage, res: ServerResponse) {
@@ -108,7 +116,8 @@ export function startHttpServer({ db, port }: HttpServerOptions): Server {
       return
     }
 
-    if (!(await requireAuth(req))) {
+    const authn = await authenticate(req)
+    if (!authn.ok) {
       res.writeHead(401, {
         'content-type': 'application/json',
         'WWW-Authenticate': wwwAuthenticate,
@@ -152,7 +161,13 @@ export function startHttpServer({ db, port }: HttpServerOptions): Server {
         transport.onclose = () => {
           if (transport!.sessionId) transports.delete(transport!.sessionId)
         }
-        await createMcpServer(db).connect(transport)
+        // Scope is fixed for the session at initialize, from the bearer's user
+        // (null in sem-auth → unrestricted). Subsequent requests on the session
+        // are still bearer-checked above; the scope doesn't change mid-session.
+        const scope: McpScope | null = authn.userId
+          ? await resolveMcpScope(db, authn.userId)
+          : null
+        await createMcpServer(db, scope).connect(transport)
       }
 
       await transport.handleRequest(req, res, body)

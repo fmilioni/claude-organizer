@@ -10,6 +10,12 @@ import {
 } from '@claude-organizer/core'
 import type { Database } from '@claude-organizer/db'
 
+import {
+  canAccessProjectId,
+  filterProjectsByScope,
+  type McpScope
+} from '../scope'
+
 // Read-only MCP resources: let the AI pull board/backlog/card context as a
 // cacheable snapshot without invoking a tool. Everything is markdown.
 const STATUS_ORDER = [
@@ -82,7 +88,15 @@ function formatCard(card: CardDetail) {
   return out.join('\n')
 }
 
-export function registerResources(server: McpServer, db: Database) {
+export function registerResources(
+  server: McpServer,
+  db: Database,
+  scope: McpScope | null
+) {
+  // Same scoping as the tools: a scoped session only sees its own projects.
+  const scopedProjects = async () =>
+    filterProjectsByScope(await listProjects(db), scope)
+
   server.registerResource(
     'projects',
     'organizer://projects',
@@ -91,14 +105,14 @@ export function registerResources(server: McpServer, db: Database) {
       description: 'All projects tracked by claude-organizer.',
       mimeType: 'text/markdown'
     },
-    async uri => md(uri, formatProjects(await listProjects(db)))
+    async uri => md(uri, formatProjects(await scopedProjects()))
   )
 
   server.registerResource(
     'board',
     new ResourceTemplate('organizer://project/{slug}/board', {
       list: async () => ({
-        resources: (await listProjects(db)).map(p => ({
+        resources: (await scopedProjects()).map(p => ({
           uri: `organizer://project/${p.slug}/board`,
           name: `${p.name} — active sprint board`,
           mimeType: 'text/markdown'
@@ -113,7 +127,11 @@ export function registerResources(server: McpServer, db: Database) {
     },
     async (uri, { slug }) => {
       const project = await getProjectBySlug(db, String(slug))
-      if (!project) return md(uri, `Project \`${String(slug)}\` not found.`)
+      // Out-of-scope reads answer "not found" — same as a missing project, so a
+      // scoped session can't probe which projects exist.
+      if (!project || !canAccessProjectId(scope, project.id)) {
+        return md(uri, `Project \`${String(slug)}\` not found.`)
+      }
       const sprint = await getActiveSprint(db, project.id)
       if (!sprint) return md(uri, `# ${project.name}\n\n_No active sprint._`)
       const cards = await listCards(db, {
@@ -128,7 +146,7 @@ export function registerResources(server: McpServer, db: Database) {
     'backlog',
     new ResourceTemplate('organizer://project/{slug}/backlog', {
       list: async () => ({
-        resources: (await listProjects(db)).map(p => ({
+        resources: (await scopedProjects()).map(p => ({
           uri: `organizer://project/${p.slug}/backlog`,
           name: `${p.name} — backlog`,
           mimeType: 'text/markdown'
@@ -142,7 +160,9 @@ export function registerResources(server: McpServer, db: Database) {
     },
     async (uri, { slug }) => {
       const project = await getProjectBySlug(db, String(slug))
-      if (!project) return md(uri, `Project \`${String(slug)}\` not found.`)
+      if (!project || !canAccessProjectId(scope, project.id)) {
+        return md(uri, `Project \`${String(slug)}\` not found.`)
+      }
       const cards = await listCards(db, {
         projectId: project.id,
         backlogOnly: true
@@ -161,7 +181,9 @@ export function registerResources(server: McpServer, db: Database) {
     },
     async (uri, { key }) => {
       const card = await getCardByKey(db, String(key))
-      if (!card) return md(uri, `Card \`${String(key)}\` not found.`)
+      if (!card || !canAccessProjectId(scope, card.projectId)) {
+        return md(uri, `Card \`${String(key)}\` not found.`)
+      }
       return md(uri, formatCard(card))
     }
   )
