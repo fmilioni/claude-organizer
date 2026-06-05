@@ -130,6 +130,7 @@ Rules of thumb:
 - **Default to acting, not asking.** Recording is the normal path when the content is durable; only ask the user in a real doubt (e.g. creating a brand-new doc _group_).
 - **Update > duplicate.** If a doc for the area already exists, edit it (pass its `id`) — don't create a second one that drifts.
 - **No doc spam** — the same signal-vs-noise discipline as comments. Durable and non-deducible → record. Ephemeral, obvious, or deducible from the code/board → leave it out. If it would rot on the next refactor or just restate the obvious, it's not a doc.
+- **Retire a `note` when its issue is resolved — don't mark it "resolved".** A `note` capturing a pending item / gap is **transient**: once the work lands, move whatever durable knowledge it holds into the right `module`/`adr` (the permanent home) and then **delete or archive the note**. Leaving a note that says "resolved" is doc spam — a future reader has to open it to learn it no longer matters. If nothing durable survives, just delete it.
 
 ## Conventions
 

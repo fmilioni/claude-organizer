@@ -67,6 +67,7 @@ The agent returns a structured report — **Acceptance criteria** (met/partial/n
    - **follow-up card(s)** — capture findings as new cards (via the `plan`/board flow) for later;
    - **other** — defer, dismiss as won't-fix, accept as partial, etc.
 3. **Act on the choice.** Fixes go back through the `implement` lifecycle; cards get created; then the unit can close.
+4. **Re-review non-trivial fixes before closing.** A fix is itself a change, and a change can introduce new problems. If the fixes you applied were **substantial** — a new function, edits across several files, a reworked code path, anything with real logic — run **one more fresh review pass over the fix diff** before the unit closes, so the corrections didn't add bugs of their own. **Skip** the re-review for **obvious** fixes (deleting a comment, a lint/format tweak, a rename, a one-liner) — same trivial-skip judgment as a per-task review. The point is the same as the gate itself: the session that just applied the fix is the worst judge of it.
 
 Record the outcome on the board: a short comment on the card with the criteria verdict and anything deferred, following the signal-vs-noise rule in the `claude-organizer` skill. The full finding list is ephemeral working material — never paste the whole diff or a wall of nitpicks into a comment.
 
