@@ -6,6 +6,7 @@ import type { McpScope } from '../scope'
 import { registerBlockerTools } from './blockers'
 import { registerCardTools } from './cards'
 import { registerCommentTools } from './comments'
+import { registerCommitTools } from './commits'
 import { registerDocTools } from './docs'
 import { registerIntakeTools } from './intake'
 import { registerProjectTools } from './projects'
@@ -24,6 +25,7 @@ export function registerTools(
   registerSprintTools(server, db)
   registerCardTools(server, db)
   registerCommentTools(server, db)
+  registerCommitTools(server)
   registerTagTools(server, db)
   registerBlockerTools(server, db)
   registerDocTools(server, db)

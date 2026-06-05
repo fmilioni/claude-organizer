@@ -106,6 +106,9 @@ async function resolveToolProjectIds(
     case 'get_card_by_key':
       return entity('cardKey', str(input.key))
 
+    case 'issue_commit_token':
+      return entity('cardKey', str(input.cardKey))
+
     case 'move_card_to_sprint': {
       const ids = (
         await Promise.all([

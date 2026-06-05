@@ -9,7 +9,9 @@ import {
   hasProjectGrant,
   resolveCardsProjectIds,
   resolveCommentsProjectIds,
-  resolveEntityProjectId
+  resolveCommitTokenSecret,
+  resolveEntityProjectId,
+  verifyCommitToken
 } from '@claude-organizer/core'
 import type { Database } from '@claude-organizer/db'
 import type { UserRole, UserStatus } from '@claude-organizer/shared'
@@ -39,6 +41,27 @@ const PUBLIC_EXACT = new Set([
   // clients can bootstrap the auth flow.
   '/.well-known/oauth-authorization-server'
 ])
+
+// Diff-write routes a card-scoped commit token may authorize without a session
+// (the worktree script reuses POST /commits with a sentinel sha; DELETE clears
+// the pending diff). Everything else stays session-only.
+const COMMIT_TOKEN_ROUTES = new Set([
+  'POST /cards/:key/commits',
+  'DELETE /cards/:key/commits/working'
+])
+
+// A valid `X-CO-Commit-Token` matching the route's card key stands in for a
+// session, but ONLY on the routes above and ONLY for that card — it grants no
+// broader identity (authUser stays null).
+function acceptsCommitToken(req: FastifyRequest): boolean {
+  const url = req.routeOptions?.url
+  if (!url || !COMMIT_TOKEN_ROUTES.has(`${req.method} ${url}`)) return false
+  const token = req.headers['x-co-commit-token']
+  const key = (req.params as Record<string, string>).key
+  if (typeof token !== 'string' || !key) return false
+  const secret = resolveCommitTokenSecret()
+  return secret ? verifyCommitToken(token, key, secret) : false
+}
 
 function isPublic(url: string | undefined): boolean {
   if (!url) return false
@@ -165,7 +188,12 @@ export function registerAuthEnforcement(
     const session = await auth.api.getSession({
       headers: fromNodeHeaders(req.raw.headers)
     })
-    if (!session) return reply.code(401).send({ error: 'unauthorized' })
+    if (!session) {
+      // Programmatic diff clients (attach-commit / attach-worktree-diff) have no
+      // browser session; a valid card-scoped token authorizes just their routes.
+      if (acceptsCommitToken(req)) return
+      return reply.code(401).send({ error: 'unauthorized' })
+    }
 
     const authz = await getUserAuthz(db, session.user.id)
     if (!authz || authz.status !== 'approved') {
