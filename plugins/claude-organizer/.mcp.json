@@ -2,10 +2,7 @@
   "mcpServers": {
     "claude-organizer": {
       "type": "http",
-      "url": "${CO_MCP_URL:-http://localhost:4402/mcp}",
-      "headers": {
-        "Authorization": "Bearer ${CO_MCP_TOKEN:-}"
-      }
+      "url": "${CO_MCP_URL:-http://localhost:4402/mcp}"
     }
   }
 }
