@@ -58,6 +58,11 @@ overrides below, and points to the docs for the rest.
   commits **on the branch** and opens a **PR** — the **user's merge is the
   confirmation gate**, and the AI never merges to `main` itself. `attach-commit`
   per card still applies.
+- **PRs**: written **in English** (title *and* body, same as commits — only
+  tasks/comments/docs follow the user's language). Write the **title as a
+  conventional-commit** (`feat(scope): … (CO-N)`); PRs are **squash-merged**, so
+  the title becomes the commit message. End the body with the
+  `🤖 Generated with Claude Code` line.
 - **Versioning**: every version (each `package.json`, the plugin manifests and
   the MCP server) stays in sync — to set it, run `pnpm bump <version>` (the
   unified bump script); never edit version fields by hand.
