@@ -70,7 +70,11 @@ services:
     environment:
       <<: *db-env
       MCP_HTTP_PORT: 4402
-      MCP_AUTH_TOKEN: ${MCP_AUTH_TOKEN:-}
+      # Resource server: validates OAuth bearers against the same better-auth
+      # store as the API, so it needs the matching secret + the authz-server URL.
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-}
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://127.0.0.1:4400}
+      MCP_PUBLIC_URL: ${MCP_PUBLIC_URL:-http://127.0.0.1:4402}
     ports:
       - "4402:4402"
     depends_on:

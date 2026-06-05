@@ -27,11 +27,7 @@ if (httpPortEnv) {
     process.exit(1)
   }
 
-  const httpServer = startHttpServer({
-    db,
-    port,
-    authToken: process.env.MCP_AUTH_TOKEN || undefined
-  })
+  const httpServer = startHttpServer({ db, port })
 
   const shutdown = async () => {
     httpServer.close()
