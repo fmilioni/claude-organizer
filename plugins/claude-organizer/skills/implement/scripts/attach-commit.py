@@ -23,6 +23,16 @@ import urllib.request
 
 API_URL = os.environ.get("CO_API_URL", "http://127.0.0.1:4400").rstrip("/")
 
+# Card-scoped token minted by the MCP (issue_commit_token); only needed when the
+# API has auth on. Absent in sem-auth mode — then no extra header is sent.
+COMMIT_TOKEN = os.environ.get("CO_COMMIT_TOKEN")
+
+
+def with_token(headers):
+    if COMMIT_TOKEN:
+        return {**headers, "X-CO-Commit-Token": COMMIT_TOKEN}
+    return headers
+
 # Files whose body is noise: store the header + a note instead of the patch.
 LOCKFILES = {
     "pnpm-lock.yaml",
@@ -175,7 +185,7 @@ def main():
     req = urllib.request.Request(
         f"{API_URL}/cards/{key}/commits",
         data=payload,
-        headers={"Content-Type": "application/json"},
+        headers=with_token({"Content-Type": "application/json"}),
         method="POST",
     )
     try:

@@ -22,6 +22,16 @@ import { execFileSync } from 'node:child_process'
 
 const API_URL = (process.env.CO_API_URL || 'http://127.0.0.1:4400').replace(/\/$/, '')
 
+// Card-scoped token minted by the MCP (issue_commit_token); only needed when the
+// API has auth on. Absent in sem-auth mode — then no extra header is sent.
+const COMMIT_TOKEN = process.env.CO_COMMIT_TOKEN
+
+function withToken(headers = {}) {
+  return COMMIT_TOKEN
+    ? { ...headers, 'X-CO-Commit-Token': COMMIT_TOKEN }
+    : headers
+}
+
 // Must match WORKING_TREE_SHA in @claude-organizer/shared.
 const WORKING_TREE_SHA = '__working__'
 
@@ -144,7 +154,7 @@ function statSummary(raw) {
 async function clearPending(key) {
   const res = await fetch(
     `${API_URL}/cards/${encodeURIComponent(key)}/commits/working`,
-    { method: 'DELETE' }
+    { method: 'DELETE', headers: withToken() }
   ).catch((err) => {
     fail(`could not reach the API at ${API_URL} (${err.message}). Is it running?`)
   })
@@ -192,7 +202,7 @@ async function main() {
     `${API_URL}/cards/${encodeURIComponent(key)}/commits`,
     {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: withToken({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({
         sha: WORKING_TREE_SHA,
         message: '(uncommitted working tree)',

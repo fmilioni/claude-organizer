@@ -17,6 +17,16 @@ import { execFileSync } from 'node:child_process'
 
 const API_URL = (process.env.CO_API_URL || 'http://127.0.0.1:4400').replace(/\/$/, '')
 
+// Card-scoped token minted by the MCP (issue_commit_token); only needed when the
+// API has auth on. Absent in sem-auth mode — then no extra header is sent.
+const COMMIT_TOKEN = process.env.CO_COMMIT_TOKEN
+
+function withToken(headers = {}) {
+  return COMMIT_TOKEN
+    ? { ...headers, 'X-CO-Commit-Token': COMMIT_TOKEN }
+    : headers
+}
+
 // Files whose body is noise: store the header + a note instead of the patch.
 const LOCKFILES = new Set([
   'pnpm-lock.yaml',
@@ -144,7 +154,7 @@ async function main() {
 
   const res = await fetch(`${API_URL}/cards/${encodeURIComponent(key)}/commits`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: withToken({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({ sha, message, stat, diff, committedAt, authorName })
   }).catch((err) => {
     fail(`could not reach the API at ${API_URL} (${err.message}). Is it running?`)

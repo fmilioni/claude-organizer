@@ -25,6 +25,17 @@ import urllib.request
 
 API_URL = os.environ.get("CO_API_URL", "http://127.0.0.1:4400").rstrip("/")
 
+# Card-scoped token minted by the MCP (issue_commit_token); only needed when the
+# API has auth on. Absent in sem-auth mode — then no extra header is sent.
+COMMIT_TOKEN = os.environ.get("CO_COMMIT_TOKEN")
+
+
+def with_token(headers=None):
+    headers = dict(headers or {})
+    if COMMIT_TOKEN:
+        headers["X-CO-Commit-Token"] = COMMIT_TOKEN
+    return headers
+
 # Must match WORKING_TREE_SHA in @claude-organizer/shared.
 WORKING_TREE_SHA = "__working__"
 
@@ -160,6 +171,7 @@ def stat_summary(raw):
 def clear_pending(key):
     req = urllib.request.Request(
         f"{API_URL}/cards/{key}/commits/working",
+        headers=with_token(),
         method="DELETE",
     )
     try:
@@ -216,7 +228,7 @@ def main():
     req = urllib.request.Request(
         f"{API_URL}/cards/{key}/commits",
         data=payload,
-        headers={"Content-Type": "application/json"},
+        headers=with_token({"Content-Type": "application/json"}),
         method="POST",
     )
     try:

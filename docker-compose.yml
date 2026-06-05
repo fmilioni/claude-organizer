@@ -54,6 +54,9 @@ services:
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-}
       BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://127.0.0.1:4400}
       AUTH_TRUSTED_ORIGINS: ${AUTH_TRUSTED_ORIGINS:-http://127.0.0.1:4401}
+      # Signs/validates the card-scoped commit token; api and mcp must share it.
+      # Optional — falls back to BETTER_AUTH_SECRET when empty.
+      CO_COMMIT_TOKEN_SECRET: ${CO_COMMIT_TOKEN_SECRET:-}
       # The AS binds the OAuth token's resource/audience to the MCP's public URL,
       # so api and mcp must resolve the same value (matters once H5 overrides it).
       MCP_PUBLIC_URL: ${MCP_PUBLIC_URL:-http://127.0.0.1:4402}
@@ -78,6 +81,9 @@ services:
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-}
       BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://127.0.0.1:4400}
       MCP_PUBLIC_URL: ${MCP_PUBLIC_URL:-http://127.0.0.1:4402}
+      # Signs the card-scoped commit token (issue_commit_token); must match the
+      # api's value. Optional — falls back to BETTER_AUTH_SECRET when empty.
+      CO_COMMIT_TOKEN_SECRET: ${CO_COMMIT_TOKEN_SECRET:-}
     ports:
       - "4402:4402"
     depends_on:
