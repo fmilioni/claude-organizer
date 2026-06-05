@@ -1,14 +1,25 @@
 import { betterAuth } from 'better-auth'
 import { drizzleAdapter } from 'better-auth/adapters/drizzle'
+import {
+  mcp,
+  oAuthDiscoveryMetadata,
+  oAuthProtectedResourceMetadata,
+  withMcpAuth
+} from 'better-auth/plugins'
 
 import { claimOrCreateUserAuthz } from '@claude-organizer/core'
 import { createId, type Database, idPrefixes } from '@claude-organizer/db'
 import {
   accounts,
+  oauthAccessTokens,
+  oauthApplications,
+  oauthConsents,
   sessions,
   users,
   verifications
 } from '@claude-organizer/db/schema'
+
+export { oAuthDiscoveryMetadata, oAuthProtectedResourceMetadata, withMcpAuth }
 
 export function isGithubConfigured(): boolean {
   return Boolean(
@@ -32,23 +43,65 @@ export function getTrustedOrigins(): string[] {
   return ['http://127.0.0.1:4401']
 }
 
+export function getWebOrigin(): string {
+  return getTrustedOrigins()[0] ?? 'http://127.0.0.1:4401'
+}
+
+// The MCP resource server's public URL — the OAuth token audience and the
+// `resource` in the protected-resource metadata. H5 unifies this behind the
+// reverse proxy; until then it's the MCP's own origin.
+export function getMcpResourceUrl(): string {
+  return (process.env.MCP_PUBLIC_URL ?? 'http://127.0.0.1:4402').replace(
+    /\/$/,
+    ''
+  )
+}
+
+// Where the OAuth authorize endpoint sends an unauthenticated user to sign in.
+export function getMcpLoginPage(): string {
+  if (process.env.MCP_OAUTH_LOGIN_PAGE) return process.env.MCP_OAUTH_LOGIN_PAGE
+  return `${getWebOrigin().replace(/\/$/, '')}/login`
+}
+
 export async function hasAnyUser(db: Database): Promise<boolean> {
   const [row] = await db.select({ id: users.id }).from(users).limit(1)
   return Boolean(row)
 }
 
 export function createAuth(db: Database) {
+  const loginPage = getMcpLoginPage()
   return betterAuth({
     appName: 'Claude Organizer',
     database: drizzleAdapter(db, {
       provider: 'pg',
       usePlural: true,
-      schema: { users, sessions, accounts, verifications }
+      schema: {
+        users,
+        sessions,
+        accounts,
+        verifications,
+        oauthApplications,
+        oauthAccessTokens,
+        oauthConsents
+      }
     }),
     secret: process.env.BETTER_AUTH_SECRET,
     baseURL: process.env.BETTER_AUTH_URL,
     basePath: '/api/auth',
     trustedOrigins: getTrustedOrigins(),
+    plugins: [
+      mcp({
+        loginPage,
+        resource: getMcpResourceUrl(),
+        // loginPage repeated because oidcConfig is typed OIDCOptions (requires
+        // it); the mcp plugin overrides it with the top-level value anyway.
+        oidcConfig: {
+          loginPage,
+          requirePKCE: true,
+          allowDynamicClientRegistration: true
+        }
+      })
+    ],
     emailAndPassword: { enabled: isEmailPasswordEnabled() },
     // Empty object = no social provider registered, so GitHub is truly absent
     // (not just hidden) when the host didn't configure it.

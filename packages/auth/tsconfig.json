@@ -3,7 +3,12 @@
   "compilerOptions": {
     "outDir": "dist",
     "rootDir": "src",
-    "types": ["node"]
+    "types": ["node"],
+    // better-auth's mcp plugin return type leaks the non-portable MCPOptions
+    // (TS4058). This package is consumed from source (main/types → src), so no
+    // .d.ts is ever emitted/read — skip declaration to avoid the false failure.
+    "declaration": false,
+    "declarationMap": false
   },
   "include": ["src/**/*.ts"]
 }

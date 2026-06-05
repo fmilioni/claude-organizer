@@ -16,7 +16,10 @@ export const idPrefixes = {
   user: 'usr',
   session: 'ses',
   account: 'acc',
-  verification: 'ver'
+  verification: 'ver',
+  oauthApplication: 'oap',
+  oauthAccessToken: 'oat',
+  oauthConsent: 'ocn'
 } as const
 
 export type IdPrefix = (typeof idPrefixes)[keyof typeof idPrefixes]

@@ -48,6 +48,9 @@ export const NON_BACKUP_TABLE_NAMES = [
   'sessions',
   'accounts',
   'verifications',
+  'oauth_applications',
+  'oauth_access_tokens',
+  'oauth_consents',
   'user_authz',
   'user_project_access',
   'system_settings'

@@ -9,7 +9,8 @@ import type { Auth } from '@claude-organizer/auth'
 import {
   hasAnyUser,
   isEmailPasswordEnabled,
-  isGithubConfigured
+  isGithubConfigured,
+  oAuthDiscoveryMetadata
 } from '@claude-organizer/auth'
 import {
   getSystemSettings,
@@ -32,11 +33,17 @@ function toWebRequest(request: FastifyRequest): Request {
   const headers = fromNodeHeaders(request.headers)
   headers.delete('content-length') // body is re-serialized below
   const hasBody = request.method !== 'GET' && request.method !== 'HEAD'
-  return new Request(url, {
-    method: request.method,
-    headers,
-    body: hasBody ? JSON.stringify(request.body ?? {}) : undefined
-  })
+  let body: string | undefined
+  if (hasBody) {
+    // The OAuth token/register endpoints post application/x-www-form-urlencoded;
+    // the raw-string parser (registered below) keeps the body intact so better-
+    // auth parses it natively. Everything else on this surface is JSON.
+    const contentType = request.headers['content-type'] ?? ''
+    body = contentType.includes('application/x-www-form-urlencoded')
+      ? (request.body as string)
+      : JSON.stringify(request.body ?? {})
+  }
+  return new Request(url, { method: request.method, headers, body })
 }
 
 function sendWebResponse(reply: FastifyReply, res: Response, body: string) {
@@ -56,6 +63,14 @@ export function registerAuthRoutes(
   auth: Auth,
   db: Database
 ) {
+  // OAuth token/register endpoints are form-urlencoded; keep the raw body so the
+  // better-auth bridge can forward it verbatim (Fastify has no form parser).
+  app.addContentTypeParser(
+    'application/x-www-form-urlencoded',
+    { parseAs: 'string' },
+    (_req, body, done) => done(null, body)
+  )
+
   app.route({
     method: ['GET', 'POST'],
     url: '/api/auth/*',
@@ -63,6 +78,15 @@ export function registerAuthRoutes(
       const res = await auth.handler(toWebRequest(request))
       sendWebResponse(reply, res, await res.text())
     }
+  })
+
+  // RFC 8414 / MCP discovery: the issuer is the API root, so this metadata must
+  // be served at the root path (better-auth also exposes it under /api/auth, but
+  // clients resolve it from `{issuer}/.well-known/...`).
+  const discovery = oAuthDiscoveryMetadata(auth)
+  app.get('/.well-known/oauth-authorization-server', async (request, reply) => {
+    const res = await discovery(toWebRequest(request))
+    sendWebResponse(reply, res, await res.text())
   })
 
   app.get('/auth/capabilities', async (): Promise<AuthCapabilities> => ({
