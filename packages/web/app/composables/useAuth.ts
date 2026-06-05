@@ -47,10 +47,12 @@ export function useAuth() {
     await fetchSession()
   }
 
-  async function signInGithub() {
+  // callbackURL is where better-auth lands after GitHub returns; defaults to the
+  // app home, but an MCP OAuth flow overrides it with the authorize URL to resume.
+  async function signInGithub(callbackURL = `${window.location.origin}/`) {
     const { url } = await api<{ url: string }>('/api/auth/sign-in/social', {
       method: 'POST',
-      body: { provider: 'github', callbackURL: `${window.location.origin}/` }
+      body: { provider: 'github', callbackURL }
     })
     if (!url) throw new Error('GitHub indisponível no momento')
     window.location.href = url

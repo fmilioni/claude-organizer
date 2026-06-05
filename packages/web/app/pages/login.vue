@@ -6,13 +6,44 @@ import type { AuthCapabilities } from '@claude-organizer/shared'
 definePageMeta({ layout: false })
 useHead({ title: 'Entrar' })
 
-const { fetchCapabilities, signUpEmail, signInEmail, signInGithub } = useAuth()
+const {
+  fetchCapabilities,
+  fetchSession,
+  signUpEmail,
+  signInEmail,
+  signInGithub
+} = useAuth()
 const api = useApi()
+const route = useRoute()
+const config = useRuntimeConfig()
 
 const caps = ref<AuthCapabilities | null>(null)
 const loading = ref(false)
 const error = ref<string | null>(null)
 const state = reactive({ name: '', email: '', password: '' })
+
+// When the MCP OAuth authorize endpoint has no session it redirects here (its
+// loginPage) with the original authorize query appended. After login we must
+// re-hit authorize as a top-level navigation so, now authenticated, it issues
+// the code and redirects back to the MCP client — an AJAX sign-in alone would
+// leave the browser on the login page and strand the flow.
+const oauthResumeUrl = computed(() => {
+  const q = route.query
+  if (!q.client_id || !q.redirect_uri || !q.response_type) return null
+  const params = new URLSearchParams()
+  for (const [k, v] of Object.entries(q)) {
+    if (typeof v === 'string') params.set(k, v)
+  }
+  return `${config.public.apiUrl}/api/auth/mcp/authorize?${params.toString()}`
+})
+
+function afterLogin() {
+  if (oauthResumeUrl.value) {
+    window.location.href = oauthResumeUrl.value
+    return
+  }
+  return navigateTo('/')
+}
 
 // No user yet → first boot: this first sign-up claims the admin.
 const setupMode = computed(() => caps.value !== null && !caps.value.hasUsers)
@@ -55,8 +86,15 @@ async function onSubmit(_event: FormSubmitEvent<typeof state>) {
     } else {
       await signInEmail({ email: state.email, password: state.password })
     }
-    await navigateTo('/')
+    await afterLogin()
   } catch (e) {
+    // The MCP OAuth after-hook can turn the sign-in response into a redirect to
+    // the client, making the AJAX call throw even though the session was set.
+    // If we're resuming OAuth and the session really exists, proceed anyway.
+    if (oauthResumeUrl.value && (await fetchSession().catch(() => null))) {
+      window.location.href = oauthResumeUrl.value
+      return
+    }
     error.value = resolveError(e)
   } finally {
     loading.value = false
@@ -81,7 +119,8 @@ async function onGithub() {
   loading.value = true
   error.value = null
   try {
-    await signInGithub()
+    // In an OAuth flow, come back to authorize (not the app) so it resumes.
+    await signInGithub(oauthResumeUrl.value ?? undefined)
   } catch (e) {
     error.value = resolveError(e)
     loading.value = false
