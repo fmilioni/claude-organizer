@@ -126,6 +126,9 @@ async function resolveProjectIds(
     case '/cards/:id':
     case '/cards/:id/archive':
     case '/cards/:id/restore':
+    case '/cards/:id/claim':
+    case '/cards/:id/release':
+    case '/cards/:id/take-over':
       return entity('card', params.id!)
     case '/cards/by-key/:key':
     case '/cards/:key/commits':

@@ -70,6 +70,10 @@ overrides below, and points to the docs for the rest.
     to merge** does it run `gh pr merge <n> --squash --admin --delete-branch`
     (the owner override the protection requires), and that approval is **per
     merge**, never standing.
+- **Auth (diff capture)**: auth is **ON** in this deployment — the
+  `attach-commit` / `attach-worktree-diff` scripts need a card-scoped token. Mint
+  `issue_commit_token(<CO-N>)` and pass it as `CO_COMMIT_TOKEN=<token> pnpm
+  attach-… <arg>` (one token per attach).
 - **Versioning**: every version (each `package.json`, the plugin manifests and
   the MCP server) stays in sync — to set it, run `pnpm bump <version>` (the
   unified bump script); never edit version fields by hand.

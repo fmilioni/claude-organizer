@@ -1,6 +1,7 @@
 export * from './auth'
 export * from './authz'
 export * from './cardBlockers'
+export * from './cardClaims'
 export * from './cardCommits'
 export * from './cards'
 export * from './comments'

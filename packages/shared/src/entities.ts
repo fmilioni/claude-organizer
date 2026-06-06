@@ -73,6 +73,13 @@ export interface CardCommitRow {
   createdAt: string
 }
 
+export interface CardClaimRow {
+  cardId: string
+  ownerToken: string
+  ownerLabel: string | null
+  claimedAt: string
+}
+
 export interface DocRow {
   id: string
   projectId: string
@@ -205,6 +212,16 @@ export interface CardParent {
 }
 
 /**
+ * Advisory claim as surfaced on card reads — the opaque `ownerToken` is never
+ * exposed, only who holds it (`ownerLabel`, null for a generic/no-auth session)
+ * and since when. Ownership is enforced at claim/release/take-over time.
+ */
+export interface CardClaim {
+  ownerLabel: string | null
+  claimedAt: string
+}
+
+/**
  * Card as returned by the API. List endpoints omit `descriptionMd`/`archivedAt`;
  * detail endpoints add joins (tags, subtasks, parent, blockers). Hence those
  * fields are optional here.
@@ -221,6 +238,7 @@ export interface Card extends Omit<CardRow, 'descriptionMd' | 'archivedAt'> {
   blockedBy?: CardParent[]
   blocking?: CardParent[]
   blockedByPending?: number
+  claim?: CardClaim | null
 }
 
 /** Doc list item: no body, `archivedAt` optional (list endpoints omit it). */

@@ -12,6 +12,7 @@ import { registerAdminRoutes } from './routes/admin'
 import { registerAuthRoutes } from './routes/auth'
 import { registerBackupRoutes } from './routes/backup'
 import { registerBlockerRoutes } from './routes/blockers'
+import { registerCardClaimRoutes } from './routes/cardClaims'
 import { registerCardCommitRoutes } from './routes/cardCommits'
 import { registerCardRoutes } from './routes/cards'
 import { registerCommentRoutes } from './routes/comments'
@@ -77,6 +78,7 @@ registerAdminRoutes(app, db)
 registerProjectRoutes(app, db)
 registerSprintRoutes(app, db)
 registerCardRoutes(app, db)
+registerCardClaimRoutes(app, db)
 registerCardCommitRoutes(app, db)
 registerCommentRoutes(app, db)
 registerTagRoutes(app, db)
