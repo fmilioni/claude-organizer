@@ -33,8 +33,8 @@ export const docs = pgTable(
     bodyMd: text('body_md'),
     kind: docKindEnum('kind').notNull().default('note'),
     position: integer('position').notNull().default(0),
-    // Full-text search vector, auto-mantido como generated column STORED.
-    // Config `simple` (sem stemming) cobre pt-BR e en de forma agnóstica.
+    // Full-text search vector, auto-maintained as a STORED generated column.
+    // Config `simple` (no stemming) covers pt-BR and en agnostically.
     bodyTsv: tsvector('body_tsv').generatedAlwaysAs(
       sql`to_tsvector('simple', coalesce(title, '') || ' ' || coalesce(summary, '') || ' ' || coalesce(body_md, ''))`
     ),

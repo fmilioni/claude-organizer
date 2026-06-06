@@ -176,12 +176,12 @@ export async function searchDocs(
   projectId: string,
   query: string
 ) {
-  // Full-text ranqueado via tsvector (config `simple`, agnóstica de idioma).
-  // websearch_to_tsquery aceita input livre do usuário sem lançar erro de sintaxe.
+  // Full-text ranked via tsvector (config `simple`, language-agnostic).
+  // websearch_to_tsquery accepts free user input without throwing a syntax error.
   const tsQuery = sql`websearch_to_tsquery('simple', ${query})`
   const rank = sql<number>`ts_rank(${schema.docs.bodyTsv}, ${tsQuery})`
-  // FTS `simple` casa apenas tokens inteiros; ILIKE no título preserva
-  // matching por substring/prefixo (ex.: "arqu" -> "Arquitetura").
+  // FTS `simple` matches whole tokens only; ILIKE on the title preserves
+  // substring/prefix matching (e.g. "arch" -> "Architecture").
   const term = `%${query}%`
   return db
     .select(docListColumns)

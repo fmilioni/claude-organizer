@@ -257,7 +257,7 @@ async function createSprint() {
     <template #body>
       <div class="space-y-4">
         <UFormField label="Name" required>
-          <UInput v-model="newSprint.name" placeholder="Fase 3 - Roadmaps" />
+          <UInput v-model="newSprint.name" placeholder="Phase 3 - Roadmaps" />
         </UFormField>
         <UFormField
           label="Goal"

@@ -88,7 +88,7 @@ async function previewDoc(d: DocSummary) {
     preview.value = { title: full.title, body: full.bodyMd }
   } catch (e) {
     toast.add({
-      title: 'Falha ao abrir a nota',
+      title: 'Failed to open the note',
       description: resolveError(e),
       color: 'error'
     })

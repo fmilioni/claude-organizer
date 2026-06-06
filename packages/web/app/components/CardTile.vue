@@ -39,7 +39,7 @@ const claimHint = computed(() =>
       class="mb-1 flex items-center gap-1 text-xs text-error"
     >
       <UIcon name="i-lucide-ban" class="size-3 shrink-0" />
-      <span>bloqueado</span>
+      <span>blocked</span>
     </div>
     <div class="flex items-start justify-between gap-2 min-w-0">
       <NuxtLink
