@@ -63,6 +63,13 @@ overrides below, and points to the docs for the rest.
   conventional-commit** (`feat(scope): … (CO-N)`); PRs are **squash-merged**, so
   the title becomes the commit message. The body summarizes the work — **no
   "Generated with Claude Code" footer**.
+  - **Merging is the user's call.** By default the AI opens the PR and **stops**;
+    the user merges. `main` is **branch-protected**, so a plain `gh pr merge`
+    fails — and the AI must **not** reach for `--admin` on its own initiative
+    (that bypasses the protection). Only when the user **explicitly tells the AI
+    to merge** does it run `gh pr merge <n> --squash --admin --delete-branch`
+    (the owner override the protection requires), and that approval is **per
+    merge**, never standing.
 - **Versioning**: every version (each `package.json`, the plugin manifests and
   the MCP server) stays in sync — to set it, run `pnpm bump <version>` (the
   unified bump script); never edit version fields by hand.
