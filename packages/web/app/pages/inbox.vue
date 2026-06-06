@@ -13,6 +13,7 @@ const planned = ref<IntakeItem[]>([])
 const archived = ref<IntakeItem[]>([])
 const newBody = ref('')
 const adding = ref(false)
+const preview = ref<{ title: string, body: string | null } | null>(null)
 
 // The pending item being edited; its editor binds to useAutoSave's buffer, kept
 // out of the reloaded lists so a realtime echo can't clobber an in-flight edit.
@@ -278,10 +279,16 @@ const plannedCompleted = computed(() => planned.value.filter(i => i.completed))
                 :key="item.id"
                 class="flex items-center gap-2 px-2 py-1.5 rounded-md text-sm hover:bg-elevated/50"
               >
-                <AppMarkdown
-                  :value="item.bodyMd"
-                  class="flex-1 min-w-0 text-muted line-clamp-1 cursor-default"
-                />
+                <button
+                  type="button"
+                  class="flex-1 min-w-0 cursor-pointer text-left"
+                  @click="preview = { title: 'Archived demand', body: item.bodyMd }"
+                >
+                  <AppMarkdown
+                    :value="item.bodyMd"
+                    class="text-muted line-clamp-1 pointer-events-none"
+                  />
+                </button>
                 <UButton
                   icon="i-lucide-archive-restore"
                   size="xs"
@@ -305,6 +312,13 @@ const plannedCompleted = computed(() => planned.value.filter(i => i.completed))
       </div>
     </template>
   </UDashboardPanel>
+
+  <ArchivedPreviewModal
+    :open="!!preview"
+    :title="preview?.title"
+    :body="preview?.body"
+    @update:open="(v) => { if (!v) preview = null }"
+  />
 
   <UModal
     :open="!!destroyTarget"

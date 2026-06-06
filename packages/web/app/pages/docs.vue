@@ -6,6 +6,7 @@ import { buildDocTree, docKindMeta } from '~/types/doc'
 const store = useProjectStore()
 const { currentProject, currentProjectId } = storeToRefs(store)
 const api = useApi()
+const toast = useToast()
 
 useHead({ title: 'Docs' })
 
@@ -77,6 +78,21 @@ async function loadDocs() {
 async function restoreDoc(id: string) {
   await api(`/docs/${id}/restore`, { method: 'POST' })
   await loadDocs()
+}
+
+const preview = ref<{ title: string, body: string | null } | null>(null)
+
+async function previewDoc(d: DocSummary) {
+  try {
+    const full = await api<Doc>(`/docs/${d.id}`)
+    preview.value = { title: full.title, body: full.bodyMd }
+  } catch (e) {
+    toast.add({
+      title: 'Falha ao abrir a nota',
+      description: resolveError(e),
+      color: 'error'
+    })
+  }
 }
 
 async function selectDoc(id: string) {
@@ -292,11 +308,17 @@ async function onDocRemoved() {
                   :key="d.id"
                   class="flex items-center gap-2 px-2 py-1 rounded-md text-sm hover:bg-elevated/50"
                 >
-                  <UIcon
-                    :name="docKindMeta[d.kind].icon"
-                    class="size-4 shrink-0 text-muted"
-                  />
-                  <span class="truncate flex-1 text-muted">{{ d.title }}</span>
+                  <button
+                    type="button"
+                    class="flex items-center gap-2 min-w-0 flex-1 cursor-pointer text-left"
+                    @click="previewDoc(d)"
+                  >
+                    <UIcon
+                      :name="docKindMeta[d.kind].icon"
+                      class="size-4 shrink-0 text-muted"
+                    />
+                    <span class="truncate text-muted">{{ d.title }}</span>
+                  </button>
                   <UButton
                     icon="i-lucide-archive-restore"
                     size="xs"
@@ -425,4 +447,11 @@ async function onDocRemoved() {
       </div>
     </template>
   </UModal>
+
+  <ArchivedPreviewModal
+    :open="!!preview"
+    :title="preview?.title"
+    :body="preview?.body"
+    @update:open="(v) => { if (!v) preview = null }"
+  />
 </template>
