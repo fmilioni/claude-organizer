@@ -95,7 +95,19 @@ export async function addComment(db: Database, input: AddCommentInput) {
       })
     }
   }
-  return row
+  if (!row) return row
+  let authorName: string | null = null
+  let authorImage: string | null = null
+  if (row.userId) {
+    const [u] = await db
+      .select({ name: schema.users.name, image: schema.users.image })
+      .from(schema.users)
+      .where(eq(schema.users.id, row.userId))
+      .limit(1)
+    authorName = u?.name ?? null
+    authorImage = u?.image ?? null
+  }
+  return { ...row, authorName, authorImage }
 }
 
 export async function updateComment(db: Database, input: UpdateCommentInput) {
