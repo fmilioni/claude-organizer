@@ -329,8 +329,40 @@ const meta = computed(() =>
   card.value ? cardStatusMeta[card.value.status] : null
 )
 
-function authorLabel(author: 'ai' | 'user') {
-  return author === 'ai' ? 'Claude' : 'You'
+function authorLabel(c: Comment) {
+  if (c.author === 'ai') return 'Claude'
+  return c.authorName ?? 'User'
+}
+
+function commentInitials(name: string | null | undefined) {
+  if (!name) return undefined
+  const initials = name
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map(p => p[0]?.toUpperCase() ?? '')
+    .join('')
+  return initials || undefined
+}
+
+// Avatar cascades src → text → icon: a `user` shows their GitHub photo, else
+// initials, else a generic icon (sem-auth / legacy comments with no identity).
+function commentAvatar(c: Comment) {
+  if (c.author === 'ai') {
+    return {
+      icon: 'i-lucide-bot',
+      alt: 'Claude',
+      ui: { root: 'bg-primary/15 text-primary' }
+    }
+  }
+  const initials = commentInitials(c.authorName)
+  return {
+    src: c.authorImage ?? undefined,
+    text: initials,
+    icon: initials ? undefined : 'i-lucide-user',
+    alt: c.authorName ?? undefined,
+    ui: { root: 'bg-warning/15 text-warning' }
+  }
 }
 function formatDate(iso: string) {
   return new Date(iso).toLocaleString()
@@ -761,16 +793,8 @@ const providerIcon = computed(() =>
               >
                 <div class="flex items-center justify-between gap-2 mb-1.5">
                   <div class="flex items-center gap-2">
-                    <UAvatar
-                      :icon="c.author === 'ai' ? 'i-lucide-bot' : 'i-lucide-user'"
-                      size="xs"
-                      :ui="
-                        c.author === 'ai'
-                          ? { root: 'bg-primary/15 text-primary' }
-                          : { root: 'bg-warning/15 text-warning' }
-                      "
-                    />
-                    <span class="text-sm font-medium">{{ authorLabel(c.author) }}</span>
+                    <UAvatar v-bind="commentAvatar(c)" size="xs" />
+                    <span class="text-sm font-medium">{{ authorLabel(c) }}</span>
                     <UBadge
                       v-if="c.author === 'user' && !c.readByAi"
                       size="xs"
