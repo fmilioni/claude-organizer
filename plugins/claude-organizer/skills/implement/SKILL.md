@@ -5,155 +5,141 @@ description: Use to EXECUTE a card that already exists on the board in claude-or
 
 # Implementing a card
 
-This skill governs the **execution of a card that already exists** on the board — a task, a history (story), or the cards of a sprint. Planning produced the card; here you build it and walk it through its lifecycle while keeping the board honest.
-
-To break a new demand into cards, use **`plan`** — not this skill.
+This skill governs the **execution of a card that already exists** on the board — a task, a history (story), or the cards of a sprint. Planning produced the card; here you build it and walk it through its lifecycle while keeping the board honest. To break a new demand into cards, use **`plan`** — not this skill.
 
 <SKILL-GATE>
 **Load the `claude-organizer` panorama first.** This skill assumes you are oriented on the board. If you have **not** already loaded the **`claude-organizer`** skill in this conversation, invoke it now (Skill tool) and run its start-of-session orientation **before** anything below. If it is already loaded in this conversation, don't reload it — just continue. Don't enter this skill cold.
 </SKILL-GATE>
 
 <HARD-GATE>
-Every step in **The lifecycle** below is **MANDATORY and ORDERED**, for **every** card — trivial or not. You do **not** skip a step, reorder it, or fold it away because:
-
-- it "seems unnecessary" or "obvious",
-- you "already did it earlier" (in this session, on the parent history, on a sibling task),
-- the card is "too small",
-- or you judged it faster to go straight to code.
+Every step in **The lifecycle** below is **MANDATORY and ORDERED**, for **every** card — trivial or not. You do **not** skip a step, reorder it, or fold it away because it "seems unnecessary", you "already did it earlier" (this session, the parent history, a sibling task), the card is "too small", or you judged it faster to go straight to code.
 
 The board is only honest if **every** card walks the **full** lifecycle in lockstep with the real work. Skipping a step — not flipping status, not re-reading this card's comments, committing before the user reviews, not attaching the commit, not moving to `done` after validation — is a **defect**, not an optimization. When in doubt, do the step.
 </HARD-GATE>
 
 ## Never assume — ask the user
 
-Execution constantly hits things the card didn't fully nail down. **Never assume your way past one — ask.** The full doctrine — the two kinds of unknown (ambiguities vs. decisions), how to surface a decision as ready-made options with trade-offs and a recommendation, one topic per message, chaining, checking the card first, and recording the answer — lives in **`../../shared/deciding.md`** (relative to this skill's base directory). Read it and apply it. A wrong assumption baked into code is expensive to undo; asking now is far cheaper than rebuilding later.
+Execution constantly hits things the card didn't fully nail down. **Never assume your way past one — ask.** The full doctrine (the two kinds of unknown, how to surface a decision as ready-made options with trade-offs and a recommendation, one topic per message, chaining, checking the card first, recording the answer) lives in **`../../shared/deciding.md`**. Read it and apply it. Two things specific to execution:
 
-Two things specific to **execution** (vs. planning):
-
-- **The moment you hit one mid-build, stop and ask** — don't push past it. Fold the answer back in and record it as a **comment** on the card (it's signal — see step 5), so it survives for the next session.
-- **A story is decided up front, as a whole.** Before building a story with several cards, **read all of its cards** (description + comments) and gather **every** open decision and ambiguity across them, then clear them with the user **before writing code**. Don't start card 1, hit a fork mid-way, and guess — surface the doubts as a batch (still one per message, chained) so the whole story is unblocked before execution begins.
+- **Hit one mid-build → stop and ask.** Don't push past it. Fold the answer back in and record it as a **comment** (it's signal — step 5), so it survives for the next session.
+- **A story is decided up front, as a whole.** Before building a story, **read all of its cards** (description + comments) and gather **every** open decision and ambiguity across them, then clear them with the user **before writing code** — surface the batch one per message, chained. Don't start card 1, hit a fork mid-way, and guess.
 
 ## The lifecycle — every card, every time, in order
 
 ### 1. Re-read the board, then move the card to `in_progress`
 
-- **Re-read before you start.** Don't trust an earlier read or your memory: between cards the user may have re-prioritized, pulled in work, or left a comment. Re-query the active sprint and the sprint-less `todo`/`backlog` cards, and check `list_unread_comments`, so you act on the **current** state.
-- **`set_card_status(id, "in_progress")` the moment you pick the card up** — before writing a line of code. Non-negotiable, even for a one-line change. A card being worked while it still reads `todo` is the board lying.
-- **Reserve the card as you pick it up** — `claim_task(<key>, <sessionToken>, <label>)`, so another session/machine doesn't start the same work (advisory — full flow in _Reserving the card_). A **story** also reserves its not-yet-started children. A **conflict** (held by another session) — **stop and ask** the user before taking it over; don't just start.
-- If it's a sub-task, also move its **history** to `in_progress` now (see _History status_).
+- **Re-read before you start.** Don't trust an earlier read or your memory — between cards the user may have re-prioritized, pulled in work, or left a comment. Re-query the active sprint and the sprint-less `todo`/`backlog` cards, and check `list_unread_comments`, so you act on the **current** state.
+- **`set_card_status(id, "in_progress")` the moment you pick the card up** — before writing a line of code, even for a one-line change. A card being worked while it still reads `todo` is the board lying.
+- **Reserve the card** — `claim_task(<key>, <sessionToken>, <label>)` (advisory — see _Reserving the card_). A **conflict** (held by another session) → **stop and ask** before taking it over; don't just start.
+- If it's a sub-task, move its **history** to `in_progress` now too (see _History status_).
 
 ### 2. Read THIS card's comments — `list_comments(cardId)` — even if you read them before
 
 This is the step most often skipped, and skipping it is where the work goes wrong.
 
 - Call **`list_comments(cardId)` before implementing, every card, every time** — including each sub-task of a history.
-- **Re-read even if you already read this card's comments earlier.** Re-read at the **start of the task** specifically, because something **new or different may have been added since** — a correction, a constraint, a scope change the user posted after the briefing or while you were on another card.
-- Reading the **history's** comments does **not** cover its children, and a sibling task having nothing does **not** mean this one does. Comments are **per-card**.
-- **Comments are where settled decisions and clarifications live** — the answer to a question you'd otherwise ask may already be here. Read them so you don't re-ask, and don't assume past what they say (see _Never assume_).
-- Address whatever's there **before** writing code. Never skip because you "already read the comments around here".
+- **Re-read even if you read them earlier** — something **new** may have landed since: a correction, a constraint, a scope change posted after the briefing or while you were on another card.
+- Reading the **history's** comments does **not** cover its children, and a sibling task having none does **not** mean this one does. Comments are **per-card**.
+- **Comments are where settled decisions live** — the answer to a question you'd otherwise ask may already be here. Read them so you don't re-ask, and don't assume past what they say.
 
 ### 3. Read the relevant docs
 
 Scan the docs tree (`list_docs` / `search_docs`) and read what's pertinent to this card's area — the `module` for the code you'll touch, an `adr` that affects it, a `note` that may carry a constraint. Don't read unrelated docs; do decide what's worth opening. Important context often lives only there.
 
-### 4. Implement
+### 4. Implement — write clean code from the start
 
-Build the card. Follow the repo's `CLAUDE.md` and the agreed git flow (see _Git flow_). Stay within the card's scope; if scope shifts, that's a comment (step 5) — and possibly a new card via `plan`. **The moment you hit an ambiguity or a decision the card doesn't settle, stop and ask** — don't assume your way forward (see _Never assume_); fold the answer back in and record it as a comment.
+Build the card, following the repo's `CLAUDE.md` and the agreed git flow (see _Git flow_). Stay within the card's scope; if scope shifts, that's a comment (step 5) — and possibly a new card via `plan`. **The moment you hit an ambiguity or a decision the card doesn't settle, stop and ask** — don't assume your way forward; fold the answer back in and record it as a comment.
+
+**Write code without needless comments from the start** — don't leave for the review what shouldn't be written in the first place:
+
+- **Don't comment _what_ the code does** — the identifiers already say it (`const total = sum(items)` needs no `// sum the items`).
+- **Don't narrate** the task, the decision, or the change in code or comments, and **don't leave card/ticket references** in the source — that belongs in the commit message and on the card, where it won't rot on the next refactor.
+- **Comment only what the code can't say for itself**: a non-obvious **why**, a subtle **invariant or constraint** the caller must preserve, a **workaround** tied to a specific quirk, or the **doc of a public function/API**. One short line where it earns its place — if you can't put the *why* in a line, the code likely needs a better name or shape, not a comment.
+
+This is the **source** of the clean-code rule; the review gate (step 7) only catches what slips through — a safety net, not where cleanup is born.
 
 ### 5. Record signal as comments
 
-As you work, **`add_comment(cardId, …)`** for what carries **signal** — decisions and why, scope changes, deviations from what the card asked, domain insights, edge cases. Skip noise (the plan, narration, "typecheck passed"). The criterion (signal vs. noise) lives in the **`claude-organizer`** skill — follow it. This is the project's memory for the next session.
+As you work, **`add_comment(cardId, …)`** for what carries **signal** — decisions and why, scope changes, deviations from what the card asked, domain insights, edge cases. Skip noise (the plan, narration, "typecheck passed"). The signal-vs-noise criterion lives in the **`claude-organizer`** skill — follow it. This is the project's memory for the next session.
 
 ### 6. Move to `review` the moment you hand off — **even if you haven't committed**
 
-- **`set_card_status(id, "review")` the instant you stop and the user takes over** to validate. Status reflects **who holds the ball**, not whether a commit exists. Do this **even though the commit hasn't landed yet** — the commit only lands after the user confirms it works (steps 7–8), but the card belongs in `review` from the moment _you're_ done and _they_ need to look.
-- On the **same move**, post **one** comment with the **test plan**: what to open, what to do, what to expect, and briefly what you already checked. The console scrollback is ephemeral; this comment is where the user (and a future session) sees how to validate what's in review.
-- Then **capture the working-tree diff onto the card**: run `pnpm attach-worktree-diff <CO-N>` (or the bundled `scripts/attach-worktree-diff.mjs` / `.py`). Same rule as `attach-commit` — the diff goes straight to the API **outside your context**; **never read or paste it**. This lets the user see what will land while reviewing, before any commit exists.
-  - **Token only when auth is on** — read the flag from the project's `CLAUDE.md` (see _Auth flag for diff capture_), don't re-check the server. Auth on → mint `issue_commit_token(<CO-N>)` and run `CO_COMMIT_TOKEN=<token> pnpm attach-worktree-diff <CO-N>` (short-lived, card-scoped — mint one per attach); auth off → run it tokenless.
+- **`set_card_status(id, "review")` the instant you stop and the user takes over** to validate. Status reflects **who holds the ball**, not whether a commit exists — so move it even though the commit lands only after the user confirms (steps 7–10).
+- On the **same move**, post **one** comment with the **test plan**: what to open, what to do, what to expect, and briefly what you already checked. Console scrollback is ephemeral; this comment is where the user (and a future session) sees how to validate what's in review. It follows the same signal-vs-noise rule as any comment.
+- Then **capture the working-tree diff onto the card**: `pnpm attach-worktree-diff <CO-N>` (or the bundled `scripts/attach-worktree-diff.mjs` / `.py`). The diff goes straight to the API **outside your context** — **never read or paste it**. This lets the user see what will land before any commit exists. (Token only when auth is on — see _Auth flag for diff capture_.)
 - Then **wait for the user to validate**. Do **not** self-approve and do **not** jump ahead to commit or `done`.
 
 ### 7. Per-task review gate — a fresh subagent, **before commit** (skip only if trivial)
 
-Now that the behavior is validated, run the **per-task review** via the **`review`** skill **before** committing — over the **working-tree diff** (`git diff`), so any fixes fold into the change and the card keeps **one clean commit**. It spawns a **fresh subagent** (objective eyes — you just wrote this code, so you're the worst judge of it) that checks **this task's acceptance criteria** and hunts for **reuse / dead code / noise comments**, then reports and asks what to do (fix now / follow-up card / other). A **trivial** task (one-liner, rename, config — nothing with real logic) may **skip** this by quick judgment; note the skip briefly so it's visible, not silent. See _Review gate_. When fixes fold into the working tree, **re-run `pnpm attach-worktree-diff <CO-N>`** so the card's pending diff reflects the adjusted change.
+With the behavior validated, run the **per-task review** via the **`review`** skill **before** committing — over the **working-tree diff** (`git diff`), so any fixes fold into the change and the card keeps **one clean commit**. It spawns a **fresh subagent** (objective eyes — you just wrote this code, so you're the worst judge of it) that checks **this task's acceptance criteria** and hunts for reuse / dead code / leftover comments, then reports and asks what to do (fix now / follow-up card / other). When fixes fold into the working tree, **re-run `pnpm attach-worktree-diff <CO-N>`** so the pending diff reflects the adjusted change.
+
+A **trivial** task (one-liner, rename, config — nothing with real logic) may **skip** this by quick judgment; note the skip briefly so it's visible, not silent. For a **standalone** task (no parent), this per-task review *is* the whole review — there's no story layer above it. Skipping the gate (beyond the trivial exception) is a defect.
 
 ### 8. Let the user review the diff — **before** committing
 
-Once the behavior is validated and the per-task review is settled, **let the user review the diff first**. Don't commit on your own initiative. Wait for the user's go-ahead on the actual changes before creating the commit.
+Once the behavior is validated and the per-task review is settled, **let the user review the diff first**. Don't commit on your own initiative; wait for the user's go-ahead on the actual changes.
 
 ### 9. Capture durable knowledge in the docs — before you close
 
-Before committing, ask once: **did a decision, a standardization, or long-lived knowledge surface while building this card?** If so, **write or update the doc now** — don't wait to be asked: an `adr` for a decision (with the _why_), the matching `guide`/`module` for a new or changed convention, a `module`/`note` for a durable gotcha. Prefer **updating** an existing doc over creating a second; **skip** the ephemeral or deducible (no doc spam). This checkpoint is what makes the docs habit happen during the work, not just in theory — the full criterion lives in the **`claude-organizer`** skill (_Docs_). Docs live in the MCP, not in git, so this is independent of the commit below.
+Before committing, ask once: **did a decision, a standardization, or long-lived knowledge surface while building this card?** If so, **write or update the doc now** — an `adr` for a decision (with the _why_), the matching `guide`/`module` for a new or changed convention, a `module`/`note` for a durable gotcha. Prefer **updating** an existing doc over creating a second; **skip** the ephemeral or deducible (no doc spam). The full criterion lives in the **`claude-organizer`** skill (_Docs_). Docs live in the MCP, not in git, so this is independent of the commit below.
 
 ### 10. Commit, then attach the commit's diff to the card — **always**
 
 - After the user confirms, create **one commit per card**, message in English referencing the key (e.g. `feat(tags): … (CO-4)`), per the repo's `CLAUDE.md` (commit + versioning rules).
-- **Always attach the commit's diff to the card** — right after it lands. Run the project's `pnpm attach-commit <sha>`, or the bundled script in this skill's own `scripts/`: `node "<skill dir>/scripts/attach-commit.mjs" <sha>` (or the `.py` twin where Node isn't available). It runs `git show` and POSTs the diff straight to the API (`CO_API_URL`, default `http://127.0.0.1:4400`), so the card's **Changes** section shows what the commit produced. **Token only when auth is on** — same flag as the working-tree capture (see _Auth flag for diff capture_): auth on → mint `issue_commit_token(<CO-N>)` into `CO_COMMIT_TOKEN` (e.g. `CO_COMMIT_TOKEN=<token> pnpm attach-commit <sha>`); auth off → tokenless.
+- **Always attach the commit's diff** right after it lands: `pnpm attach-commit <sha>` (or the bundled `scripts/attach-commit.mjs` / `.py`). It runs `git show` and POSTs the diff to the API (`CO_API_URL`, default `http://127.0.0.1:4400`), so the card's **Changes** section shows what the commit produced. (Token only when auth is on — see _Auth flag for diff capture_.)
 - The diff is captured **outside your context on purpose** — **never read it or paste it into a comment** (it burns tokens and adds noise).
-- Attaching the **real commit clears the pending working-tree diff** automatically (the `__working__` sentinel row is dropped), so the card swaps from "uncommitted" to the committed diff with **no manual cleanup** on the happy path.
+- Attaching the real commit **clears the pending working-tree diff** automatically (the `__working__` sentinel row is dropped), so the card swaps from "uncommitted" to the committed diff with no manual cleanup on the happy path.
 
 ### 11. Move to `done` — **always**, only after the user confirms
 
 **`set_card_status(id, "done")`** once the user has confirmed it works. Don't leave a validated card sitting in `review`, and never mark `done` before validation.
 
-If this is the **last child of a story**, the **story-level review gate** fires **before** the story closes (see _Review gate_); only then move the history to `done` too (see _History status_). At this story boundary — and before advancing to the next card/story or ending the session — re-check the inbox **fresh** (see _Inbox re-check at work boundaries_).
+If this is the **last child of a story**, the **story-level review gate** fires **before** the story closes: an additional `review`-skill pass over the **whole story** (≈ one PR, `git diff <base>...HEAD`), scoped to what a single task can't see — the **story's acceptance criteria**, **duplication across tasks**, **coherence of the PR**; it does not re-review each task line-by-line (the per-task gates already did). Only then move the history to `done` too (see _History status_).
+
+At this story boundary — and before advancing to the next card/story or ending the session — re-check the inbox **fresh**: call **`list_inbox` (pending)** again (don't trust the orientation snapshot — the user may have dropped demands while you worked). If it surfaces pending demands the work didn't cover, **stop and ask** whether to review/plan them now (a decision gate — they may **reshape the upcoming stories**). The criterion and wording live in the **`claude-organizer`** skill (_Inbox_).
 
 ## Auth flag for diff capture — read it from CLAUDE.md
 
-The diff-capture scripts (`attach-worktree-diff`, `attach-commit`) need a card-scoped token **only when auth is on**. Don't probe the server's auth state before every attach — read it from a flag the project's **`CLAUDE.md`** records, and act on it:
+The diff-capture scripts (`attach-worktree-diff`, `attach-commit`) need a card-scoped token **only when auth is on**. Don't probe the server before every attach — read the flag the project's **`CLAUDE.md`** records, and act on it:
 
-- **Auth on** → mint `issue_commit_token(<CO-N>)` and pass it in `CO_COMMIT_TOKEN` when running the script.
+- **Auth on** → mint `issue_commit_token(<CO-N>)` and pass it in `CO_COMMIT_TOKEN` (e.g. `CO_COMMIT_TOKEN=<token> pnpm attach-commit <sha>`); the token is short-lived and card-scoped, so mint one per attach.
 - **Auth off, or no flag yet** → run the script tokenless.
-- **Self-healing** — if an attach unexpectedly returns **401**, auth is actually on: write the flag to `CLAUDE.md` (auth **on**) so later attaches mint a token instead of failing, then retry the attach with a token.
-
-The lifecycle's "token only when auth is on" notes (steps 6 and 10) follow **this flag**, not a fresh check each time.
-
-## Review gate — mandatory, before a task or story closes
-
-Work gets an independent review so acceptance criteria are actually met and the change carries no more code than it needs. Don't review it yourself — the **`review`** skill spawns a **fresh subagent** for objective eyes, reports the findings, and asks what to do (fix now / follow-up card / other). Fixes come back through this lifecycle. There are **two levels**, at **two moments**:
-
-- **Per task — before commit (step 7).** Reviews **that task's working-tree diff** (`git diff`): its own acceptance criteria + reuse/dead-code/comments. Fixes fold into the single commit. A **trivial** task (one-liner, rename, config — nothing with real logic) may **skip** by quick judgment; note the skip so it's visible, not silent.
-- **Per story — when the last child is done, before the story closes (step 11).** An additional pass over the **whole story** (≈ one PR), from the story's **commits / branch diff** (`git diff <base>...HEAD`), scoped to what a single task can't see: **the story's acceptance criteria**, **duplication across tasks**, **coherence of the PR**. It does **not** re-review each task line-by-line — the per-task gates already did. A **standalone task** (no parent) has no story layer: its per-task review *is* the whole review.
-
-Skipping a gate (beyond the trivial-task exception) is a defect.
-
-## Inbox re-check at work boundaries
-
-The inbox snapshot from orientation goes stale — the user may drop demands **while** you work a card or story. So at the **end of a story** (its last child done), **before advancing to the next card/story/sprint**, and **before ending the session**, re-call **`list_inbox` (pending) fresh** — don't trust the orientation snapshot. If it surfaces pending demands not covered by the work just done, **stop and ask** the user whether to review/plan them now (a decision gate), noting they may **reshape the upcoming stories**. The criterion and wording live in the **`claude-organizer`** skill (_Inbox — suggest planning, don't nag_); this is the execution-side enforcement of it.
+- **Self-healing** — if an attach unexpectedly returns **401**, auth is actually on: write the flag to `CLAUDE.md` (auth **on**), then retry the attach with a token.
 
 ## Git flow — agree before you start
 
 Before implementing a story (or the first card of a batch), get the git flow straight — **don't assume**:
 
 - If the repo's `CLAUDE.md` already defines a flow, follow it.
-- Otherwise, when you're on `main`/`master`, **ask the user how to proceed**: a branch + PR? a branch merged later? commit straight on the current branch? **Mirror what the user already does** — some want a branch + PR per story, others a branch per task, others everything left in review on one branch.
+- Otherwise, on `main`/`master`, **ask the user how to proceed**: a branch + PR? a branch merged later? commit straight on the current branch? **Mirror what the user already does.**
 
-A batch of several cards may mean **several branches** — warn the user that you'll need to **switch branches** between cards, and don't pile unrelated work onto one branch. Watch for **conflicts**: don't run far ahead in parallel if the work will collide; sequence dependent cards with the **blockers** system (a card `blocked by` another) so the order is explicit.
+A batch of several cards may mean **several branches** — warn the user you'll need to **switch branches** between cards, and don't pile unrelated work onto one branch. Watch for **conflicts**: don't run far ahead in parallel if the work will collide; sequence dependent cards with the **blockers** system (a card `blocked by` another) so the order is explicit.
 
 ## Reserving the card — advisory claim
 
 The board coordinates parallel sessions/machines with an **advisory** claim: it signals "this card is in my work buffer" so another session doesn't start the same thing. Nothing is locked (the API never blocks on it); the skill is what respects it.
 
-- **One session token per run.** At the start of a run that will work cards, generate a single opaque `sessionToken` (a random string) and a readable `label` — the user's name when you know it (auth on), otherwise a generic session label. **Reuse both** for every claim/release/take-over this run; don't mint a new one per card.
-- **Claim when you pick a card up** (step 1): `claim_task(<key>, <sessionToken>, <label>)`. A **story** also reserves its not-yet-started (`todo`) children. The reserved cards show an hourglass on the board.
-- **Conflict = held by another session.** `claim_task` returns `{ ok:false, conflict:true, claim }` **without changing anything**. **Stop and ask the user** — _"`<key>` is reserved by `<claim.ownerLabel>` since `<claim.claimedAt>`; take it over?"_ (the other session may have been interrupted). On a **yes**, `take_over_task(<key>, <sessionToken>, <label>)` swaps the token to you; on a **no**, don't start that card. **Take-over is always user-confirmed.**
-- **Release.** Completing the card (`done`) **auto-releases** the claim — no call needed. If you **abandon/cancel** a card normally without finishing, `release_task(<key>, <sessionToken>)`. A **CTRL-C keeps** the claim on purpose, so you can resume where you left off. Resuming in a **new run** mints a new token, so your own earlier claim now reads as a conflict → the take-over prompt above retakes it.
+- **One session token per run.** At the start of a run, generate a single opaque `sessionToken` and a readable `label` — the user's name when you know it (auth on), otherwise a generic session label. **Reuse both** for every claim/release/take-over this run; don't mint a new one per card.
+- **Claim when you pick a card up** (step 1): `claim_task(<key>, <sessionToken>, <label>)`. A **story** also reserves its not-yet-started (`todo`) children. Reserved cards show an hourglass on the board.
+- **Conflict = held by another session.** `claim_task` returns `{ ok:false, conflict:true, claim }` **without changing anything**. **Stop and ask the user** — _"`<key>` is reserved by `<claim.ownerLabel>` since `<claim.claimedAt>`; take it over?"_ On **yes**, `take_over_task(<key>, <sessionToken>, <label>)` swaps the token to you; on **no**, don't start that card. **Take-over is always user-confirmed.**
+- **Release.** Completing the card (`done`) **auto-releases** the claim. If you **abandon/cancel** a card without finishing, `release_task(<key>, <sessionToken>)`. A **CTRL-C keeps** the claim on purpose, so you can resume; resuming in a **new run** mints a new token, so your own earlier claim now reads as a conflict → the take-over prompt above retakes it.
 
 ## History status — keep it honest as children move
 
-A **history** (a parent card with sub-tasks) is a container; its status tracks its children, not the other way around. The moment work starts on any child — you move the first sub-task to `in_progress`, or one is already `done` — move the history to `in_progress` too. Move it to `done` only when **every** child is `done`. The board shows each history's child counts, so an out-of-sync status is visible and confusing.
+A **history** (a parent card with sub-tasks) is a container; its status tracks its children. The moment work starts on any child — you move the first sub-task to `in_progress`, or one is already `done` — move the history to `in_progress` too. Move it to `done` only when **every** child is `done`. The board shows each history's child counts, so an out-of-sync status is visible and confusing.
 
-## The one-line checklist
+## The quick checklist
 
-For each card, in order — no step skipped. **Standing rule: never assume — any ambiguity or decision the card doesn't settle goes to the user before you build (see _Never assume_); for a story, clear all of them up front.**
+Per card, in order — no step skipped. **Standing rule: never assume — any ambiguity or decision the card doesn't settle goes to the user before you build; for a story, clear all of them up front.**
 
-1. Re-read the board → **`claim_task`** (a conflict → ask, then take-over) → `in_progress` (history too, if a sub-task).
-2. `list_comments(cardId)` — even if read before; new context may have landed (and is where settled decisions live).
+1. Re-read the board → `claim_task` (conflict → ask, then take-over) → `in_progress` (history too, if a sub-task).
+2. `list_comments(cardId)` — even if read before.
 3. Read the relevant docs.
-4. Implement — hit a doubt? stop and ask, don't assume.
+4. Implement — clean code, no needless comments; hit a doubt → stop and ask.
 5. Comment the signal.
-6. `review` status the moment you hand off (even uncommitted) + test-plan comment + `attach-worktree-diff <CO-N>` (capture the pending diff, outside context) → wait for behavioral validation.
-7. **Per-task review gate** (`review` skill, fresh subagent, working-tree diff; skip only if trivial) → report & ask → fixes fold in → re-run `attach-worktree-diff`.
-8. Let the user review the diff before committing.
-9. Capture durable knowledge in the docs (decision/convention/gotcha → write or update the doc; skip the ephemeral).
-10. Commit (one per card, key in message) → attach the diff to the card.
-11. `done` after the user confirms — and if this is a story's last child, the **story-level review gate** first, then close the story. At the story/batch boundary, before advancing or ending the session, re-check the inbox **fresh** (`list_inbox`, pending) and gate with the user (see _Inbox re-check at work boundaries_).
+6. `review` status + test-plan comment + `attach-worktree-diff` → wait for validation.
+7. Per-task review gate (fresh subagent; skip only if trivial) → fixes fold in → re-run `attach-worktree-diff`.
+8. Let the user review the diff.
+9. Capture durable knowledge in the docs.
+10. Commit (one per card, key in message) → `attach-commit`.
+11. `done` after the user confirms — story's last child → story-level review gate first, then close the history; re-check the inbox fresh at the boundary.

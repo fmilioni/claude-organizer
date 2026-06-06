@@ -5,15 +5,13 @@ description: Use to REVIEW work in claude-organizer with fresh, objective eyes b
 
 # Reviewing with fresh eyes
 
-This skill is the **review phase** — what a careful **senior engineer reviewing a PR** does. The session that just wrote the code is the worst judge of it — it's anchored to the choices it made. So every review runs in a **separate subagent with a clean context**, which checks that the **acceptance criteria were actually met, the right way**, and goes looking for the **real problems a human reviewer would catch**: bugs and missed edge cases, security holes, slow or wasteful data access, risky dependencies, needless complexity, missed reuse, and code or comments that shouldn't be there.
+This skill is the **review phase** — what a careful **senior engineer reviewing a PR** does. The session that just wrote the code is the worst judge of it: it's anchored to the choices it made. So every review runs in a **separate subagent with a clean context**, which checks that the **acceptance criteria were actually met, the right way**, and goes looking for the **real problems a human reviewer would catch**: bugs and missed edge cases, security holes, slow or wasteful data access, risky dependencies, needless complexity, missed reuse, and code or comments that shouldn't be there.
 
 <SKILL-GATE>
 **Load the `claude-organizer` panorama first.** This skill assumes you are oriented on the board. If you have **not** already loaded the **`claude-organizer`** skill in this conversation, invoke it now (Skill tool) and run its start-of-session orientation **before** anything below. If it is already loaded in this conversation, don't reload it — just continue. Don't enter this skill cold.
 </SKILL-GATE>
 
-There are **two levels**, with **different scopes so they don't redo each other's work**.
-
-## The two levels
+## The two levels — different scopes, so they don't redo each other's work
 
 ### Per-task review — local scope
 
@@ -36,21 +34,21 @@ It does **not** re-review each task line-by-line — that's already done. Review
 
 ### Standalone task
 
-A task with **no parent** is its own unit (≈ its own PR). It gets a **single review at completion** — the per-task review *is* the whole review here, since there's no story layer above it. (Trivial-skip still applies.)
+A task with **no parent** is its own unit (≈ its own PR). It gets a **single review at completion** — the per-task review *is* the whole review, since there's no story layer above it. (Trivial-skip still applies.)
 
 <HARD-GATE>
 Both gates are **mandatory** and the `implement` skill fires them automatically — they are **not** optional and **not** skippable because the work "looks fine" (trivial tasks are the only exception, and only at the per-task level). The point is exactly that the implementing session's confidence is unreliable; an independent pass catches what it's blind to. Run the gate **before** the unit closes (`done`). Skipping it is a defect.
 </HARD-GATE>
 
+> **On comments:** the `implement` skill already requires code to be written without needless comments from the start, so the reviewer treats comment noise as a **safety net** — flagging what slipped through, not running a cleanup the implementer should never have left for it.
+
 ## How — dispatch the `card-reviewer` agent
 
 Do **not** review in this context. Spawn a **fresh subagent** per pass, starting from a clean slate.
 
-**Use the dedicated `claude-organizer:card-reviewer` agent** (`Agent` tool, `subagent_type: "claude-organizer:card-reviewer"`). It is **read-only by construction** — its tool roster has no `Edit`/`Write` and no board-write MCP tools, so it physically **cannot** fix code or touch the board, only read code + git + the board and report. The full review **mandate** (scope discipline, the checks, the output format) lives in the **agent definition** — this skill does not restate it; it just hands the agent the scope and the changeset.
+**Use the dedicated `claude-organizer:card-reviewer` agent** (`Agent` tool, `subagent_type: "claude-organizer:card-reviewer"`). It is **read-only by construction** — its tool roster has no `Edit`/`Write` and no board-write MCP tools, so it physically **cannot** fix code or touch the board, only read code + git + the board and report. The full review **mandate** (scope discipline, the checks, the output format) lives in the **agent definition** — this skill doesn't restate it; it just hands the agent the scope and the changeset:
 
-Give the agent, in the spawn prompt:
-
-- **The card** — pass the **card id or key** (e.g. `CO-42`) **and the scope** (per-task / story / standalone). The agent pulls the card itself (`get_card` / `get_card_by_key` + `list_comments`; for a story, the parent **and all children**) so it has the acceptance criteria and constraints **straight from the source**.
+- **The card** — the **card id or key** (e.g. `CO-42`) **and the scope** (per-task / story / standalone). The agent pulls the card itself (`get_card` / `get_card_by_key` + `list_comments`; for a story, the parent **and all children**), so it has the acceptance criteria and constraints straight from the source.
 - **The changeset spec** — how to see exactly the code in scope (it runs the git itself; don't paste diffs):
   - **per-task / standalone** → that task's commit (`git show <sha>`) or the working-tree diff of just its files (`git diff`).
   - **story** → the whole unit: the branch/PR diff against the base (`git diff <base>...HEAD`), or the commits referencing the story's key **and its children's keys**.
@@ -67,7 +65,7 @@ The agent returns a structured report — **Acceptance criteria** (met/partial/n
    - **follow-up card(s)** — capture findings as new cards (via the `plan`/board flow) for later;
    - **other** — defer, dismiss as won't-fix, accept as partial, etc.
 3. **Act on the choice.** Fixes go back through the `implement` lifecycle; cards get created; then the unit can close.
-4. **Re-review non-trivial fixes before closing.** A fix is itself a change, and a change can introduce new problems. If the fixes you applied were **substantial** — a new function, edits across several files, a reworked code path, anything with real logic — run **one more fresh review pass over the fix diff** before the unit closes, so the corrections didn't add bugs of their own. **Skip** the re-review for **obvious** fixes (deleting a comment, a lint/format tweak, a rename, a one-liner) — same trivial-skip judgment as a per-task review. The point is the same as the gate itself: the session that just applied the fix is the worst judge of it.
+4. **Re-review non-trivial fixes before closing.** A fix is itself a change, and a change can introduce new problems. If the fixes you applied were **substantial** — a new function, edits across several files, a reworked code path, anything with real logic — run **one more fresh review pass over the fix diff** before the unit closes. **Skip** the re-review for **obvious** fixes (deleting a comment, a lint/format tweak, a rename, a one-liner) — same trivial-skip judgment as a per-task review. The session that just applied the fix is the worst judge of it.
 
 Record the outcome on the board: a short comment on the card with the criteria verdict and anything deferred, following the signal-vs-noise rule in the `claude-organizer` skill. The full finding list is ephemeral working material — never paste the whole diff or a wall of nitpicks into a comment.
 
