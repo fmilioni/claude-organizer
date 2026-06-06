@@ -52,8 +52,10 @@ the same board, drag cards, and leave comments the agent reads back.
   captured outside the AI's context (no tokens spent reading patches).
 - 📚 **Docs that don't rot** — architecture, ADRs and patterns live as project
   docs the agent reads before reinventing.
+- 🔐 **Auth when you want it** — runs open by default, or turn on sign-in
+  (email+password, GitHub optional) with roles and per-project access.
 - 🔌 **One-command install** — the plugin delivers the skills *and* registers the
-  remote MCP; no `claude mcp add`.
+  MCP; no `claude mcp add`.
 
 <div align="center">
 <table>
@@ -90,7 +92,8 @@ docker compose up -d --build
 | **MCP** (Streamable HTTP) | http://localhost:4402/mcp |
 
 Migrations run automatically before the API and MCP start. Postgres data persists
-under `./docker/data/postgres`.
+under `./docker/data/postgres`. Out of the box the board is **open** (no login) —
+see [Run modes](#run-modes) to turn auth on or to go remote.
 
 ### 2. Configure the environment
 
@@ -108,14 +111,14 @@ POSTGRES_PORT=5544                 # host port (in-container is 5432)
 API_PORT=4400
 NUXT_PUBLIC_API_URL=http://127.0.0.1:4400
 
-# MCP transport
-# MCP_HTTP_PORT=4402               # serve over HTTP (Docker/VPS); omit for stdio
-# MCP_AUTH_TOKEN=                  # if set, clients must send Authorization: Bearer <token>
+# MCP transport (Streamable HTTP at /mcp)
+# MCP_HTTP_PORT=4402               # override the port (default 4402)
+# MCP_PUBLIC_URL=http://127.0.0.1:4402   # public URL clients reach the MCP at
 ```
 
-The MCP runs over **stdio** by default (local Claude Code). Setting
-`MCP_HTTP_PORT` serves it over Streamable HTTP at `/mcp` instead — that's what the
-Docker stack does, and it's the transport the plugin connects to.
+The MCP is served over **Streamable HTTP** at `/mcp` — that's the transport the
+plugin connects to. Auth is **off by default** (open board, like before it
+landed); turn it on from the in-app setup — see [Authentication](#authentication).
 
 ### 3. Install the plugin
 
@@ -136,8 +139,89 @@ Or via the marketplace:
 ```
 
 The `claude-organizer` tools appear automatically, pointing at
-`${CO_MCP_URL:-http://localhost:4402/mcp}`. If the server sets `MCP_AUTH_TOKEN`,
-pass it as `CO_MCP_TOKEN`.
+`${CO_MCP_URL:-http://localhost:4402/mcp}`. To reach a remote host, export
+`CO_MCP_URL` (see [Run modes](#run-modes)); when auth is on, the plugin runs the
+OAuth flow itself — there's no token to paste.
+
+## Run modes
+
+The same stack runs three ways. The only differences are a couple of env vars and,
+for remote, the reverse-proxy overlay.
+
+### Local, no auth (default)
+
+`docker compose up -d --build` and you're done: an open board on
+`http://localhost:4401` and an open MCP on `http://localhost:4402/mcp`. No login,
+no token — the plugin connects as-is. This matches how the project ran before auth
+existed.
+
+### Local, with auth
+
+Turn auth on from the **first-boot setup** on the login screen — the first account
+becomes the **admin**; after that, sign-in is required. Accounts use
+email+password by default, with **GitHub OAuth optional** (set `GITHUB_CLIENT_ID` /
+`GITHUB_CLIENT_SECRET`). Set a `BETTER_AUTH_SECRET` in `.env` for anything beyond a
+throwaway local run. The MCP then requires OAuth — the plugin performs the flow for
+you, so `CO_MCP_URL` is still all you set. Details in [Authentication](#authentication).
+
+### Remote (reverse proxy + subdomains)
+
+For a hosted deployment, put the three services behind a single TLS edge on
+**80/443** with **Caddy**, routing one subdomain each. A versioned overlay does this:
+
+```bash
+cp .env.prod.example .env   # set *_DOMAIN, ACME_EMAIL, BETTER_AUTH_SECRET, public URLs
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+```
+
+- `app.<domain>` → web, `api.<domain>` → API, `mcp.<domain>` → MCP. Point DNS for
+  all three at the host; Caddy issues and renews TLS automatically (ACME).
+- Only Caddy publishes host ports; postgres/api/web/mcp stay on the internal
+  network. The reverse-proxy config lives in [`deploy/Caddyfile`](deploy/Caddyfile).
+- **Point the plugin at the remote MCP** by its subdomain:
+
+  ```bash
+  CO_MCP_URL=https://mcp.<domain>/mcp claude
+  ```
+
+- `AUTH_COOKIE_DOMAIN=<domain>` shares the session cookie across `app.`/`api.`, and
+  `NUXT_PUBLIC_API_URL` is **baked into the SPA at build time** (`ssr: false`), so
+  set it to `https://api.<domain>` before `up --build`. All values are in
+  [`.env.prod.example`](.env.prod.example).
+
+## Authentication
+
+Auth is built on [better-auth](https://better-auth.com) and is **off by default**
+(the open board above). When on:
+
+- **Methods** — email+password is the zero-config base; **GitHub OAuth** is
+  optional and only appears when `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` are
+  set (callback `https://api.<domain>/api/auth/callback/github`). No host is forced
+  to register an OAuth app.
+- **First boot** — the first account to sign in claims **admin**; from there,
+  users get **roles** and **per-project access**, and admins manage who can see
+  what.
+- **MCP** — with auth on, `/mcp` is an OAuth 2.1 resource server: the plugin
+  obtains a bearer automatically. With auth off, `/mcp` is open (no login),
+  mirroring the open board.
+- **Sem-auth mode** — the default; flip it from the setup screen or system
+  settings.
+
+Relevant env (see `.env.example`):
+
+| Var | Purpose |
+| --- | --- |
+| `BETTER_AUTH_SECRET` | Signs sessions/tokens — **required in production**. |
+| `BETTER_AUTH_URL` | Public URL of the API (where better-auth is mounted). |
+| `AUTH_TRUSTED_ORIGINS` | Origins allowed to call auth (CSRF) — also the API's CORS allow-list. |
+| `AUTH_COOKIE_DOMAIN` | Parent domain to share the session cookie across subdomains (remote only). |
+| `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` | Enable GitHub sign-in. |
+
+> **Local gotcha:** the web (`:4401`) and API (`:4400`) are different origins, and
+> the session cookie is `SameSite=Lax` + host-bound. Locally, reach **both on the
+> same host** — use `127.0.0.1`, not `localhost` — or the cookie won't be sent.
+> Behind the reverse proxy, `AUTH_COOKIE_DOMAIN` removes this constraint across the
+> subdomains.
 
 ## The skills
 
@@ -176,6 +260,14 @@ has no memory, so it reads the board before touching code:
 **Let it run** — the `autopilot` skill works several ready cards as separate PRs
 and stops when only blocked/PR-dependent work remains. Your merge confirms each.
 
+### Inbox
+
+Got an idea mid-flight but don't want to plan it yet? Drop it in the **inbox** — a
+one-line demand captured without breaking it into cards. The agent reads pending
+inbox items when it orients and offers to plan them; the `plan` skill turns a
+demand into the right sprint/stories/tasks and marks it planned. It keeps raw
+intake out of the board until it's actually structured work.
+
 ## Architecture
 
 ```text
@@ -191,23 +283,13 @@ A pnpm monorepo under `packages/`:
 | `shared` | Shared TypeScript types. |
 | `db` | Drizzle schema + migrations. |
 | `core` | Zod-validated use-cases — the single source of truth. |
-| `mcp` | The MCP server (stdio or HTTP). |
+| `auth` | better-auth setup (email+password, GitHub, OAuth for the MCP). |
+| `mcp` | The MCP server (Streamable HTTP). |
 | `api` | Fastify REST + WebSocket. |
 | `web` | Nuxt 4 SPA (the UI talks only to the API, never the MCP). |
 
 Prefixed nanoid IDs (`prj_`, `crd_`, `spr_`…) let the agent recognize an entity's
 type from the ID alone.
-
-## Remote (VPS)
-
-Host the stack, then point Claude Code at it before launching:
-
-```bash
-CO_MCP_URL=https://your-host/mcp CO_MCP_TOKEN=your-token claude
-```
-
-`CO_MCP_TOKEN` is only needed when the server sets `MCP_AUTH_TOKEN`. Terminate TLS
-with a reverse proxy (Caddy, Nginx, …).
 
 ## Development (without Docker)
 
@@ -217,7 +299,7 @@ pnpm db:up                       # Postgres on :5544
 pnpm db:migrate
 pnpm dev:api                     # :4400
 pnpm dev:web                     # :4401
-MCP_HTTP_PORT=4402 pnpm dev:mcp  # :4402  (omit MCP_HTTP_PORT for stdio)
+pnpm dev:mcp                     # :4402/mcp
 ```
 
 Also handy: `pnpm typecheck`, `pnpm lint`, `pnpm test`, and `pnpm db:generate`
@@ -225,27 +307,16 @@ after schema changes.
 
 ## Roadmap
 
-Claude Organizer is single-tenant and open today — anyone who can reach the API
-or MCP can read and write the board. The next milestone closes that gap:
+Authentication has landed — sign-in (email+password, GitHub optional), roles and
+per-project access, OAuth for the MCP, and identity on comments. What's still open:
 
-- 🔐 **Authentication & accounts** — sign-in for the web UI and token-based auth
-  for the API, so the board is no longer wide-open.
-- 👥 **Multi-user & roles** — per-user identity on cards and comments, with
-  owner / member / viewer permissions.
 - 🏢 **Multi-tenant workspaces** — isolated organizations, each with its own
   projects, members and MCP credentials.
-- 🔑 **Scoped MCP tokens** — per-agent tokens with project-level scope, instead
-  of a single shared `MCP_AUTH_TOKEN`.
-- 📦 **Import / export** — back up and move a board between instances, with a
-  portable format to export projects, sprints, cards, comments and docs (and
-  import them back).
-
-> Today, protect a hosted instance by keeping it private (VPN / reverse-proxy
-> auth) and setting `MCP_AUTH_TOKEN`. Real authentication lands with the items
-> above.
+- 🔑 **Per-agent MCP tokens** — scoped credentials per agent, beyond the current
+  per-user project scope.
+- 📦 **Import / export** — move a board between instances via a portable backup
+  of projects, sprints, cards, comments and docs.
 
 ## License
 
 [MIT](LICENSE) © Felipe Milioni
-</content>
-</invoke>
