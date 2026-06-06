@@ -54,12 +54,14 @@ export function useAuth() {
       method: 'POST',
       body: { provider: 'github', callbackURL }
     })
-    if (!url) throw new Error('GitHub indisponível no momento')
+    if (!url) throw new Error('GitHub is unavailable right now')
     window.location.href = url
   }
 
   async function signOut() {
-    await api('/api/auth/sign-out', { method: 'POST' })
+    // Empty `body` forces Content-Type: application/json — the API's Fastify
+    // content-type parser 415s a bodyless POST (defaults to text/plain).
+    await api('/api/auth/sign-out', { method: 'POST', body: {} })
     user.value = null
   }
 

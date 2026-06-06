@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import type { NavigationMenuItem } from '@nuxt/ui'
+import type { DropdownMenuItem, NavigationMenuItem } from '@nuxt/ui'
 
 import { useProjectStore } from '~/stores/project'
 
 const store = useProjectStore()
 const { projects } = storeToRefs(store)
-const { isAdmin, capabilities } = useAuth()
+const { user, isAdmin, capabilities, signOut } = useAuth()
 
 // Load projects here (not only in the boot plugin): the layout renders only for
 // authenticated pages, so by now the session cookie exists and /projects is
@@ -14,10 +14,10 @@ store.ensureLoaded()
 
 const version = useRuntimeConfig().public.appVersion
 
-// Creating a project is admin-only (open in sem-auth mode). A scoped `user`
-// can't, so onboarding/empty-state must branch on this — forcing the create
-// modal on a non-creator would trap them (POST /projects 403s, no escape).
-const canCreateProject = computed(
+// Admin, or sem-auth mode (an open board has no admin to gate). The same gate the
+// settings page applies to system actions — here it drives both project creation
+// and whether the system-config section is visible at all.
+const adminOrOpenMode = computed(
   () => isAdmin.value || !(capabilities.value?.authEnabled ?? true)
 )
 
@@ -25,9 +25,9 @@ const canCreateProject = computed(
 // create-project modal (non-dismissable) — but only for someone who can create.
 const onboardingOpen = ref(false)
 watch(
-  [projects, canCreateProject],
-  ([list, canCreate]) => {
-    onboardingOpen.value = list.length === 0 && canCreate
+  [projects, adminOrOpenMode],
+  ([list, adminOrOpen]) => {
+    onboardingOpen.value = list.length === 0 && adminOrOpen
   },
   { immediate: true }
 )
@@ -35,46 +35,91 @@ watch(
 // A scoped user with no accessible projects: nothing to show and nothing to
 // create — point them at their admin instead of an empty app.
 const noProjectsForUser = computed(
-  () => projects.value.length === 0 && !canCreateProject.value
+  () => projects.value.length === 0 && !adminOrOpenMode.value
 )
 
 function onProjectCreated() {
   navigateTo('/')
 }
 
-const links = computed<NavigationMenuItem[][]>(() => [
-  [
-    { label: 'Home', icon: 'i-lucide-home', to: '/' },
-    { label: 'Inbox', icon: 'i-lucide-inbox', to: '/inbox' },
-    { label: 'Board', icon: 'i-lucide-kanban', to: '/board' },
-    { label: 'Sprints', icon: 'i-lucide-timer', to: '/sprints' },
-    { label: 'Tasks', icon: 'i-lucide-list-todo', to: '/tasks' },
-    { label: 'Docs', icon: 'i-lucide-book', to: '/docs' }
-  ],
-  [
-    ...(isAdmin.value
-      ? [{ label: 'Usuários', icon: 'i-lucide-users', to: '/admin/users' }]
-      : []),
-    { label: 'Settings', icon: 'i-lucide-settings', to: '/settings' }
-  ]
+const projectLinks = computed<NavigationMenuItem[]>(() => [
+  { label: 'Home', icon: 'i-lucide-home', to: '/' },
+  { label: 'Inbox', icon: 'i-lucide-inbox', to: '/inbox' },
+  { label: 'Board', icon: 'i-lucide-kanban', to: '/board' },
+  { label: 'Sprints', icon: 'i-lucide-timer', to: '/sprints' },
+  { label: 'Tasks', icon: 'i-lucide-list-todo', to: '/tasks' },
+  { label: 'Docs', icon: 'i-lucide-book', to: '/docs' }
 ])
+
+const systemLinks = computed<NavigationMenuItem[]>(() => [
+  ...(isAdmin.value
+    ? [{ label: 'Users', icon: 'i-lucide-users', to: '/admin/users' }]
+    : []),
+  { label: 'Settings', icon: 'i-lucide-settings', to: '/settings' }
+])
+
+const accountItems = computed<DropdownMenuItem[][]>(() => [
+  [{ label: user.value?.email ?? '', type: 'label' }],
+  [{ label: 'Log out', icon: 'i-lucide-log-out', onSelect: onLogout }]
+])
+
+async function onLogout() {
+  await signOut()
+  await navigateTo('/login')
+}
 </script>
 
 <template>
   <UDashboardGroup>
-    <UDashboardSidebar collapsible resizable>
+    <UDashboardSidebar
+      collapsible
+      resizable
+      :ui="{ footer: 'flex-col items-stretch gap-2' }"
+    >
       <template #header>
         <AppProjectSwitcher />
       </template>
 
-      <UNavigationMenu
-        :items="links"
-        orientation="vertical"
-        class="-mx-2"
-      />
+      <template #default="{ collapsed }">
+        <UNavigationMenu
+          :items="projectLinks"
+          orientation="vertical"
+          :collapsed="collapsed"
+          tooltip
+          class="-mx-2"
+        />
+      </template>
 
       <template #footer="{ collapsed }">
-        <span v-if="!collapsed" class="block w-full text-center text-xs text-muted pb-2">v{{ version }}</span>
+        <UNavigationMenu
+          v-if="adminOrOpenMode"
+          :items="systemLinks"
+          orientation="vertical"
+          :collapsed="collapsed"
+          tooltip
+          class="-mx-2"
+        />
+
+        <UDropdownMenu
+          v-if="user"
+          :items="accountItems"
+          :content="{ align: 'center', collisionPadding: 12 }"
+          :ui="{ content: collapsed ? 'w-48' : 'w-(--reka-dropdown-menu-trigger-width)' }"
+        >
+          <UButton
+            color="neutral"
+            variant="ghost"
+            block
+            :square="collapsed"
+            :avatar="{ src: user.image ?? undefined, alt: user.name, icon: 'i-lucide-user' }"
+            :label="collapsed ? undefined : user.name"
+            :trailing-icon="collapsed ? undefined : 'i-lucide-chevrons-up-down'"
+            class="-mx-2 data-[state=open]:bg-elevated"
+            :ui="{ trailingIcon: 'text-dimmed' }"
+          />
+        </UDropdownMenu>
+
+        <span v-if="!collapsed" class="block w-full text-center text-xs text-muted">v{{ version }}</span>
       </template>
     </UDashboardSidebar>
 
@@ -85,11 +130,11 @@ const links = computed<NavigationMenuItem[][]>(() => [
       <div class="text-center max-w-sm">
         <UIcon name="i-lucide-folder-lock" class="size-8 text-muted mx-auto" />
         <p class="text-sm font-medium mt-2">
-          Nenhum projeto liberado
+          No projects yet
         </p>
         <p class="text-sm text-muted mt-1">
-          Você ainda não tem acesso a nenhum projeto. Peça a um administrador
-          para liberar um para você.
+          You don't have access to any project yet. Ask an administrator to
+          grant you access.
         </p>
       </div>
     </div>

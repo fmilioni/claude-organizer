@@ -91,18 +91,14 @@ function openProject(slug: string) {
 
     <template #body>
       <div class="max-w-2xl mx-auto w-full space-y-8">
-        <section v-if="adminOrOpenMode" class="space-y-3">
-          <div>
-            <h2 class="text-sm font-semibold">
-              Backup
-            </h2>
-            <p class="text-sm text-muted">
-              Export a project (or everything) to a versioned <code>.json.gz</code>,
-              or import one as a brand-new project.
-            </p>
-          </div>
-
-          <div class="space-y-3 border border-default rounded-lg p-4">
+        <UPageCard
+          v-if="adminOrOpenMode"
+          title="Backup"
+          description="Export a project (or everything) to a versioned .json.gz, or import one as a brand-new project."
+          variant="subtle"
+          :ui="{ container: 'gap-4', wrapper: 'mb-0' }"
+        >
+          <div class="space-y-3">
             <div class="flex items-center justify-between gap-3">
               <div class="min-w-0">
                 <p class="text-sm font-medium">
@@ -198,42 +194,37 @@ function openProject(slug: string) {
               <span>{{ importError }}</span>
             </div>
           </div>
-        </section>
+        </UPageCard>
 
-        <section v-if="adminOrOpenMode" class="space-y-3">
-          <div>
-            <h2 class="text-sm font-semibold">
-              Autenticação
-            </h2>
-            <p class="text-sm text-muted">
-              Com auth desativada o board funciona sem login (modo aberto):
-              qualquer um com acesso à rede usa o board. Ative para exigir login
-              e liberar usuários por papel/projeto.
-            </p>
-          </div>
-
-          <div class="space-y-3 border border-default rounded-lg p-4">
+        <UPageCard
+          v-if="adminOrOpenMode"
+          title="Authentication"
+          description="With auth disabled the board runs without login (open mode): anyone with network access uses it. Enable it to require login and grant users access by role/project."
+          variant="subtle"
+          :ui="{ container: 'gap-4', wrapper: 'mb-0' }"
+        >
+          <div class="space-y-3">
             <div class="flex items-center justify-between gap-3">
               <div class="min-w-0">
                 <p class="text-sm font-medium">
-                  {{ authEnabled ? "Ativada" : "Desativada (modo aberto)" }}
+                  {{ authEnabled ? "Enabled" : "Disabled (open mode)" }}
                 </p>
                 <p class="text-xs text-muted">
                   {{ authEnabled
-                    ? "Login obrigatório; o admin libera novos usuários."
-                    : "Qualquer um com acesso à rede usa o board sem login." }}
+                    ? "Login required; the admin approves new users."
+                    : "Anyone with network access uses the board without logging in." }}
                 </p>
               </div>
               <UButton
                 :color="authEnabled ? 'error' : 'primary'"
                 variant="subtle"
                 :loading="togglingAuth"
-                :label="authEnabled ? 'Desativar' : 'Ativar'"
+                :label="authEnabled ? 'Disable' : 'Enable'"
                 @click="toggleAuth"
               />
             </div>
           </div>
-        </section>
+        </UPageCard>
       </div>
     </template>
   </UDashboardPanel>
