@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { Card, CardStatus } from '~/types/card'
+import type { Card, CardClaim, CardStatus } from '~/types/card'
 import { cardStatusMeta } from '~/types/card'
 
 const props = withDefaults(
@@ -12,7 +12,7 @@ const props = withDefaults(
     /** parentKey -> story title, for the envelope headers. */
     parentTitles?: Record<string, string>
     /** parentKey -> the story's own claim, for the envelope reservation hint. */
-    parentClaims?: Record<string, { ownerLabel: string | null, claimedAt: string }>
+    parentClaims?: Record<string, CardClaim>
   }>(),
   { groupByStory: false, parentTitles: () => ({}), parentClaims: () => ({}) }
 )

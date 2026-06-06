@@ -197,13 +197,20 @@ export async function updateCard(db: Database, input: UpdateCardInput) {
   if (rest.parentId != null) {
     await assertValidParent(db, id, rest.parentId)
   }
-  const [row] = await db
-    .update(schema.cards)
-    .set({ ...rest, updatedAt: sql`now()` })
-    .where(eq(schema.cards.id, id))
-    .returning()
+  const [row] = await db.transaction(async (tx) => {
+    const updated = await tx
+      .update(schema.cards)
+      .set({ ...rest, updatedAt: sql`now()` })
+      .where(eq(schema.cards.id, id))
+      .returning()
+    // Auto-release the claim atomically with the status write (a done card never
+    // stays reserved), mirroring the reorder path.
+    if (updated[0] && rest.status === 'done') {
+      await releaseClaimOnDone(tx, updated[0].id)
+    }
+    return updated
+  })
   if (row) {
-    if (rest.status === 'done') await releaseClaimOnDone(db, row.id)
     await notify(db, {
       type: 'card.changed',
       projectId: row.projectId,

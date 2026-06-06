@@ -271,10 +271,10 @@ export async function takeOverCard(
     const targets = children.filter(
       c => c.status === 'todo' || c.claimed != null
     )
-    for (const t of targets) {
+    if (targets.length > 0) {
       await tx
         .insert(schema.cardClaims)
-        .values({ cardId: t.id, ownerToken, ownerLabel })
+        .values(targets.map(t => ({ cardId: t.id, ownerToken, ownerLabel })))
         .onConflictDoUpdate({
           target: schema.cardClaims.cardId,
           set: { ownerToken, ownerLabel, claimedAt: sql`now()` }

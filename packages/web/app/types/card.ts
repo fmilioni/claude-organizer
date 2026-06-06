@@ -2,6 +2,7 @@ import type { CardStatus } from '@claude-organizer/shared'
 
 export type {
   Card,
+  CardClaim,
   CardParent,
   CardStatus,
   CardSubtask

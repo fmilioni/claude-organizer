@@ -16,12 +16,9 @@ const props = withDefaults(
 
 // Advisory claim: an hourglass marks a reserved card; the owner + since-when ride
 // in the native title tooltip (read-only — reserving happens via MCP).
-const claimHint = computed(() => {
-  const c = props.card.claim
-  if (!c) return ''
-  const who = c.ownerLabel ?? 'a session'
-  return `Reserved by ${who} · since ${new Date(c.claimedAt).toLocaleString()}`
-})
+const claimHint = computed(() =>
+  props.card.claim ? formatClaimHint(props.card.claim) : ''
+)
 </script>
 
 <template>

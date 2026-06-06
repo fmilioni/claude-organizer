@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { VueDraggable } from 'vue-draggable-plus'
 
-import type { Card, CardStatus } from '~/types/card'
+import type { Card, CardClaim, CardStatus } from '~/types/card'
 
 // Draggable list of cards with optional story-envelope grouping, shared by the
 // board columns and the Tasks Backlog. Owns the drag wiring (reorder emit) and
@@ -16,7 +16,7 @@ const props = withDefaults(
     /** parentKey -> story title, for the envelope headers. */
     parentTitles?: Record<string, string>
     /** parentKey -> the story's own claim, for the envelope reservation hint. */
-    parentClaims?: Record<string, { ownerLabel: string | null, claimedAt: string }>
+    parentClaims?: Record<string, CardClaim>
     /** Layout of the draggable container; defaults to the board column flow. */
     listClass?: string
   }>(),
@@ -76,10 +76,9 @@ const isGroupEnd = (i: number) => {
 }
 const inGroup = (c: Card) => props.groupByStory && !!c.parentKey
 
-// Reservation hint for each story envelope: the story's OWN claim (the parent is
-// rendered as an envelope, not a tile, so its claim has nowhere else to show)
-// takes precedence; otherwise an aggregate count of reserved children. Computed
-// once per render, keyed by parentKey.
+// Reservation hint per story envelope: the story's OWN claim takes precedence
+// over a reserved-children count (the parent renders as an envelope, not a tile,
+// so its claim has nowhere else to surface). Keyed by parentKey, computed once.
 const groupClaimHints = computed<Record<string, string>>(() => {
   const childCounts = new Map<string, number>()
   for (const c of localList.value) {
@@ -95,8 +94,7 @@ const groupClaimHints = computed<Record<string, string>>(() => {
   for (const key of keys) {
     const own = props.parentClaims[key]
     if (own) {
-      const who = own.ownerLabel ?? 'a session'
-      hints[key] = `Reserved by ${who} · since ${new Date(own.claimedAt).toLocaleString()}`
+      hints[key] = formatClaimHint(own)
     } else {
       const n = childCounts.get(key) ?? 0
       hints[key] = n ? `${n} reserved subtask${n > 1 ? 's' : ''}` : ''
