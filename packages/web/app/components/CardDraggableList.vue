@@ -15,12 +15,15 @@ const props = withDefaults(
     groupByStory?: boolean
     /** parentKey -> story title, for the envelope headers. */
     parentTitles?: Record<string, string>
+    /** parentKey -> the story's own claim, for the envelope reservation hint. */
+    parentClaims?: Record<string, { ownerLabel: string | null, claimedAt: string }>
     /** Layout of the draggable container; defaults to the board column flow. */
     listClass?: string
   }>(),
   {
     groupByStory: false,
     parentTitles: () => ({}),
+    parentClaims: () => ({}),
     listClass: 'flex flex-col p-2 flex-1 overflow-y-auto overflow-x-hidden'
   }
 )
@@ -72,6 +75,35 @@ const isGroupEnd = (i: number) => {
   return k !== null && groupKeyOf(localList.value[i + 1]) !== k
 }
 const inGroup = (c: Card) => props.groupByStory && !!c.parentKey
+
+// Reservation hint for each story envelope: the story's OWN claim (the parent is
+// rendered as an envelope, not a tile, so its claim has nowhere else to show)
+// takes precedence; otherwise an aggregate count of reserved children. Computed
+// once per render, keyed by parentKey.
+const groupClaimHints = computed<Record<string, string>>(() => {
+  const childCounts = new Map<string, number>()
+  for (const c of localList.value) {
+    if (c.parentKey && c.claim) {
+      childCounts.set(c.parentKey, (childCounts.get(c.parentKey) ?? 0) + 1)
+    }
+  }
+  const keys = new Set([
+    ...childCounts.keys(),
+    ...Object.keys(props.parentClaims)
+  ])
+  const hints: Record<string, string> = {}
+  for (const key of keys) {
+    const own = props.parentClaims[key]
+    if (own) {
+      const who = own.ownerLabel ?? 'a session'
+      hints[key] = `Reserved by ${who} · since ${new Date(own.claimedAt).toLocaleString()}`
+    } else {
+      const n = childCounts.get(key) ?? 0
+      hints[key] = n ? `${n} reserved subtask${n > 1 ? 's' : ''}` : ''
+    }
+  }
+  return hints
+})
 
 // SortableJS has already updated `localList` (v-model) by the time these fire,
 // so it reflects the dropped order. `@add` = a card came from another column
@@ -125,6 +157,14 @@ function onUpdate() {
         <UIcon name="i-lucide-layers" class="size-3.5 text-primary shrink-0" />
         <span class="font-mono font-bold text-default shrink-0 whitespace-nowrap">{{ card.parentKey }}</span>
         <span class="text-muted truncate min-w-0">{{ parentTitles[card.parentKey ?? ''] ?? '' }}</span>
+        <span
+          v-if="groupClaimHints[card.parentKey ?? '']"
+          :title="groupClaimHints[card.parentKey ?? '']"
+          class="flex items-center text-warning shrink-0"
+          @mousedown.stop
+        >
+          <UIcon name="i-lucide-hourglass" class="size-3" />
+        </span>
       </NuxtLink>
 
       <CardTile

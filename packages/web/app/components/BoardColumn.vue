@@ -11,8 +11,10 @@ const props = withDefaults(
     groupByStory?: boolean
     /** parentKey -> story title, for the envelope headers. */
     parentTitles?: Record<string, string>
+    /** parentKey -> the story's own claim, for the envelope reservation hint. */
+    parentClaims?: Record<string, { ownerLabel: string | null, claimedAt: string }>
   }>(),
-  { groupByStory: false, parentTitles: () => ({}) }
+  { groupByStory: false, parentTitles: () => ({}), parentClaims: () => ({}) }
 )
 
 const emit = defineEmits<{
@@ -52,6 +54,7 @@ const meta = computed(() => cardStatusMeta[props.status])
       :cards="cards"
       :group-by-story="groupByStory"
       :parent-titles="parentTitles"
+      :parent-claims="parentClaims"
       @reorder="(p) => emit('reorder', p)"
     />
   </div>
