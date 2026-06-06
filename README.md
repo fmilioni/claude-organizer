@@ -189,6 +189,24 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
   set it to `https://api.<domain>` before `up --build`. All values are in
   [`.env.prod.example`](.env.prod.example).
 
+### Two hosts at once (local + company)
+
+`CO_MCP_URL` points the bundled plugin entry at **one** host. To use **two at the
+same time** — say your local board and a company one — register the second host as
+its own MCP server with a distinct name:
+
+```bash
+claude mcp add --transport http -s user claude-organizer-second https://mcp.company.com/mcp
+```
+
+(`-s user` keeps it available across repos, like the bundled entry.) Each host is
+independent: its own tool prefix (`mcp__claude-organizer__*` and
+`mcp__claude-organizer-second__*`), its own OAuth session (the plugin runs the flow
+per host when auth is on), and its own set of projects. The skills treat each
+server as one host and never mix their projects — they pick the server whose
+project matches the repo you're in. The bundled plugin ships only the default
+entry; the extra host is this one-time `claude mcp add`.
+
 ## Authentication
 
 Auth is built on [better-auth](https://better-auth.com) and is **off by default**

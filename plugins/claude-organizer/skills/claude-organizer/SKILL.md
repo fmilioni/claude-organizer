@@ -39,6 +39,16 @@ If no project matches the current repo, ask the user before creating one.
 
 **Wire the repo link once.** After step 1, if the project has no `repoWebUrl`, detect the current repo's remote so commit hashes link to the provider: read `git remote get-url origin` (fallback: the first of `git remote -v`), convert it to a web URL (`git@github.com:owner/repo.git` or `https://github.com/owner/repo.git` → `https://github.com/owner/repo`; GitLab the same, subgroups included), pick the `provider` by host (`github`/`gitlab`; skip a self-hosted host you can't classify), and save it with `set_project_repo(projectId, provider, repoWebUrl)`. Skip when it's already set or there's no git remote.
 
+## Multiple hosts — one server per host, never mix
+
+You may have **more than one** organizer host connected at once — e.g. a **local** board and a **company** one. Each host is a **separate MCP server**, with its **own tool prefix** (`mcp__claude-organizer__*`, `mcp__claude-organizer-second__*`, …) and its **own set of projects** — they never share data.
+
+- **One server = one host = its own projects.** Run the orientation (step 1, `list_projects`) **on the right server** and pick the one whose project `slug` matches the repo you're in. The tool prefix already tells you which host a call hits.
+- **Never mix hosts in a single operation.** Keep a card/sprint/doc/comment on the **same** server its project lives on — don't read from one host and write to another.
+- **Unsure which host a repo belongs to? Ask** — a project from the wrong host is worse than a question.
+
+Adding a second host is a one-time `claude mcp add` (distinct name + URL); the bundled plugin ships only the default entry. See the README.
+
 ## Inbox — suggest planning, don't nag
 
 The inbox (`list_inbox`, pending) holds **raw demands** the user dropped without planning them — not cards yet. You **always do what the user asked first**; then, with judgment, suggest turning pending demands into cards via the **`plan`** skill:

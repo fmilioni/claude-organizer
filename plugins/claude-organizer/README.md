@@ -41,3 +41,13 @@ CO_MCP_URL=https://mcp.example.com/mcp claude
 ```
 
 `CO_MCP_URL` defaults safely: unset, the plugin talks to `http://localhost:4402/mcp`. See the root `README.md` for the full local/remote setup.
+
+## Two hosts at once (local + company)
+
+`CO_MCP_URL` points the bundled entry at **one** host per session. To use **two simultaneously** — e.g. your local board and a company one — add the second host as its **own** MCP server with a distinct name:
+
+```bash
+claude mcp add --transport http -s user claude-organizer-second https://mcp.company.com/mcp
+```
+
+(`-s user` makes it available in every repo, like the bundled entry; omit it to scope it to the current directory — `local`.) Both run side by side: each gets its own tool prefix (`mcp__claude-organizer__*` and `mcp__claude-organizer-second__*`), its own OAuth session (when auth is on, the flow runs per host — no token to paste), and its own set of projects. The skills treat each server as one host and never mix their projects — pick the server whose project matches the repo you're in.
