@@ -2,7 +2,7 @@
   "name": "claude-organizer",
   "displayName": "Claude Organizer",
   "description": "Jira para Claude Code: gestão de tarefas via MCP. Entrega as skills de board (usar, planejar, executar, revisar e rodar o board em autopilot) e registra o MCP remoto (HTTP) automaticamente.",
-  "version": "0.9.1",
+  "version": "0.9.2",
   "author": {
     "name": "Felipe Milioni"
   },
