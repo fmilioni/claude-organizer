@@ -57,7 +57,7 @@ Run each fully-decided ready card through the **normal `implement` lifecycle + `
 - **Sequential:** in the main session, one card at a time — for each, branch from fresh `main` → `implement` lifecycle → per-task `review` gate → commit on the branch → open the PR (`gh`) → set the card to `review` → next independent card.
 - **Parallel:** one subagent per card, each in its own worktree — see _Parallel mode_.
 
-Each card is a **fresh branch off the up-to-date `main`** (`git fetch origin && git switch -c <branch> origin/main`), never off another card's branch. One PR per card. Keep `pnpm attach-commit <sha>` per card after its commit.
+Each card is a **fresh branch off the up-to-date `main`** (`git fetch origin && git switch -c <branch> origin/main`), never off another card's branch. One PR per card. Keep `pnpm attach-commit <sha>` per card after its commit. **Claim each card as it enters execution** so another machine doesn't take the same work (see _Reserving cards across machines_).
 
 **Record the PR on the card when you open it** — post the PR number/link as a comment. Your context may reset between rounds, and the next round's Phase 1 needs to map a card back to its PR (to check merge state and to report what's waiting). The card status alone (`review`) doesn't carry the PR number.
 
@@ -118,11 +118,20 @@ The project rule "commit only after the user confirms" **adapts** here, it isn't
 
 **What changes in the `implement` lifecycle on the autonomous path** (only these — the rest is unchanged): the user isn't present per card, so the **wait for behavioral validation** (step 6) and the **user's diff review before commit** (step 8) are replaced by **the PR itself** — committing on the branch and opening the PR *is* the handoff, and the user validates by reviewing/merging the PR. The per-task **`review` gate still runs before the commit** (over the working-tree diff), and the **test-plan still gets posted** — as the PR body and/or a card comment — so the user knows how to validate. Ordering: run the review gate → commit → open PR → `attach-commit` → set the card to `review` (PR open = ball in the user's court).
 
+## Reserving cards across machines (advisory claim)
+
+The run coordinates with other sessions/machines through the **advisory** claim (full semantics in `implement`'s _Reserving the card_). At board scope:
+
+- **One session token + label for the whole run** (the orchestrator's), reused across every card and — in parallel mode — handed to each subagent so its `done` auto-releases under the same identity.
+- **Claim each card as it enters execution** (Phase 3): `claim_task(<key>, <token>, <label>)` on the fresh branch; a story claim cascades to its `todo` children. In **parallel mode the orchestrator claims before dispatching** the subagent, so the conflict check happens centrally — a card already held by **another** session is **not** dispatched.
+- **A conflict is a Phase-2-style decision, not a guess.** If a ready card is held by another session/machine, **surface it to the user** (_"reserved by X since Y — take over?"_) like any open decision; on confirmation, `take_over_task`; otherwise skip that card this round. Never auto-take.
+- **Release** is automatic on `done`; a normally abandoned/skipped card gets `release_task`. A crash **keeps** the claim — the next round's claim attempt reads it as a conflict and the take-over prompt retakes it.
+
 ## The one-line checklist
 
 1. **Ask the mode** — sequential or parallel.
 2. **Map** the board → dependency graph → **ready set** (`git fetch`; blockers must be **merged into `main`**, not just `done`).
 3. **Decide** the ready set up front with the user (shared doctrine, batch, current ready set only) → **record answers into the cards**.
-4. **Execute** each decided card on a **fresh branch off `main`** → `implement` lifecycle → `review` gate → commit on branch → open PR → `attach-commit` → card to `review`. Parallel: one subagent per card in a worktree, skills **inline**, conflict guard on, **subagent never asks**.
+4. **Execute** each decided card on a **fresh branch off `main`** → **`claim_task`** (conflict → ask, take-over) → `implement` lifecycle → `review` gate → commit on branch → open PR → `attach-commit` → card to `review`. Parallel: one subagent per card in a worktree, skills **inline**, conflict guard on, **subagent never asks**.
 5. **Never** stack, **never** merge to `main` yourself.
 6. **Report** (PRs opened / waiting on your merge / blocked) and **stop** when only PR-dependent or blocked work remains. Re-check the inbox **fresh** before stopping/looping and gate pending demands with the user. **Resume** after the user merges.
