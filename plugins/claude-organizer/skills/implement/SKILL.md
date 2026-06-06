@@ -68,7 +68,7 @@ As you work, **`add_comment(cardId, …)`** for what carries **signal** — deci
 - **`set_card_status(id, "review")` the instant you stop and the user takes over** to validate. Status reflects **who holds the ball**, not whether a commit exists. Do this **even though the commit hasn't landed yet** — the commit only lands after the user confirms it works (steps 7–8), but the card belongs in `review` from the moment _you're_ done and _they_ need to look.
 - On the **same move**, post **one** comment with the **test plan**: what to open, what to do, what to expect, and briefly what you already checked. The console scrollback is ephemeral; this comment is where the user (and a future session) sees how to validate what's in review.
 - Then **capture the working-tree diff onto the card**: run `pnpm attach-worktree-diff <CO-N>` (or the bundled `scripts/attach-worktree-diff.mjs` / `.py`). Same rule as `attach-commit` — the diff goes straight to the API **outside your context**; **never read or paste it**. This lets the user see what will land while reviewing, before any commit exists.
-  - **Auth on → the script needs a card-scoped token.** With auth enabled the attach scripts get **401** without one. Mint it from the MCP — `issue_commit_token(<CO-N>)` — and run the script with that token in `CO_COMMIT_TOKEN` (e.g. `CO_COMMIT_TOKEN=<token> pnpm attach-worktree-diff <CO-N>`). It's short-lived and scoped to that card, so mint a fresh one per attach. In **sem-auth** mode skip this — the script works tokenless.
+  - **Token only when auth is on** — read the flag from the project's `CLAUDE.md` (see _Auth flag for diff capture_), don't re-check the server. Auth on → mint `issue_commit_token(<CO-N>)` and run `CO_COMMIT_TOKEN=<token> pnpm attach-worktree-diff <CO-N>` (short-lived, card-scoped — mint one per attach); auth off → run it tokenless.
 - Then **wait for the user to validate**. Do **not** self-approve and do **not** jump ahead to commit or `done`.
 
 ### 7. Per-task review gate — a fresh subagent, **before commit** (skip only if trivial)
@@ -86,15 +86,25 @@ Before committing, ask once: **did a decision, a standardization, or long-lived 
 ### 10. Commit, then attach the commit's diff to the card — **always**
 
 - After the user confirms, create **one commit per card**, message in English referencing the key (e.g. `feat(tags): … (CO-4)`), per the repo's `CLAUDE.md` (commit + versioning rules).
-- **Always attach the commit's diff to the card** — right after it lands. Run the project's `pnpm attach-commit <sha>`, or the bundled script in this skill's own `scripts/`: `node "<skill dir>/scripts/attach-commit.mjs" <sha>` (or the `.py` twin where Node isn't available). It runs `git show` and POSTs the diff straight to the API (`CO_API_URL`, default `http://127.0.0.1:4400`), so the card's **Changes** section shows what the commit produced. **Auth on?** Same as the working-tree capture above — mint `issue_commit_token(<CO-N>)` and pass it in `CO_COMMIT_TOKEN` (e.g. `CO_COMMIT_TOKEN=<token> pnpm attach-commit <sha>`); tokenless in sem-auth mode.
+- **Always attach the commit's diff to the card** — right after it lands. Run the project's `pnpm attach-commit <sha>`, or the bundled script in this skill's own `scripts/`: `node "<skill dir>/scripts/attach-commit.mjs" <sha>` (or the `.py` twin where Node isn't available). It runs `git show` and POSTs the diff straight to the API (`CO_API_URL`, default `http://127.0.0.1:4400`), so the card's **Changes** section shows what the commit produced. **Token only when auth is on** — same flag as the working-tree capture (see _Auth flag for diff capture_): auth on → mint `issue_commit_token(<CO-N>)` into `CO_COMMIT_TOKEN` (e.g. `CO_COMMIT_TOKEN=<token> pnpm attach-commit <sha>`); auth off → tokenless.
 - The diff is captured **outside your context on purpose** — **never read it or paste it into a comment** (it burns tokens and adds noise).
-- Attaching the **real commit clears the pending working-tree diff** automatically (the `__working__` sentinel row is dropped — see CO-136), so the card swaps from "uncommitted" to the committed diff with **no manual cleanup** on the happy path.
+- Attaching the **real commit clears the pending working-tree diff** automatically (the `__working__` sentinel row is dropped), so the card swaps from "uncommitted" to the committed diff with **no manual cleanup** on the happy path.
 
 ### 11. Move to `done` — **always**, only after the user confirms
 
 **`set_card_status(id, "done")`** once the user has confirmed it works. Don't leave a validated card sitting in `review`, and never mark `done` before validation.
 
 If this is the **last child of a story**, the **story-level review gate** fires **before** the story closes (see _Review gate_); only then move the history to `done` too (see _History status_). At this story boundary — and before advancing to the next card/story or ending the session — re-check the inbox **fresh** (see _Inbox re-check at work boundaries_).
+
+## Auth flag for diff capture — read it from CLAUDE.md
+
+The diff-capture scripts (`attach-worktree-diff`, `attach-commit`) need a card-scoped token **only when auth is on**. Don't probe the server's auth state before every attach — read it from a flag the project's **`CLAUDE.md`** records, and act on it:
+
+- **Auth on** → mint `issue_commit_token(<CO-N>)` and pass it in `CO_COMMIT_TOKEN` when running the script.
+- **Auth off, or no flag yet** → run the script tokenless.
+- **Self-healing** — if an attach unexpectedly returns **401**, auth is actually on: write the flag to `CLAUDE.md` (auth **on**) so later attaches mint a token instead of failing, then retry the attach with a token.
+
+The lifecycle's "token only when auth is on" notes (steps 6 and 10) follow **this flag**, not a fresh check each time.
 
 ## Review gate — mandatory, before a task or story closes
 
