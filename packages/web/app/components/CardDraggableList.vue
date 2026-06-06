@@ -155,14 +155,17 @@ function onUpdate() {
         <UIcon name="i-lucide-layers" class="size-3.5 text-primary shrink-0" />
         <span class="font-mono font-bold text-default shrink-0 whitespace-nowrap">{{ card.parentKey }}</span>
         <span class="text-muted truncate min-w-0">{{ parentTitles[card.parentKey ?? ''] ?? '' }}</span>
-        <span
+        <UTooltip
           v-if="groupClaimHints[card.parentKey ?? '']"
-          :title="groupClaimHints[card.parentKey ?? '']"
-          class="flex items-center text-warning shrink-0"
-          @mousedown.stop
+          :text="groupClaimHints[card.parentKey ?? '']"
         >
-          <UIcon name="i-lucide-hourglass" class="size-3" />
-        </span>
+          <span
+            class="flex items-center text-warning shrink-0"
+            @mousedown.stop
+          >
+            <UIcon name="i-lucide-hourglass" class="size-3" />
+          </span>
+        </UTooltip>
       </NuxtLink>
 
       <CardTile

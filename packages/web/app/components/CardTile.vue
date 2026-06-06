@@ -15,7 +15,7 @@ const props = withDefaults(
 )
 
 // Advisory claim: an hourglass marks a reserved card; the owner + since-when ride
-// in the native title tooltip (read-only — reserving happens via MCP).
+// in a UTooltip (read-only — reserving happens via MCP).
 const claimHint = computed(() =>
   props.card.claim ? formatClaimHint(props.card.claim) : ''
 )
@@ -51,13 +51,6 @@ const claimHint = computed(() =>
         <span class="font-medium">{{ card.title }}</span>
       </NuxtLink>
       <div class="flex shrink-0 items-center gap-1">
-        <span
-          v-if="card.claim"
-          :title="claimHint"
-          class="flex items-center text-warning"
-        >
-          <UIcon name="i-lucide-hourglass" class="size-3.5 shrink-0" />
-        </span>
         <UBadge
           v-if="card.subtaskCount"
           size="xs"
@@ -85,7 +78,15 @@ const claimHint = computed(() =>
     >
       {{ card.summary }}
     </p>
-    <div v-if="card.tags?.length" class="flex flex-wrap gap-1 mt-1.5">
+    <div
+      v-if="card.claim || card.tags?.length"
+      class="flex flex-wrap items-center gap-1 mt-1.5"
+    >
+      <UTooltip v-if="card.claim" :text="claimHint">
+        <span class="flex items-center text-warning">
+          <UIcon name="i-lucide-hourglass" class="size-3.5 shrink-0" />
+        </span>
+      </UTooltip>
       <TagBadge
         v-for="t in card.tags"
         :key="t.id"
