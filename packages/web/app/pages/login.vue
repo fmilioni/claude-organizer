@@ -4,7 +4,6 @@ import type { FormError, FormSubmitEvent } from '@nuxt/ui'
 import type { AuthCapabilities } from '@claude-organizer/shared'
 
 definePageMeta({ layout: false })
-useHead({ title: 'Entrar' })
 
 const {
   fetchCapabilities,
@@ -49,6 +48,43 @@ function afterLogin() {
 const setupMode = computed(() => caps.value !== null && !caps.value.hasUsers)
 const githubEnabled = computed(() => caps.value?.github ?? false)
 
+const mode = ref<'signin' | 'signup'>('signin')
+// setupMode forces signup (the first-boot admin claim); outside it the toggle
+// decides. Hidden during an MCP OAuth resume: a fresh signup lands pending and
+// can't complete authorize, so we don't expose it there.
+const isSignup = computed(() => setupMode.value || mode.value === 'signup')
+const canSignUp = computed(
+  () => (caps.value?.emailPassword ?? false) && !oauthResumeUrl.value
+)
+
+function toggleMode() {
+  mode.value = mode.value === 'signin' ? 'signup' : 'signin'
+  error.value = null
+}
+
+const heading = computed(() =>
+  setupMode.value
+    ? 'Create administrator'
+    : isSignup.value
+      ? 'Create account'
+      : 'Sign in'
+)
+const subtitle = computed(() =>
+  setupMode.value
+    ? 'First run: create the board administrator account.'
+    : isSignup.value
+      ? 'Create your account. An administrator must approve access.'
+      : 'Sign in to Claude Organizer.'
+)
+const submitLabel = computed(() =>
+  setupMode.value
+    ? 'Create and sign in'
+    : isSignup.value
+      ? 'Create account'
+      : 'Sign in'
+)
+useHead({ title: () => heading.value })
+
 onMounted(async () => {
   try {
     caps.value = await fetchCapabilities()
@@ -60,15 +96,15 @@ onMounted(async () => {
 function validate(s: typeof state): FormError[] {
   const errors: FormError[] = []
   if (!s.email) {
-    errors.push({ name: 'email', message: 'Informe o e-mail' })
+    errors.push({ name: 'email', message: 'Enter your email' })
   } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s.email)) {
-    errors.push({ name: 'email', message: 'E-mail inválido' })
+    errors.push({ name: 'email', message: 'Invalid email' })
   }
   if (!s.password || s.password.length < 8) {
-    errors.push({ name: 'password', message: 'Mínimo de 8 caracteres' })
+    errors.push({ name: 'password', message: 'At least 8 characters' })
   }
-  if (setupMode.value && !s.name) {
-    errors.push({ name: 'name', message: 'Informe o nome' })
+  if (isSignup.value && !s.name) {
+    errors.push({ name: 'name', message: 'Enter your name' })
   }
   return errors
 }
@@ -77,7 +113,7 @@ async function onSubmit(_event: FormSubmitEvent<typeof state>) {
   loading.value = true
   error.value = null
   try {
-    if (setupMode.value) {
+    if (isSignup.value) {
       await signUpEmail({
         name: state.name,
         email: state.email,
@@ -150,7 +186,7 @@ function resolveError(e: unknown): string {
   // better-auth errors carry `message`; the project's Fastify handler uses `error`.
   const data = (e as { data?: { message?: string, error?: string } })?.data
   return (
-    data?.message ?? data?.error ?? (e as Error)?.message ?? 'Falha ao autenticar'
+    data?.message ?? data?.error ?? (e as Error)?.message ?? 'Authentication failed'
   )
 }
 </script>
@@ -160,12 +196,10 @@ function resolveError(e: unknown): string {
     <UCard class="w-full max-w-sm">
       <template #header>
         <h1 class="text-lg font-semibold">
-          {{ setupMode ? 'Criar administrador' : 'Entrar' }}
+          {{ heading }}
         </h1>
         <p class="text-sm text-muted">
-          {{ setupMode
-            ? 'Primeiro acesso: crie a conta de administrador do board.'
-            : 'Acesse o Claude Organizer.' }}
+          {{ subtitle }}
         </p>
       </template>
 
@@ -175,19 +209,19 @@ function resolveError(e: unknown): string {
         class="space-y-4"
         @submit="onSubmit"
       >
-        <UFormField v-if="setupMode" name="name" label="Nome">
+        <UFormField v-if="isSignup" name="name" label="Name">
           <UInput v-model="state.name" autocomplete="name" />
         </UFormField>
 
-        <UFormField name="email" label="E-mail">
+        <UFormField name="email" label="Email">
           <UInput v-model="state.email" type="email" autocomplete="email" />
         </UFormField>
 
-        <UFormField name="password" label="Senha">
+        <UFormField name="password" label="Password">
           <UInput
             v-model="state.password"
             type="password"
-            :autocomplete="setupMode ? 'new-password' : 'current-password'"
+            :autocomplete="isSignup ? 'new-password' : 'current-password'"
           />
         </UFormField>
 
@@ -199,19 +233,26 @@ function resolveError(e: unknown): string {
         />
 
         <UButton type="submit" block :loading="loading">
-          {{ setupMode ? 'Criar e entrar' : 'Entrar' }}
+          {{ submitLabel }}
         </UButton>
+
+        <p v-if="!setupMode && canSignUp" class="text-center text-sm text-muted">
+          {{ isSignup ? 'Already have an account?' : "Don't have an account?" }}
+          <UButton variant="link" class="p-0" @click="toggleMode">
+            {{ isSignup ? 'Sign in' : 'Create account' }}
+          </UButton>
+        </p>
       </UForm>
 
       <div v-if="setupMode" class="mt-4 pt-4 border-t border-default space-y-4">
         <div class="flex items-center justify-between gap-3">
           <div class="min-w-0">
             <p class="text-sm font-medium">
-              Manter diffs ao arquivar
+              Keep diffs on archive
             </p>
             <p class="text-xs text-muted">
-              Por padrão, arquivar um card/sprint descarta os diffs anexados
-              (os metadados do commit ficam). Ative para preservá-los.
+              By default, archiving a card/sprint discards the attached diffs
+              (the commit metadata stays). Enable this to keep them.
             </p>
           </div>
           <USwitch
@@ -223,8 +264,8 @@ function resolveError(e: unknown): string {
 
         <div class="pt-4 border-t border-default">
           <p class="text-xs text-muted mb-2">
-            Ou rode sem autenticação: qualquer pessoa com acesso à rede usa o
-            board sem login. Dá para reativar depois nas configurações.
+            Or run without authentication: anyone with network access uses the
+            board without logging in. You can re-enable it later in settings.
           </p>
           <UButton
             block
@@ -234,7 +275,7 @@ function resolveError(e: unknown): string {
             :loading="loading"
             @click="onDisableAuth"
           >
-            Desabilitar autenticação
+            Disable authentication
           </UButton>
         </div>
       </div>
@@ -248,7 +289,7 @@ function resolveError(e: unknown): string {
           :loading="loading"
           @click="onGithub"
         >
-          Entrar com GitHub
+          Sign in with GitHub
         </UButton>
       </template>
     </UCard>

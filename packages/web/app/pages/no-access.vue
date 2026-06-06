@@ -1,6 +1,6 @@
 <script setup lang="ts">
 definePageMeta({ layout: false })
-useHead({ title: 'Sem acesso' })
+useHead({ title: 'No access' })
 
 const { user, signOut } = useAuth()
 const loading = ref(false)
@@ -22,13 +22,13 @@ async function onSignOut() {
       <template #header>
         <UIcon name="i-lucide-lock" class="size-8 text-muted mx-auto" />
         <h1 class="text-lg font-semibold mt-2">
-          Aguardando liberação
+          Awaiting approval
         </h1>
       </template>
 
       <p class="text-sm text-muted">
-        Sua conta<span v-if="user"> (<strong>{{ user.email }}</strong>)</span>
-        ainda não tem acesso ao board. Peça a um administrador para liberá-la.
+        Your account<span v-if="user"> (<strong>{{ user.email }}</strong>)</span>
+        doesn't have access to the board yet. Ask an administrator to approve it.
       </p>
 
       <template #footer>
@@ -40,7 +40,7 @@ async function onSignOut() {
           :loading="loading"
           @click="onSignOut"
         >
-          Sair
+          Sign out
         </UButton>
       </template>
     </UCard>
