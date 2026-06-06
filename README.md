@@ -5,7 +5,7 @@
 ### A "Jira" for Claude Code — your agent's project board, exposed over MCP.
 
 Claude Organizer gives Claude Code a real project-management system — cards,
-sprints, roadmaps, comments and docs — as **queryable state over MCP**, instead
+sprints, comments and docs — as **queryable state over MCP**, instead
 of spec Markdown files that grow without bound and go stale. A clean Nuxt UI
 mirrors the same board for humans, in real time.
 
@@ -222,7 +222,7 @@ Auth is built on [better-auth](https://better-auth.com) and is **off by default*
 - **MCP** — with auth on, `/mcp` is an OAuth 2.1 resource server: the plugin
   obtains a bearer automatically. With auth off, `/mcp` is open (no login),
   mirroring the open board.
-- **Sem-auth mode** — the default; flip it from the setup screen or system
+- **No-auth mode** — the default; flip it from the setup screen or system
   settings.
 
 Relevant env (see `.env.example`):
@@ -318,18 +318,6 @@ pnpm dev:mcp                     # :4402/mcp
 
 Also handy: `pnpm typecheck`, `pnpm lint`, `pnpm test`, and `pnpm db:generate`
 after schema changes.
-
-## Roadmap
-
-Authentication has landed — sign-in (email+password, GitHub optional), roles and
-per-project access, OAuth for the MCP, and identity on comments. What's still open:
-
-- 🏢 **Multi-tenant workspaces** — isolated organizations, each with its own
-  projects, members and MCP credentials.
-- 🔑 **Per-agent MCP tokens** — scoped credentials per agent, beyond the current
-  per-user project scope.
-- 📦 **Import / export** — move a board between instances via a portable backup
-  of projects, sprints, cards, comments and docs.
 
 ## License
 
