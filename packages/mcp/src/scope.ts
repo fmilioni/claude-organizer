@@ -107,6 +107,9 @@ async function resolveToolProjectIds(
       return entity('cardKey', str(input.key))
 
     case 'issue_commit_token':
+    case 'claim_task':
+    case 'release_task':
+    case 'take_over_task':
       return entity('cardKey', str(input.cardKey))
 
     case 'move_card_to_sprint': {
