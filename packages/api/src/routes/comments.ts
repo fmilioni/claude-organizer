@@ -36,9 +36,11 @@ export function registerCommentRoutes(app: FastifyInstance, db: Database) {
     '/cards/:cardId/comments',
     async (req) => {
       const body = addCommentBody.parse(req.body)
+      const author = body.author ?? 'user'
       return addComment(db, {
         cardId: req.params.cardId,
-        author: body.author ?? 'user',
+        author,
+        userId: author === 'user' ? (req.authUser?.userId ?? null) : null,
         bodyMd: body.bodyMd
       })
     }

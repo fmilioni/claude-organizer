@@ -55,6 +55,7 @@ export interface CommentRow {
   id: string
   cardId: string
   author: CommentAuthor
+  userId: string | null
   bodyMd: string
   readByAi: boolean
   createdAt: string
@@ -154,8 +155,17 @@ export interface SystemSettingsRow {
 
 export type Project = ProjectRow
 export type Roadmap = RoadmapRow
-export type Comment = CommentRow
 export type CardCommit = CardCommitRow
+
+/**
+ * Comment as returned by the API. `authorName`/`authorImage` are joined from the
+ * `user` author's identity (null for `ai` comments and for legacy `user`
+ * comments with no `userId`); the UI falls back to a generic label when absent.
+ */
+export interface Comment extends CommentRow {
+  authorName: string | null
+  authorImage: string | null
+}
 
 /**
  * Intake item as returned by the API. `completed` is derived at read time for

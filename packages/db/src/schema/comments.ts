@@ -7,6 +7,7 @@ import {
   timestamp
 } from 'drizzle-orm/pg-core'
 
+import { users } from './auth'
 import { cards } from './cards'
 import { commentAuthorEnum } from './enums'
 
@@ -18,6 +19,7 @@ export const comments = pgTable(
       .notNull()
       .references(() => cards.id, { onDelete: 'cascade' }),
     author: commentAuthorEnum('author').notNull(),
+    userId: text('user_id').references(() => users.id, { onDelete: 'set null' }),
     bodyMd: text('body_md').notNull(),
     readByAi: boolean('read_by_ai').notNull().default(false),
     createdAt: timestamp('created_at', { withTimezone: true })
