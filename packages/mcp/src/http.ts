@@ -58,14 +58,13 @@ function readJsonBody(req: IncomingMessage): Promise<unknown> {
 }
 
 // Streamable HTTP transport (stateful): one session per `Mcp-Session-Id`,
-// created on the initialize request and torn down on close. Mirrors the stdio
-// behaviour — same tools, same handshake.
+// created on the initialize request and torn down on close.
 //
 // Auth: this server is the OAuth *resource server*. When auth is enabled, every
 // `/mcp` request must carry a valid `Authorization: Bearer` (validated against
-// the shared better-auth store via getMcpSession); when disabled it stays open,
-// mirroring the local stdio path (sem-auth, T3.4). The static MCP_AUTH_TOKEN was
-// dropped in favour of OAuth.
+// the shared better-auth store via getMcpSession); when disabled it stays open
+// without login (sem-auth, T3.4). The static MCP_AUTH_TOKEN was dropped in
+// favour of OAuth.
 export function startHttpServer({ db, port }: HttpServerOptions): Server {
   const transports = new Map<string, StreamableHTTPServerTransport>()
   const auth = createAuth(db)

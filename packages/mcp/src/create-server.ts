@@ -9,11 +9,10 @@ import { registerTools } from './tools/index'
 
 type ToolHandler = (input: Record<string, unknown>, extra: unknown) => unknown
 
-// Builds a fully-registered MCP server (same tools/resources regardless of
-// transport). The HTTP transport creates one per session, passing the session's
-// resolved `scope`; stdio uses a single unscoped instance. `db` is shared.
+// Builds a fully-registered MCP server. The HTTP transport creates one per
+// session, passing the session's resolved `scope`; `db` is shared.
 //
-// `scope` (null = unrestricted: stdio / sem-auth) is enforced at a single choke
+// `scope` (null = unrestricted: sem-auth mode) is enforced at a single choke
 // point: registerTool is wrapped so EVERY tool runs `assertToolAccess` before its
 // handler — a new tool can't forget to scope, and an unmapped one fails closed.
 export function createMcpServer(db: Database, scope: McpScope | null = null) {
