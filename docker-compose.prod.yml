@@ -1,0 +1,52 @@
+# Production overlay: one public edge on 80/443 (TLS via Caddy), routing
+# subdomains app./api./mcp. to the three services. Local stays on distinct ports
+# (plain docker-compose.yml, no proxy).
+#
+# Usage:
+#   cp .env.prod.example .env   # fill in the *_DOMAIN vars, ACME_EMAIL, secret…
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+#
+# Caddy is the only service that publishes host ports; postgres/api/web/mcp are
+# reachable only inside the compose network (their `ports` are cleared here).
+services:
+  caddy:
+    image: caddy:2-alpine
+    container_name: claude-organizer-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      ACME_EMAIL: ${ACME_EMAIL:?set ACME_EMAIL in .env}
+      APP_DOMAIN: ${APP_DOMAIN:?set APP_DOMAIN in .env}
+      API_DOMAIN: ${API_DOMAIN:?set API_DOMAIN in .env}
+      MCP_DOMAIN: ${MCP_DOMAIN:?set MCP_DOMAIN in .env}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./docker/data/caddy/data:/data
+      - ./docker/data/caddy/config:/config
+    depends_on:
+      - api
+      - web
+      - mcp
+
+  postgres:
+    ports: !reset []
+
+  # environment maps merge with the base; only the public-edge values change.
+  api:
+    ports: !reset []
+    environment:
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL:?set BETTER_AUTH_URL in .env}
+      AUTH_TRUSTED_ORIGINS: ${AUTH_TRUSTED_ORIGINS:?set AUTH_TRUSTED_ORIGINS in .env}
+      MCP_PUBLIC_URL: ${MCP_PUBLIC_URL:?set MCP_PUBLIC_URL in .env}
+      AUTH_COOKIE_DOMAIN: ${AUTH_COOKIE_DOMAIN:?set AUTH_COOKIE_DOMAIN in .env}
+
+  mcp:
+    ports: !reset []
+    environment:
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL:?set BETTER_AUTH_URL in .env}
+      MCP_PUBLIC_URL: ${MCP_PUBLIC_URL:?set MCP_PUBLIC_URL in .env}
+
+  web:
+    ports: !reset []

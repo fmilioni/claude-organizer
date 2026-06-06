@@ -48,8 +48,8 @@ export function getWebOrigin(): string {
 }
 
 // The MCP resource server's public URL — the OAuth token audience and the
-// `resource` in the protected-resource metadata. H5 unifies this behind the
-// reverse proxy; until then it's the MCP's own origin.
+// `resource` in the protected-resource metadata. Behind the reverse proxy (H5)
+// it's the mcp. subdomain; locally it's the MCP's own origin.
 export function getMcpResourceUrl(): string {
   return (process.env.MCP_PUBLIC_URL ?? 'http://127.0.0.1:4402').replace(
     /\/$/,
@@ -70,6 +70,7 @@ export async function hasAnyUser(db: Database): Promise<boolean> {
 
 export function createAuth(db: Database) {
   const loginPage = getMcpLoginPage()
+  const cookieDomain = process.env.AUTH_COOKIE_DOMAIN?.trim()
   return betterAuth({
     appName: 'Claude Organizer',
     database: drizzleAdapter(db, {
@@ -126,6 +127,13 @@ export function createAuth(db: Database) {
       }
     },
     advanced: {
+      // Cross-subdomain session: behind the reverse proxy (H5) the web (app.)
+      // and API (api.) are different hosts of the same site, so the session
+      // cookie must be scoped to the parent domain to travel between them.
+      // Opt-in via AUTH_COOKIE_DOMAIN — unset locally, where web/API share a host.
+      ...(cookieDomain
+        ? { crossSubDomainCookies: { enabled: true, domain: cookieDomain } }
+        : {}),
       database: {
         // better-auth model names (user/session/account/verification) match the
         // keys in db's idPrefixes, so the prefix map isn't duplicated here.

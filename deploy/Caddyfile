@@ -1,0 +1,24 @@
+# Reverse proxy for the remote deploy (H5/CO-177): a single public edge on
+# 80/443, with TLS issued automatically by Caddy (ACME). Each app service keeps
+# its internal port (4400/4401/4402) — only the public subdomain routing changes.
+#
+# Set APP_DOMAIN / API_DOMAIN / MCP_DOMAIN / ACME_EMAIL in the environment
+# (see .env.prod.example). Wired up by docker-compose.prod.yml.
+
+{
+	email {$ACME_EMAIL}
+}
+
+{$APP_DOMAIN} {
+	reverse_proxy web:4401
+}
+
+{$API_DOMAIN} {
+	reverse_proxy api:4400
+}
+
+{$MCP_DOMAIN} {
+	# Streamable HTTP, including SSE streams — Caddy streams text/event-stream
+	# responses without buffering by default, so no extra config is needed.
+	reverse_proxy mcp:4402
+}
