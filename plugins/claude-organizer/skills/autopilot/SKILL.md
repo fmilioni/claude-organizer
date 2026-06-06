@@ -92,7 +92,7 @@ A subagent does **not** load this session's skills and can't be relied on to inv
 - the relevant **`CLAUDE.md` overrides** (commit message format, versioning, import/gotcha rules);
 - the **base branch** and the **worktree path** it must work in.
 
-Read the canonical files at runtime and concatenate them — don't paraphrase from memory, so the subagent gets the current text. (Sentinel/CO-120 note: the Skill-tool/sentinel path covers the **main session**; for **subagents** the mechanism is this **inline** embed, not the Skill tool.)
+Read the canonical files at runtime and concatenate them — don't paraphrase from memory, so the subagent gets the current text. (Sentinel note: the Skill-tool/sentinel path covers the **main session**; for **subagents** the mechanism is this **inline** embed, not the Skill tool.)
 
 ### The three parallel-mode rules
 
