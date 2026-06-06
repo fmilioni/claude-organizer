@@ -2,7 +2,7 @@ import type { FastifyError } from 'fastify'
 import fp from 'fastify-plugin'
 import { ZodError } from 'zod'
 
-import { InputError } from '@claude-organizer/core'
+import { ConflictError, InputError } from '@claude-organizer/core'
 
 /**
  * Single place that turns a thrown error into an HTTP response, so routes can
@@ -29,6 +29,11 @@ export default fp(async (app) => {
     // illegal hierarchy move).
     if (err instanceof InputError) {
       return reply.code(400).send({ error: err.message, code: 'invalid_input' })
+    }
+
+    // Well-formed request that conflicts with current state (e.g. last admin).
+    if (err instanceof ConflictError) {
+      return reply.code(409).send({ error: err.message, code: 'conflict' })
     }
 
     // Fastify's own schema validation, if any route ever declares one.

@@ -78,9 +78,9 @@ const ADMIN_ONLY: Array<{ method: string, url: string }> = [
   { method: 'GET', url: '/export' },
   { method: 'POST', url: '/import' },
   { method: 'GET', url: '/projects/:projectId/export' },
-  { method: 'GET', url: '/admin/users/pending' },
+  { method: 'GET', url: '/admin/users' },
   { method: 'POST', url: '/admin/users/:id/approve' },
-  { method: 'POST', url: '/admin/users/:id/reject' },
+  { method: 'DELETE', url: '/admin/users/:id' },
   // Reachable in sem-auth mode (the gate bypasses before this list), so an open
   // board can re-enable auth; admin-only once auth is on with users.
   { method: 'POST', url: '/admin/settings' }

@@ -1,39 +1,48 @@
 <script setup lang="ts">
-import type { PendingUser, UserRole } from '@claude-organizer/shared'
+import type { AdminUser, UserRole } from '@claude-organizer/shared'
 
 import { useProjectStore } from '~/stores/project'
 
 definePageMeta({ middleware: 'admin' })
-useHead({ title: 'Usuários' })
+useHead({ title: 'Users' })
 
 const api = useApi()
 const toast = useToast()
 const store = useProjectStore()
 const { projects } = storeToRefs(store)
+const { user: currentUser } = useAuth()
 
-const pending = ref<PendingUser[]>([])
+const users = ref<AdminUser[]>([])
 const loading = ref(false)
 
 async function load() {
   loading.value = true
   try {
-    pending.value = await api<PendingUser[]>('/admin/users/pending')
+    users.value = await api<AdminUser[]>('/admin/users')
   } finally {
     loading.value = false
   }
 }
 onMounted(load)
 
+const adminCount = computed(
+  () => users.value.filter(u => u.role === 'admin').length
+)
+const isSelf = (u: AdminUser) => currentUser.value?.id === u.id
+// The last admin can't be removed (would lock everyone out of the admin surface);
+// you can't remove yourself (auto-lockout). The API enforces both too.
+const isLastAdmin = (u: AdminUser) => u.role === 'admin' && adminCount.value <= 1
+
 const roleItems = [
-  { label: 'Usuário', value: 'user' as UserRole },
-  { label: 'Administrador', value: 'admin' as UserRole }
+  { label: 'User', value: 'user' as UserRole },
+  { label: 'Administrator', value: 'admin' as UserRole }
 ]
 const scopeItems = [
-  { label: 'Todos os projetos (inclui futuros)', value: 'all' },
-  { label: 'Selecionar projetos', value: 'subset' }
+  { label: 'All projects (including future ones)', value: 'all' },
+  { label: 'Select projects', value: 'subset' }
 ]
 
-const approving = ref<PendingUser | null>(null)
+const approving = ref<AdminUser | null>(null)
 const role = ref<UserRole>('user')
 const scope = ref<'all' | 'subset'>('all')
 const selectedProjects = ref<string[]>([])
@@ -50,7 +59,7 @@ const showProjectPicker = computed(
   () => role.value === 'user' && scope.value === 'subset'
 )
 
-function openApprove(u: PendingUser) {
+function openApprove(u: AdminUser) {
   approving.value = u
   role.value = 'user'
   scope.value = 'all'
@@ -81,20 +90,25 @@ async function confirmApprove() {
   }
 }
 
-const rejecting = ref<string | null>(null)
-async function reject(u: PendingUser) {
-  rejecting.value = u.id
+// Both "Reject" (pending) and "Remove" (approved) open this confirm and hit the
+// same hard delete — only the row's button label differs.
+const removing = ref<AdminUser | null>(null)
+const deleting = ref(false)
+async function confirmRemove() {
+  if (!removing.value) return
+  deleting.value = true
   try {
-    await api(`/admin/users/${u.id}/reject`, { method: 'POST' })
+    await api(`/admin/users/${removing.value.id}`, { method: 'DELETE' })
     await load()
+    removing.value = null
   } catch (e) {
     toast.add({
-      title: 'Falha ao rejeitar',
+      title: 'Failed to remove user',
       description: resolveError(e),
       color: 'error'
     })
   } finally {
-    rejecting.value = null
+    deleting.value = false
   }
 }
 </script>
@@ -102,7 +116,7 @@ async function reject(u: PendingUser) {
 <template>
   <UDashboardPanel id="admin-users">
     <template #header>
-      <UDashboardNavbar title="Usuários">
+      <UDashboardNavbar title="Users">
         <template #leading>
           <UIcon name="i-lucide-users" class="text-primary" />
         </template>
@@ -112,20 +126,21 @@ async function reject(u: PendingUser) {
     <template #body>
       <div class="max-w-2xl mx-auto w-full space-y-4">
         <p class="text-sm text-muted">
-          Usuários que entraram e aguardam liberação. Aprove definindo papel e
-          projetos, ou rejeite para remover da fila.
+          All users in the system. Approve pending users by setting a role and
+          projects; remove an account to revoke access (deletes it for good — the
+          person's comments stay but show with no author).
         </p>
 
         <div
-          v-if="!loading && pending.length === 0"
+          v-if="!loading && users.length === 0"
           class="text-sm text-muted border border-default rounded-lg p-8 text-center"
         >
-          Nenhum usuário pendente.
+          No users.
         </div>
 
         <ul v-else class="space-y-2">
           <li
-            v-for="u in pending"
+            v-for="u in users"
             :key="u.id"
             class="flex items-center gap-3 border border-default rounded-lg p-3"
           >
@@ -138,83 +153,142 @@ async function reject(u: PendingUser) {
                 {{ u.email }}
               </p>
             </div>
-            <UButton
-              size="sm"
-              color="primary"
-              variant="subtle"
-              label="Aprovar"
-              @click="openApprove(u)"
-            />
-            <UButton
-              size="sm"
-              color="error"
-              variant="ghost"
-              label="Rejeitar"
-              :loading="rejecting === u.id"
-              @click="reject(u)"
-            />
+
+            <div class="flex items-center gap-1.5 shrink-0">
+              <UBadge
+                v-if="u.role === 'admin'"
+                color="primary"
+                variant="subtle"
+                size="sm"
+                label="Administrator"
+              />
+              <UBadge
+                v-if="u.status === 'pending'"
+                color="warning"
+                variant="subtle"
+                size="sm"
+                label="Pending"
+              />
+            </div>
+
+            <div class="flex items-center gap-2 shrink-0">
+              <UButton
+                v-if="u.status === 'pending'"
+                size="sm"
+                color="primary"
+                variant="subtle"
+                label="Approve"
+                @click="openApprove(u)"
+              />
+              <UButton
+                v-if="u.status === 'pending'"
+                size="sm"
+                color="error"
+                variant="ghost"
+                label="Reject"
+                @click="removing = u"
+              />
+              <UButton
+                v-else-if="!isSelf(u)"
+                size="sm"
+                color="error"
+                variant="ghost"
+                label="Remove"
+                :disabled="isLastAdmin(u)"
+                :title="isLastAdmin(u) ? 'Cannot remove the last administrator' : undefined"
+                @click="removing = u"
+              />
+            </div>
           </li>
         </ul>
       </div>
     </template>
-
-    <UModal
-      :open="approving !== null"
-      title="Aprovar usuário"
-      :description="approving?.email"
-      @update:open="(o: boolean) => { if (!o) approving = null }"
-    >
-      <template #body>
-        <div class="space-y-4">
-          <UFormField label="Papel">
-            <USelectMenu
-              v-model="role"
-              :items="roleItems"
-              value-key="value"
-              label-key="label"
-            />
-          </UFormField>
-
-          <UFormField v-if="role === 'user'" label="Acesso a projetos">
-            <USelectMenu
-              v-model="scope"
-              :items="scopeItems"
-              value-key="value"
-              label-key="label"
-            />
-          </UFormField>
-
-          <UFormField v-if="showProjectPicker" label="Projetos">
-            <USelectMenu
-              v-model="selectedProjects"
-              :items="projectItems"
-              multiple
-              value-key="id"
-              label-key="name"
-              placeholder="Selecione os projetos"
-            />
-          </UFormField>
-
-          <UAlert
-            v-if="error"
-            color="error"
-            variant="soft"
-            :title="error"
-          />
-        </div>
-      </template>
-      <template #footer>
-        <div class="flex justify-end gap-2 w-full">
-          <UButton variant="ghost" label="Cancelar" @click="approving = null" />
-          <UButton
-            color="primary"
-            label="Aprovar"
-            :loading="saving"
-            :disabled="showProjectPicker && selectedProjects.length === 0"
-            @click="confirmApprove"
-          />
-        </div>
-      </template>
-    </UModal>
   </UDashboardPanel>
+
+  <UModal
+    :open="approving !== null"
+    title="Approve user"
+    :description="approving?.email"
+    @update:open="(o: boolean) => { if (!o) approving = null }"
+  >
+    <template #body>
+      <div class="space-y-4">
+        <UFormField label="Role">
+          <USelectMenu
+            v-model="role"
+            :items="roleItems"
+            value-key="value"
+            label-key="label"
+          />
+        </UFormField>
+
+        <UFormField v-if="role === 'user'" label="Project access">
+          <USelectMenu
+            v-model="scope"
+            :items="scopeItems"
+            value-key="value"
+            label-key="label"
+          />
+        </UFormField>
+
+        <UFormField v-if="showProjectPicker" label="Projects">
+          <USelectMenu
+            v-model="selectedProjects"
+            :items="projectItems"
+            multiple
+            value-key="id"
+            label-key="name"
+            placeholder="Select projects"
+          />
+        </UFormField>
+
+        <UAlert
+          v-if="error"
+          color="error"
+          variant="soft"
+          :title="error"
+        />
+      </div>
+    </template>
+    <template #footer>
+      <div class="flex justify-end gap-2 w-full">
+        <UButton variant="ghost" label="Cancel" @click="approving = null" />
+        <UButton
+          color="primary"
+          label="Approve"
+          :loading="saving"
+          :disabled="showProjectPicker && selectedProjects.length === 0"
+          @click="confirmApprove"
+        />
+      </div>
+    </template>
+  </UModal>
+
+  <UModal
+    :open="removing !== null"
+    title="Remove user?"
+    @update:open="(o: boolean) => { if (!o) removing = null }"
+  >
+    <template #body>
+      <p class="text-sm text-muted">
+        The account of
+        <span class="font-medium text-default">{{ removing?.name }}</span>
+        will be permanently deleted. Any comments they left stay but show with
+        no author.
+        <strong class="text-error">This can't be undone.</strong>
+      </p>
+    </template>
+    <template #footer>
+      <div class="flex justify-end gap-2 w-full">
+        <UButton variant="ghost" label="Cancel" @click="removing = null" />
+        <UButton
+          color="error"
+          icon="i-lucide-trash-2"
+          label="Remove"
+          :loading="deleting"
+          @click="confirmRemove"
+        />
+      </div>
+    </template>
+  </UModal>
 </template>

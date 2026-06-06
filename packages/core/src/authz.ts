@@ -8,6 +8,8 @@ import type {
   UserStatus
 } from '@claude-organizer/shared'
 
+import { ConflictError } from './errors'
+
 export async function getUserAuthz(db: Database, userId: string) {
   const [row] = await db
     .select()
@@ -146,32 +148,49 @@ export async function approveUser(
   return setUserAuthz(db, userId, { ...input, status: 'approved' })
 }
 
-// Reject = remove the account (sessions/accounts/authz cascade). Only a *pending*
-// user can be rejected, so this endpoint can't delete an approved user or an
-// admin. They can sign in again as a fresh pending user (this clears the queue,
-// it is not a ban). Returns null when the user isn't pending (or doesn't exist).
-export async function rejectUser(db: Database, userId: string) {
-  const authz = await getUserAuthz(db, userId)
-  if (!authz || authz.status !== 'pending') return null
-  const [row] = await db
-    .delete(schema.users)
-    .where(eq(schema.users.id, userId))
-    .returning({ id: schema.users.id })
-  return row ?? null
+// Hard delete (cascade drops sessions/accounts/user_authz/user_project_access;
+// comments.userId set-null keeps the comments, now author-less). Refuses the
+// *last* admin — that would lock everyone out of the admin-only surface.
+// Returns the deleted id, or null when the user doesn't exist.
+export async function deleteUser(db: Database, userId: string) {
+  return db.transaction(async (tx) => {
+    // Lock the whole admin set up front (consistent lock order → no deadlock)
+    // so the last-admin count can't go stale between the guard and the delete
+    // under concurrent admin deletions.
+    const admins = await tx
+      .select({ userId: schema.userAuthz.userId })
+      .from(schema.userAuthz)
+      .where(eq(schema.userAuthz.role, 'admin'))
+      .orderBy(schema.userAuthz.userId)
+      .for('update')
+    const targetIsAdmin = admins.some(a => a.userId === userId)
+    if (targetIsAdmin && admins.length <= 1) {
+      throw new ConflictError('Cannot remove the last admin')
+    }
+    const [row] = await tx
+      .delete(schema.users)
+      .where(eq(schema.users.id, userId))
+      .returning({ id: schema.users.id })
+    return row ?? null
+  })
 }
 
-export async function listPendingUsers(db: Database) {
+// Every user with their role/status, for the admin management page. innerJoin
+// so a user with no authz row (shouldn't happen — the create hook always makes
+// one) is simply absent rather than half-populated.
+export async function listAllUsers(db: Database) {
   return db
     .select({
       id: schema.users.id,
       name: schema.users.name,
       email: schema.users.email,
       image: schema.users.image,
+      role: schema.userAuthz.role,
+      status: schema.userAuthz.status,
       createdAt: schema.users.createdAt
     })
     .from(schema.userAuthz)
     .innerJoin(schema.users, eq(schema.userAuthz.userId, schema.users.id))
-    .where(eq(schema.userAuthz.status, 'pending'))
     .orderBy(schema.users.createdAt)
 }
 

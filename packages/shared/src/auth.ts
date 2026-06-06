@@ -22,11 +22,14 @@ export interface AuthCapabilities {
   authEnabled: boolean
 }
 
-// A user awaiting admin approval, as listed on the admin queue.
-export interface PendingUser {
+// A user as listed on the admin management page — every account with its
+// role/status, so the UI can show badges and gate the per-row actions.
+export interface AdminUser {
   id: string
   name: string
   email: string
   image: string | null
+  role: UserRole
+  status: UserStatus
   createdAt: string
 }

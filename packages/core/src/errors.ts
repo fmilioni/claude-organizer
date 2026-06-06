@@ -10,3 +10,15 @@ export class InputError extends Error {
     this.name = 'InputError'
   }
 }
+
+/**
+ * Error raised when a well-formed request conflicts with the current state of
+ * the system (e.g. removing the last admin would lock everyone out of the
+ * admin-only surface). The API maps it to HTTP 409.
+ */
+export class ConflictError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'ConflictError'
+  }
+}
