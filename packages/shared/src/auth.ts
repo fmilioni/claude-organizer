@@ -20,6 +20,8 @@ export interface AuthCapabilities {
   hasUsers: boolean
   // false = sem-auth mode: the web runs without sessions/gating, as before auth.
   authEnabled: boolean
+  // true = preserve attached diffs when archiving a card/sprint.
+  keepDiffsOnArchive: boolean
 }
 
 // A user as listed on the admin management page — every account with its

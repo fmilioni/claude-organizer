@@ -101,6 +101,25 @@ async function onSubmit(_event: FormSubmitEvent<typeof state>) {
   }
 }
 
+// Setup-only system preference; persisted before any admin exists via the
+// hasAnyUser-guarded /setup/settings (mirrors /admin/settings once set up).
+const keepDiffsOnArchive = computed(() => caps.value?.keepDiffsOnArchive ?? false)
+const togglingDiffs = ref(false)
+async function onToggleKeepDiffs(next: boolean) {
+  togglingDiffs.value = true
+  try {
+    await api('/setup/settings', {
+      method: 'POST',
+      body: { keepDiffsOnArchive: next }
+    })
+    if (caps.value) caps.value.keepDiffsOnArchive = next
+  } catch (e) {
+    error.value = resolveError(e)
+  } finally {
+    togglingDiffs.value = false
+  }
+}
+
 // Setup-only "run without login" choice. A full reload re-resolves capabilities
 // and the auth middleware, which then sees sem-auth and stops gating.
 async function onDisableAuth() {
@@ -184,21 +203,40 @@ function resolveError(e: unknown): string {
         </UButton>
       </UForm>
 
-      <div v-if="setupMode" class="mt-4 pt-4 border-t border-default">
-        <p class="text-xs text-muted mb-2">
-          Ou rode sem autenticação: qualquer pessoa com acesso à rede usa o
-          board sem login. Dá para reativar depois nas configurações.
-        </p>
-        <UButton
-          block
-          color="neutral"
-          variant="ghost"
-          icon="i-lucide-unlock"
-          :loading="loading"
-          @click="onDisableAuth"
-        >
-          Desabilitar autenticação
-        </UButton>
+      <div v-if="setupMode" class="mt-4 pt-4 border-t border-default space-y-4">
+        <div class="flex items-center justify-between gap-3">
+          <div class="min-w-0">
+            <p class="text-sm font-medium">
+              Manter diffs ao arquivar
+            </p>
+            <p class="text-xs text-muted">
+              Por padrão, arquivar um card/sprint descarta os diffs anexados
+              (os metadados do commit ficam). Ative para preservá-los.
+            </p>
+          </div>
+          <USwitch
+            :model-value="keepDiffsOnArchive"
+            :loading="togglingDiffs"
+            @update:model-value="onToggleKeepDiffs"
+          />
+        </div>
+
+        <div class="pt-4 border-t border-default">
+          <p class="text-xs text-muted mb-2">
+            Ou rode sem autenticação: qualquer pessoa com acesso à rede usa o
+            board sem login. Dá para reativar depois nas configurações.
+          </p>
+          <UButton
+            block
+            color="neutral"
+            variant="ghost"
+            icon="i-lucide-unlock"
+            :loading="loading"
+            @click="onDisableAuth"
+          >
+            Desabilitar autenticação
+          </UButton>
+        </div>
       </div>
 
       <template v-if="githubEnabled" #footer>

@@ -4,6 +4,7 @@ import type {
   FastifyReply,
   FastifyRequest
 } from 'fastify'
+import { z } from 'zod'
 
 import type { Auth } from '@claude-organizer/auth'
 import {
@@ -15,7 +16,8 @@ import {
 import {
   getSystemSettings,
   getUserAuthz,
-  setAuthEnabled
+  setAuthEnabled,
+  setKeepDiffsOnArchive
 } from '@claude-organizer/core'
 import type { Database } from '@claude-organizer/db'
 import type { AuthCapabilities, SessionUser } from '@claude-organizer/shared'
@@ -89,12 +91,16 @@ export function registerAuthRoutes(
     sendWebResponse(reply, res, await res.text())
   })
 
-  app.get('/auth/capabilities', async (): Promise<AuthCapabilities> => ({
-    emailPassword: isEmailPasswordEnabled(),
-    github: isGithubConfigured(),
-    hasUsers: await hasAnyUser(db),
-    authEnabled: (await getSystemSettings(db)).authEnabled
-  }))
+  app.get('/auth/capabilities', async (): Promise<AuthCapabilities> => {
+    const settings = await getSystemSettings(db)
+    return {
+      emailPassword: isEmailPasswordEnabled(),
+      github: isGithubConfigured(),
+      hasUsers: await hasAnyUser(db),
+      authEnabled: settings.authEnabled,
+      keepDiffsOnArchive: settings.keepDiffsOnArchive
+    }
+  })
 
   // First-boot only: with no user yet there is no admin to authorize this, so it
   // self-guards on hasAnyUser. Disabling auth here is the "run without login"
@@ -104,6 +110,18 @@ export function registerAuthRoutes(
       return reply.code(409).send({ error: 'already_setup' })
     }
     return setAuthEnabled(db, false)
+  })
+
+  // First-boot only (same self-guard): persist setup-screen system settings
+  // before any admin exists. Once a user exists, this lives behind /admin/settings.
+  app.post('/setup/settings', async (request, reply) => {
+    if (await hasAnyUser(db)) {
+      return reply.code(409).send({ error: 'already_setup' })
+    }
+    const { keepDiffsOnArchive } = z
+      .object({ keepDiffsOnArchive: z.boolean() })
+      .parse(request.body)
+    return setKeepDiffsOnArchive(db, keepDiffsOnArchive)
   })
 
   app.get('/auth/me', async (request): Promise<SessionUser | null> => {

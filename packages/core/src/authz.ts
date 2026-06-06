@@ -194,13 +194,19 @@ export async function listAllUsers(db: Database) {
     .orderBy(schema.users.createdAt)
 }
 
-const DEFAULT_SYSTEM_SETTINGS = { authEnabled: true } as const
+const DEFAULT_SYSTEM_SETTINGS = {
+  authEnabled: true,
+  keepDiffsOnArchive: false
+} as const
 
 export async function getSystemSettings(
   db: Database
-): Promise<Pick<SystemSettingsRow, 'authEnabled'>> {
+): Promise<Pick<SystemSettingsRow, 'authEnabled' | 'keepDiffsOnArchive'>> {
   const [row] = await db
-    .select({ authEnabled: schema.systemSettings.authEnabled })
+    .select({
+      authEnabled: schema.systemSettings.authEnabled,
+      keepDiffsOnArchive: schema.systemSettings.keepDiffsOnArchive
+    })
     .from(schema.systemSettings)
     .where(eq(schema.systemSettings.id, SYSTEM_SETTINGS_ID))
     .limit(1)
@@ -216,6 +222,23 @@ export async function setAuthEnabled(db: Database, authEnabled: boolean) {
       set: { authEnabled, updatedAt: sql`now()` }
     })
     .returning({ authEnabled: schema.systemSettings.authEnabled })
+  return row!
+}
+
+export async function setKeepDiffsOnArchive(
+  db: Database,
+  keepDiffsOnArchive: boolean
+) {
+  const [row] = await db
+    .insert(schema.systemSettings)
+    .values({ id: SYSTEM_SETTINGS_ID, keepDiffsOnArchive })
+    .onConflictDoUpdate({
+      target: schema.systemSettings.id,
+      set: { keepDiffsOnArchive, updatedAt: sql`now()` }
+    })
+    .returning({
+      keepDiffsOnArchive: schema.systemSettings.keepDiffsOnArchive
+    })
   return row!
 }
 

@@ -37,6 +37,7 @@ const PUBLIC_EXACT = new Set([
   '/auth/me',
   // Self-guards on hasAnyUser (first boot only); see routes/auth.ts.
   '/setup/disable-auth',
+  '/setup/settings',
   // OAuth discovery (RFC 8414) — must be reachable without a session so MCP
   // clients can bootstrap the auth flow.
   '/.well-known/oauth-authorization-server'

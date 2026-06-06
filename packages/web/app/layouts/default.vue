@@ -86,7 +86,6 @@ async function onLogout() {
           orientation="vertical"
           :collapsed="collapsed"
           tooltip
-          class="-mx-2"
         />
       </template>
 
@@ -97,7 +96,6 @@ async function onLogout() {
           orientation="vertical"
           :collapsed="collapsed"
           tooltip
-          class="-mx-2"
         />
 
         <UDropdownMenu
@@ -114,7 +112,7 @@ async function onLogout() {
             :avatar="{ src: user.image ?? undefined, alt: user.name, icon: 'i-lucide-user' }"
             :label="collapsed ? undefined : user.name"
             :trailing-icon="collapsed ? undefined : 'i-lucide-chevrons-up-down'"
-            class="-mx-2 data-[state=open]:bg-elevated"
+            class="data-[state=open]:bg-elevated"
             :ui="{ trailingIcon: 'text-dimmed' }"
           />
         </UDropdownMenu>

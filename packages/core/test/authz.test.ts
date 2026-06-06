@@ -20,6 +20,7 @@ import {
   resolveCommentsProjectIds,
   resolveEntityProjectId,
   setAuthEnabled,
+  setKeepDiffsOnArchive,
   setUserAuthz
 } from '../src/index'
 import { freshProject, uniqueKeyPrefix, useTestDb } from './helpers'
@@ -214,11 +215,26 @@ describe('user management', () => {
   })
 })
 
-describe('system settings (sem-auth flag)', () => {
+describe('system settings', () => {
   it('persists and toggles authEnabled', async () => {
     expect(await setAuthEnabled(ctx.db, false)).toEqual({ authEnabled: false })
-    expect(await getSystemSettings(ctx.db)).toEqual({ authEnabled: false })
+    expect(await getSystemSettings(ctx.db)).toMatchObject({ authEnabled: false })
     expect(await setAuthEnabled(ctx.db, true)).toEqual({ authEnabled: true })
-    expect(await getSystemSettings(ctx.db)).toEqual({ authEnabled: true })
+    expect(await getSystemSettings(ctx.db)).toMatchObject({ authEnabled: true })
+  })
+
+  it('persists and toggles keepDiffsOnArchive (default off)', async () => {
+    expect(await getSystemSettings(ctx.db)).toMatchObject({
+      keepDiffsOnArchive: false
+    })
+    expect(await setKeepDiffsOnArchive(ctx.db, true)).toEqual({
+      keepDiffsOnArchive: true
+    })
+    expect(await getSystemSettings(ctx.db)).toMatchObject({
+      keepDiffsOnArchive: true
+    })
+    expect(await setKeepDiffsOnArchive(ctx.db, false)).toEqual({
+      keepDiffsOnArchive: false
+    })
   })
 })

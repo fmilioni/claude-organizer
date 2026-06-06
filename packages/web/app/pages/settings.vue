@@ -6,11 +6,13 @@ import { useProjectStore } from '~/stores/project'
 const store = useProjectStore()
 const { currentProject } = storeToRefs(store)
 const api = useApi()
+const toast = useToast()
 const apiUrl = (useRuntimeConfig().public.apiUrl as string).replace(/\/$/, '')
 
 useHead({ title: 'Settings' })
 
-const { isAdmin, capabilities, ensureCapabilities, ensureSession } = useAuth()
+const { isAdmin, capabilities, fetchCapabilities, ensureCapabilities, ensureSession }
+  = useAuth()
 // Resolve both explicitly rather than leaning on the global middleware's order,
 // so `isAdmin` (from the session) is populated when adminOrOpenMode is computed.
 onMounted(async () => {
@@ -22,16 +24,39 @@ const authEnabled = computed(() => capabilities.value?.authEnabled ?? true)
 // API mirrors this (the gate bypasses in sem-auth mode).
 const adminOrOpenMode = computed(() => !authEnabled.value || isAdmin.value)
 const togglingAuth = ref(false)
-async function toggleAuth() {
+async function toggleAuth(next: boolean) {
   togglingAuth.value = true
   try {
     await api('/admin/settings', {
       method: 'POST',
-      body: { authEnabled: !authEnabled.value }
+      body: { authEnabled: next }
     })
     window.location.reload()
   } finally {
     togglingAuth.value = false
+  }
+}
+
+const keepDiffsOnArchive = computed(
+  () => capabilities.value?.keepDiffsOnArchive ?? false
+)
+const togglingDiffs = ref(false)
+async function toggleKeepDiffs(next: boolean) {
+  togglingDiffs.value = true
+  try {
+    await api('/admin/settings', {
+      method: 'POST',
+      body: { keepDiffsOnArchive: next }
+    })
+    capabilities.value = await fetchCapabilities()
+  } catch (e) {
+    toast.add({
+      title: 'Failed to update archiving setting',
+      description: resolveError(e),
+      color: 'error'
+    })
+  } finally {
+    togglingDiffs.value = false
   }
 }
 
@@ -91,140 +116,183 @@ function openProject(slug: string) {
 
     <template #body>
       <div class="max-w-2xl mx-auto w-full space-y-8">
-        <UPageCard
-          v-if="adminOrOpenMode"
-          title="Backup"
-          description="Export a project (or everything) to a versioned .json.gz, or import one as a brand-new project."
-          variant="subtle"
-          :ui="{ container: 'gap-4', wrapper: 'mb-0' }"
-        >
-          <div class="space-y-3">
-            <div class="flex items-center justify-between gap-3">
-              <div class="min-w-0">
-                <p class="text-sm font-medium">
-                  Export this project
-                </p>
-                <p class="text-xs text-muted truncate">
-                  {{ currentProject ? currentProject.name : "No project selected" }}
-                </p>
-              </div>
-              <UButton
-                icon="i-lucide-download"
-                label="Export project"
-                color="neutral"
-                variant="subtle"
-                :disabled="!currentProject"
-                @click="download(`/projects/${currentProject!.id}/export`)"
-              />
-            </div>
-
-            <div class="flex items-center justify-between gap-3 border-t border-default pt-3">
-              <div class="min-w-0">
-                <p class="text-sm font-medium">
-                  Export everything
-                </p>
-                <p class="text-xs text-muted">
-                  All projects in one file.
-                </p>
-              </div>
-              <UButton
-                icon="i-lucide-download"
-                label="Export all"
-                color="neutral"
-                variant="subtle"
-                @click="download('/export')"
-              />
-            </div>
-
-            <div class="flex items-center justify-between gap-3 border-t border-default pt-3">
-              <div class="min-w-0">
-                <p class="text-sm font-medium">
-                  Import a backup
-                </p>
-                <p class="text-xs text-muted">
-                  Restores as a new project (keys preserved; a name clash is suffixed).
-                </p>
-              </div>
-              <UButton
-                icon="i-lucide-upload"
-                label="Import…"
-                color="neutral"
-                variant="subtle"
-                :loading="importing"
-                @click="fileInput?.click()"
-              />
-              <input
-                ref="fileInput"
-                type="file"
-                accept=".gz,application/gzip"
-                aria-label="Import a backup file"
-                class="hidden"
-                @change="onImportFile"
-              >
-            </div>
-
-            <div
-              v-if="imported.length"
-              class="border-t border-default pt-3 space-y-1.5"
-            >
-              <div class="flex items-center gap-2 text-sm text-success">
-                <UIcon name="i-lucide-check-circle" />
-                <span>Imported {{ imported.length }} project{{ imported.length === 1 ? "" : "s" }} as new.</span>
-              </div>
-              <div
-                v-for="p in imported"
-                :key="p.id"
-                class="flex items-center gap-2 text-sm pl-6"
-              >
-                <span class="flex-1 truncate text-muted">{{ p.name }} ({{ p.slug }})</span>
+        <div v-if="adminOrOpenMode">
+          <UPageCard
+            title="Backup"
+            description="Export to a versioned .json.gz, or import one as a new project."
+            variant="naked"
+            class="mb-4"
+          />
+          <UPageCard
+            variant="subtle"
+            :ui="{ container: 'gap-4', wrapper: 'mb-0' }"
+          >
+            <div class="space-y-4">
+              <div class="flex items-center justify-between gap-3">
+                <div class="min-w-0">
+                  <p class="text-sm font-medium">
+                    Export project
+                  </p>
+                  <p class="mt-0.5 text-xs text-muted">
+                    Export {{ currentProject ? currentProject.name : "the selected project" }} to a versioned .json.gz.
+                  </p>
+                </div>
                 <UButton
-                  size="xs"
-                  color="primary"
+                  icon="i-lucide-download"
+                  label="Export project"
+                  color="neutral"
                   variant="subtle"
-                  label="Open"
-                  @click="openProject(p.slug)"
+                  class="min-w-[160px] justify-center shrink-0"
+                  :disabled="!currentProject"
+                  @click="download(`/projects/${currentProject!.id}/export`)"
                 />
               </div>
-            </div>
-            <div
-              v-if="importError"
-              class="flex items-center gap-2 text-sm text-error border-t border-default pt-3"
-            >
-              <UIcon name="i-lucide-alert-triangle" />
-              <span>{{ importError }}</span>
-            </div>
-          </div>
-        </UPageCard>
 
-        <UPageCard
-          v-if="adminOrOpenMode"
-          title="Authentication"
-          description="With auth disabled the board runs without login (open mode): anyone with network access uses it. Enable it to require login and grant users access by role/project."
-          variant="subtle"
-          :ui="{ container: 'gap-4', wrapper: 'mb-0' }"
-        >
-          <div class="space-y-3">
+              <USeparator />
+
+              <div class="flex items-center justify-between gap-3">
+                <div class="min-w-0">
+                  <p class="text-sm font-medium">
+                    Export all
+                  </p>
+                  <p class="mt-0.5 text-xs text-muted">
+                    Every project in one .json.gz file.
+                  </p>
+                </div>
+                <UButton
+                  icon="i-lucide-download"
+                  label="Export all"
+                  color="neutral"
+                  variant="subtle"
+                  class="min-w-[160px] justify-center shrink-0"
+                  @click="download('/export')"
+                />
+              </div>
+
+              <USeparator />
+
+              <div class="flex items-center justify-between gap-3">
+                <div class="min-w-0">
+                  <p class="text-sm font-medium">
+                    Import
+                  </p>
+                  <p class="mt-0.5 text-xs text-muted">
+                    Restores as a new project (keys preserved; a name clash is suffixed).
+                  </p>
+                </div>
+                <UButton
+                  icon="i-lucide-upload"
+                  label="Import…"
+                  color="neutral"
+                  variant="subtle"
+                  class="min-w-[160px] justify-center shrink-0"
+                  :loading="importing"
+                  @click="fileInput?.click()"
+                />
+                <input
+                  ref="fileInput"
+                  type="file"
+                  accept=".gz,application/gzip"
+                  aria-label="Import a backup file"
+                  class="hidden"
+                  @change="onImportFile"
+                >
+              </div>
+
+              <template v-if="imported.length">
+                <USeparator />
+                <div class="space-y-1.5">
+                  <div class="flex items-center gap-2 text-sm text-success">
+                    <UIcon name="i-lucide-check-circle" />
+                    <span>Imported {{ imported.length }} project{{ imported.length === 1 ? "" : "s" }} as new.</span>
+                  </div>
+                  <div
+                    v-for="p in imported"
+                    :key="p.id"
+                    class="flex items-center gap-2 text-sm pl-6"
+                  >
+                    <span class="flex-1 truncate text-muted">{{ p.name }} ({{ p.slug }})</span>
+                    <UButton
+                      size="xs"
+                      color="primary"
+                      variant="subtle"
+                      label="Open"
+                      @click="openProject(p.slug)"
+                    />
+                  </div>
+                </div>
+              </template>
+
+              <template v-if="importError">
+                <USeparator />
+                <div class="flex items-center gap-2 text-sm text-error">
+                  <UIcon name="i-lucide-alert-triangle" />
+                  <span>{{ importError }}</span>
+                </div>
+              </template>
+            </div>
+          </UPageCard>
+        </div>
+
+        <div v-if="adminOrOpenMode">
+          <UPageCard
+            title="Authentication"
+            description="Control who can access the board."
+            variant="naked"
+            class="mb-4"
+          />
+          <UPageCard
+            variant="subtle"
+            :ui="{ container: 'gap-4', wrapper: 'mb-0' }"
+          >
             <div class="flex items-center justify-between gap-3">
               <div class="min-w-0">
                 <p class="text-sm font-medium">
-                  {{ authEnabled ? "Enabled" : "Disabled (open mode)" }}
+                  Require login
                 </p>
-                <p class="text-xs text-muted">
-                  {{ authEnabled
-                    ? "Login required; the admin approves new users."
-                    : "Anyone with network access uses the board without logging in." }}
+                <p class="mt-0.5 text-xs text-muted">
+                  On: login required, the admin approves new users. Off: open mode — anyone with network access uses the board without logging in.
                 </p>
               </div>
-              <UButton
-                :color="authEnabled ? 'error' : 'primary'"
-                variant="subtle"
+              <USwitch
+                :model-value="authEnabled"
                 :loading="togglingAuth"
-                :label="authEnabled ? 'Disable' : 'Enable'"
-                @click="toggleAuth"
+                class="shrink-0"
+                @update:model-value="toggleAuth"
               />
             </div>
-          </div>
-        </UPageCard>
+          </UPageCard>
+        </div>
+
+        <div v-if="adminOrOpenMode">
+          <UPageCard
+            title="Archiving"
+            description="What happens to attached diffs when a card or sprint is archived."
+            variant="naked"
+            class="mb-4"
+          />
+          <UPageCard
+            variant="subtle"
+            :ui="{ container: 'gap-4', wrapper: 'mb-0' }"
+          >
+            <div class="flex items-center justify-between gap-3">
+              <div class="min-w-0">
+                <p class="text-sm font-medium">
+                  Keep diffs on archive
+                </p>
+                <p class="mt-0.5 text-xs text-muted">
+                  On: attached diffs are kept when archiving a card or sprint. Off (default): diffs are dropped; re-run attach-commit to restore one.
+                </p>
+              </div>
+              <USwitch
+                :model-value="keepDiffsOnArchive"
+                :loading="togglingDiffs"
+                class="shrink-0"
+                @update:model-value="toggleKeepDiffs"
+              />
+            </div>
+          </UPageCard>
+        </div>
       </div>
     </template>
   </UDashboardPanel>

@@ -4,6 +4,7 @@ import { z } from 'zod'
 import { createId, type Database, schema } from '@claude-organizer/db'
 
 import { archivedCondition, type ArchiveFilter } from './archive'
+import { getSystemSettings } from './authz'
 import { listBlockedBy, listBlocking, pendingBlockerCounts } from './blockers'
 import { claimsByCardIds, getClaim, releaseClaimOnDone } from './cardClaims'
 import { InputError } from './errors'
@@ -290,12 +291,16 @@ export async function archiveCard(db: Database, id: string) {
     .where(eq(schema.cards.id, id))
     .returning()
   if (row) {
-    // Free the heavy diff blobs; keep the commit metadata (hash, message,
-    // stat…). Restoring does NOT bring the diff back — re-run attach-commit.
-    await db
-      .update(schema.cardCommits)
-      .set({ diff: null })
-      .where(eq(schema.cardCommits.cardId, id))
+    // Default: free the heavy diff blobs, keep the commit metadata (hash,
+    // message, stat…); restoring does NOT bring the diff back — re-run
+    // attach-commit. With keepDiffsOnArchive on, the blobs are preserved.
+    const { keepDiffsOnArchive } = await getSystemSettings(db)
+    if (!keepDiffsOnArchive) {
+      await db
+        .update(schema.cardCommits)
+        .set({ diff: null })
+        .where(eq(schema.cardCommits.cardId, id))
+    }
     await syncIntakeForCard(db, row.projectId, row.key)
     await notify(db, {
       type: 'card.changed',

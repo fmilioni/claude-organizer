@@ -5,8 +5,10 @@ import {
   approveUser,
   ConflictError,
   deleteUser,
+  getSystemSettings,
   listAllUsers,
-  setAuthEnabled
+  setAuthEnabled,
+  setKeepDiffsOnArchive
 } from '@claude-organizer/core'
 import type { Database } from '@claude-organizer/db'
 import { USER_ROLES } from '@claude-organizer/shared'
@@ -18,7 +20,14 @@ const approveBody = z.object({
   allProjects: z.boolean(),
   projectIds: z.array(z.string()).optional()
 })
-const settingsBody = z.object({ authEnabled: z.boolean() })
+const settingsBody = z
+  .object({
+    authEnabled: z.boolean().optional(),
+    keepDiffsOnArchive: z.boolean().optional()
+  })
+  .refine(b => b.authEnabled !== undefined || b.keepDiffsOnArchive !== undefined, {
+    message: 'No setting to update'
+  })
 
 export function registerAdminRoutes(app: FastifyInstance, db: Database) {
   app.get('/admin/users', async () => listAllUsers(db))
@@ -47,7 +56,11 @@ export function registerAdminRoutes(app: FastifyInstance, db: Database) {
   )
 
   app.post('/admin/settings', async (req) => {
-    const { authEnabled } = settingsBody.parse(req.body)
-    return setAuthEnabled(db, authEnabled)
+    const body = settingsBody.parse(req.body)
+    if (body.authEnabled !== undefined) await setAuthEnabled(db, body.authEnabled)
+    if (body.keepDiffsOnArchive !== undefined) {
+      await setKeepDiffsOnArchive(db, body.keepDiffsOnArchive)
+    }
+    return getSystemSettings(db)
   })
 }

@@ -53,6 +53,7 @@ export const NON_BACKUP_TABLE_NAMES = [
   'oauth_consents',
   'user_authz',
   'user_project_access',
+  'card_claims',
   'system_settings'
 ] as const
 
