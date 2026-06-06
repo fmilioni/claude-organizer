@@ -1,14 +1,13 @@
 # claude-organizer (Claude Code plugin)
 
-Five skills:
+Four skills:
 
 - **`claude-organizer`** — how to **operate** the board: orient at the start of a session, keep statuses honest, comment with signal (not noise), docs.
 - **`plan`** — turn a **new demand** into sprints/histories/tasks. Triggers automatically when you describe something to build.
 - **`implement`** — **execute** a card that already exists, through a mandatory lifecycle (`in_progress` → read comments → implement → review → commit → done). Triggers when you start building a specific card.
 - **`review`** — the **mandatory review gate** before work closes (per-task and story-level), run by a fresh subagent: checks acceptance criteria and hunts for reuse/dead-code/comment improvements. Fired by `implement` at task/story completion.
-- **`autopilot`** — **run the board autonomously**: advance through several ready cards as independent PRs off `main` (trunk-based, no stacked PRs), guided by the blocker graph. Settles each ready card's decisions up front, asks sequential vs. parallel (worktrees), and stops when only PR-dependent/blocked work remains — never merging to `main` itself.
 
-The shared "never assume — resolve open decisions" doctrine lives once in `shared/deciding.md`; `plan`, `implement` and `autopilot` reference it.
+The shared "never assume — resolve open decisions" doctrine lives once in `shared/deciding.md`; `plan` and `implement` reference it.
 
 ## Installation
 

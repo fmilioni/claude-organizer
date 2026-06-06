@@ -5,7 +5,7 @@ system to organize its own development (auto-inception). **International** produ
 
 ## Skills
 
-Five skills drive the work (packaged in `plugins/claude-organizer`):
+Four skills drive the work (packaged in `plugins/claude-organizer`):
 
 - **`claude-organizer`** — how to operate the board: orient at the start of a
   session, keep statuses honest, comment with signal, docs.
@@ -17,15 +17,10 @@ Five skills drive the work (packaged in `plugins/claude-organizer`):
 - **`review`** — mandatory review gate before work closes (per-task + story-level),
   run by a fresh subagent: checks acceptance criteria and hunts for reuse/dead-code/
   comment improvements. Fired by `implement` at task/story completion.
-- **`autopilot`** — run the board autonomously: advance through several ready
-  cards as **independent PRs off `main`** (trunk-based, no stacked PRs), guided
-  by the blocker graph. Settles every ready card's decisions up front, asks
-  sequential vs. parallel (worktrees), and stops when only PR-dependent/blocked
-  work remains. Never merges to `main` — the user's merge is the gate.
 
 The shared "never assume — resolve open decisions" doctrine lives once in
-`plugins/claude-organizer/shared/deciding.md`; `plan`, `implement` and
-`autopilot` reference it instead of each restating it.
+`plugins/claude-organizer/shared/deciding.md`; `plan` and `implement` reference
+it instead of each restating it.
 
 Let the skills drive. **What** to do (active sprint, cards, backlog, comments,
 docs) is the source of truth and lives **in the MCP**, not here — query it via
@@ -54,10 +49,7 @@ overrides below, and points to the docs for the rest.
   works; the message is written **in English** and references the key (e.g.
   `feat(tags): … (CO-4)`). After committing, attach its diff to the card with
   `pnpm attach-commit <sha>` (captured outside the AI context — never read or
-  paste the diff). **In `autopilot` (autonomous) mode this adapts:** the AI
-  commits **on the branch** and opens a **PR** — the **user's merge is the
-  confirmation gate**, and the AI never merges to `main` itself. `attach-commit`
-  per card still applies.
+  paste the diff).
 - **PRs**: written **in English** (title *and* body, same as commits — only
   tasks/comments/docs follow the user's language). Write the **title as a
   conventional-commit** (`feat(scope): … (CO-N)`); PRs are **squash-merged**, so

@@ -1,8 +1,6 @@
 # Resolving decisions — never assume
 
-Shared doctrine for the claude-organizer skills. `plan`, `implement` and `autopilot` all reference this single file instead of restating it, so the rule stays consistent and is maintained in one place. Each skill says **when** and at **what scope** it applies the doctrine (planning a card, executing a card, or a board-level pre-flight); the **method** below is the same everywhere.
-
-> A subagent that received this text inline cannot reach the user. Where that's the case (the `autopilot` parallel mode), the rule changes shape: the agent does **not** ask — it **stops the card and reports the open decision** to its orchestrator, which resolves it with the user and re-dispatches. Asking is the orchestrator's job; never guess to keep moving.
+Shared doctrine for the claude-organizer skills. `plan` and `implement` both reference this single file instead of restating it, so the rule stays consistent and is maintained in one place. Each skill says **when** and at **what scope** it applies the doctrine (planning a card or executing a card); the **method** below is the same everywhere.
 
 ## Two kinds of unknown
 

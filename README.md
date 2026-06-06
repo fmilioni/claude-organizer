@@ -9,7 +9,7 @@ sprints, roadmaps, comments and docs — as **queryable state over MCP**, instea
 of spec Markdown files that grow without bound and go stale. A clean Nuxt UI
 mirrors the same board for humans, in real time.
 
-It ships as a **Claude Code plugin** (five skills + the MCP server), backed by a
+It ships as a **Claude Code plugin** (four skills + the MCP server), backed by a
 pnpm monorepo you run with Docker.
 
 <br/>
@@ -243,7 +243,7 @@ Relevant env (see `.env.example`):
 
 ## The skills
 
-Five skills drive the work — you don't call them by hand, they trigger from what
+Four skills drive the work — you don't call them by hand, they trigger from what
 you say:
 
 | Skill | What it does | Triggers when… |
@@ -252,7 +252,6 @@ you say:
 | **`plan`** | Turn a fuzzy new demand into structured work (sprint → stories → tasks), gets the design approved, then creates the cards. | you describe something new to build, before it's broken down. |
 | **`implement`** | Execute one existing card through its lifecycle: `in_progress` → read comments → implement → review → commit → `done`. | you start/resume work on a specific card — *"work CO-42", "build it"*. |
 | **`review`** | A mandatory review gate (per-task + story-level), run by a fresh subagent: checks acceptance criteria, hunts bugs/security/reuse. | a task or story's last task just finished (fired by `implement`). |
-| **`autopilot`** | Run the board autonomously — advance through several ready cards as **independent PRs off `main`**, guided by the blocker graph. Never merges; your merge is the gate. | you ask it to run the board on its own. |
 
 ## Using it
 
@@ -274,9 +273,6 @@ has no memory, so it reads the board before touching code:
 > **Claude:** *reads the active sprint, your unread comments and the in-flight
 > cards, picks the top one, moves it to `in_progress`, implements it, records the
 > decisions as comments, runs the review gate, then moves it to `review` for you.*
-
-**Let it run** — the `autopilot` skill works several ready cards as separate PRs
-and stops when only blocked/PR-dependent work remains. Your merge confirms each.
 
 ### Inbox
 

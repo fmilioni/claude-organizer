@@ -9,12 +9,11 @@ claude-organizer is a "Jira for Claude Code" exposed over MCP. It holds a projec
 
 A fresh session starts with no memory of past work. This system is how continuity is preserved: the active sprint says what matters now, cards carry the detail, comments carry the back-and-forth with the user, and docs carry the architecture and decisions. Read it first; keep it honest.
 
-> **Five skills, one board.** This skill covers **operating** the board — orienting, reading state, keeping it honest, comments and docs. The other four own distinct phases:
+> **Four skills, one board.** This skill covers **operating** the board — orienting, reading state, keeping it honest, comments and docs. The other three own distinct phases:
 >
 > - **`plan`** — when the user brings a **new demand** (a feature, a change, a fix) to turn into work: it understands the demand and organizes it into sprints/histories/tasks. Planning, not code. **Creating any card goes through here** — never call `create_card` ad-hoc from another context.
 > - **`implement`** — when you **execute** a card that already exists (a task, a story, a sprint's cards): it owns the **mandatory execution lifecycle** (`in_progress` → read comments → implement → commit → done). The moment you start building a specific card, that skill drives — every step is mandatory.
 > - **`review`** — the **mandatory review gate** the `implement` skill fires before work closes: a per-task review and a story-level review, run by a **fresh subagent** that checks acceptance criteria and hunts for reuse/dead-code/comment improvements.
-> - **`autopilot`** — when the user asks to **run the board on its own** ("run the board", "knock out the ready tasks"): it advances through several ready cards as **independent PRs off `main`** (trunk-based, no stacked PRs), guided by the blocker graph — settling each ready card's decisions up front, then driving `implement`+`review` per card, and stopping when only PR-dependent/blocked work remains. It never merges to `main` itself.
 >
 > Use this skill to orient and to keep the board honest throughout.
 
@@ -58,7 +57,7 @@ The inbox (`list_inbox`, pending) holds **raw demands** the user dropped without
 - User is **lost / asks what to do / what's next / asks for board status / is idle** → suggest planning the pending demands **right away** (plan first — it's the most useful next move).
 - **No pending demands → say nothing.** And don't re-offer every turn — suggest sparingly, not on a loop.
 
-**Re-check fresh at the end of work — never the orientation snapshot.** The inbox you read while orienting (step 7) goes stale: the user routinely drops demands **during** a long piece of work. So at every natural **end-of-work boundary** — finishing a story, **before advancing to the next story/sprint**, and **before ending the session** — call **`list_inbox` (pending) again, fresh**, and judge against *that*, not the snapshot. When the fresh check surfaces pending demands not covered by what you just did, treat it as a **decision gate**: **ask** the user whether to review/plan them now, noting that pending demands may **reshape the upcoming stories** — don't only mention them in passing or skip ahead. (The soft "offer once, sparingly" above is the normal-turn register; at a real end-of-work boundary it firms into this gate.) (The `implement` and `autopilot` skills enforce this same fresh re-check at their story/round boundaries.)
+**Re-check fresh at the end of work — never the orientation snapshot.** The inbox you read while orienting (step 7) goes stale: the user routinely drops demands **during** a long piece of work. So at every natural **end-of-work boundary** — finishing a story, **before advancing to the next story/sprint**, and **before ending the session** — call **`list_inbox` (pending) again, fresh**, and judge against *that*, not the snapshot. When the fresh check surfaces pending demands not covered by what you just did, treat it as a **decision gate**: **ask** the user whether to review/plan them now, noting that pending demands may **reshape the upcoming stories** — don't only mention them in passing or skip ahead. (The soft "offer once, sparingly" above is the normal-turn register; at a real end-of-work boundary it firms into this gate.) (The `implement` skill enforces this same fresh re-check at its story boundaries.)
 
 Converting a demand into cards is the **`plan`** skill's job (it reads the inbox and marks each planned); here you only orient and suggest.
 
@@ -75,7 +74,6 @@ This skill is the **panorama of how to use the board**. The actual workflow rule
 - **New demand → `plan`.** Turning a fuzzy feature/change/fix into sprints/histories/tasks (clarifying, surfacing decisions, writing the cards) is the **`plan`** skill's job. Don't plan ad-hoc here. **Creating a card _is_ planning** — the moment the user asks for something that should become a card (or several), or anything that needs to be broken down, **switch to the `plan` skill instead of calling `create_card` directly**. Even a single obvious-looking card goes through `plan`: it clarifies open decisions, structures the work, writes the spec and tags it. Reaching for `create_card` from this context — or from `implement`, mid-execution — is the failure to avoid.
 - **Executing a card → `implement`.** The moment you start building a specific card, the **`implement`** skill drives — it owns the mandatory execution lifecycle so no step gets skipped. Don't reconstruct that flow from memory here.
 - **Closing a task/story → `review`.** Before work closes, the `implement` skill fires the **`review`** skill's mandatory gate (per-task and story-level), run by a fresh subagent. Don't review your own work inline here.
-- **Running the board on its own → `autopilot`.** When the user wants the AI to advance through several ready cards autonomously (independent PRs off `main`, no stacked PRs), the **`autopilot`** skill drives the board-level orchestration around `implement`+`review`. Don't improvise an autonomous run here.
 
 Everything below is about **operating** the board itself — comments, card/sprint structure, docs — and applies across all phases.
 
@@ -148,6 +146,5 @@ Rules of thumb:
 - New demand, or **any** new card → **`plan`** skill (understand & organize) before executing. Never `create_card` directly from this context — card creation is always the `plan` skill.
 - Executing a card → **`implement`** skill (mandatory lifecycle: `in_progress` → read comments → implement → review status → commit → done). Every step is obligatory — don't skip.
 - Closing a task/story → **`review`** skill (mandatory gate, fresh subagent: per-task + story-level — acceptance criteria + reuse/dead-code/comment improvements).
-- Running the board autonomously → **`autopilot`** skill (board-level orchestrator: ready set from the blocker graph → decide it up front → independent PRs off `main`, no stacked PRs → stop & report; never merges to `main`).
 - **Durable knowledge lives in docs, not in `CLAUDE.md`.** Architecture, data model, decisions (ADRs) and patterns belong in the docs — consult them, don't copy them into `CLAUDE.md`. Keep `CLAUDE.md` lean: it points at the project and its skills and holds only project-specific rules and overrides.
 - Respect the repo's `CLAUDE.md`. When `CLAUDE.md` conflicts with a doc or this skill, `CLAUDE.md` wins — it's the project-specific override.

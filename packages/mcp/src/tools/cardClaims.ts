@@ -15,7 +15,7 @@ const sessionToken = z
   .string()
   .min(1)
   .describe(
-    'Opaque session token this run uses to hold its claims. Generate ONE per run and reuse it for every claim/release/take-over call (the implement/autopilot skills do this).'
+    'Opaque session token this run uses to hold its claims. Generate ONE per run and reuse it for every claim/release/take-over call (the implement skill does this).'
   )
 
 export function registerCardClaimTools(server: McpServer, db: Database) {
