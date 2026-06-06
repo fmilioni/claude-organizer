@@ -30,7 +30,10 @@ async function loadSprints() {
 }
 
 function sprintRecency(s: Sprint): string {
-  return s.endsAt ?? s.archivedAt ?? s.createdAt
+  // archivedAt stays out of the chain: archiving is usually batched (near-equal
+  // timestamps), so a sprint without endsAt would jump to the top. createdAt
+  // reflects the sprint's real age.
+  return s.endsAt ?? s.createdAt
 }
 function byRecencyDesc(a: Sprint, b: Sprint): number {
   return sprintRecency(b).localeCompare(sprintRecency(a))
