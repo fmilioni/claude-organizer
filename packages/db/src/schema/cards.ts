@@ -10,6 +10,7 @@ import {
 } from 'drizzle-orm/pg-core'
 
 import { cardCommits } from './cardCommits'
+import { tsvector } from './columns'
 import { comments } from './comments'
 import { cardStatusEnum } from './enums'
 import { projects } from './projects'
@@ -37,6 +38,10 @@ export const cards = pgTable(
     priority: integer('priority').notNull().default(0),
     dueDate: timestamp('due_date', { withTimezone: true }),
     position: integer('position').notNull().default(0),
+    // Including `key` is deliberate: searching "CO-42" finds the card itself.
+    searchTsv: tsvector('search_tsv').generatedAlwaysAs(
+      sql`to_tsvector('simple', coalesce(key, '') || ' ' || coalesce(title, '') || ' ' || coalesce(summary, '') || ' ' || coalesce(description_md, ''))`
+    ),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .default(sql`now()`),
@@ -50,6 +55,7 @@ export const cards = pgTable(
     index('cards_sprint_idx').on(t.sprintId),
     index('cards_parent_idx').on(t.parentId),
     index('cards_status_idx').on(t.projectId, t.status),
+    index('cards_search_tsv_idx').using('gin', t.searchTsv),
     uniqueIndex('cards_project_key_uk').on(t.projectId, t.key)
   ]
 )

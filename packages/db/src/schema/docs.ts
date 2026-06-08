@@ -1,7 +1,6 @@
 import { relations, sql } from 'drizzle-orm'
 import {
   type AnyPgColumn,
-  customType,
   index,
   integer,
   pgTable,
@@ -9,14 +8,9 @@ import {
   timestamp
 } from 'drizzle-orm/pg-core'
 
+import { tsvector } from './columns'
 import { docKindEnum } from './enums'
 import { projects } from './projects'
-
-const tsvector = customType<{ data: string }>({
-  dataType() {
-    return 'tsvector'
-  }
-})
 
 export const docs = pgTable(
   'docs',

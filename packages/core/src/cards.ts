@@ -1,4 +1,16 @@
-import { and, asc, desc, eq, inArray, isNull, sql } from 'drizzle-orm'
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  ilike,
+  inArray,
+  isNull,
+  notInArray,
+  or,
+  type SQL,
+  sql
+} from 'drizzle-orm'
 import { z } from 'zod'
 
 import { createId, type Database, schema } from '@claude-organizer/db'
@@ -60,11 +72,24 @@ export const reorderCardsInput = z.object({
 })
 export type ReorderCardsInput = z.infer<typeof reorderCardsInput>
 
-export interface ListCardsFilters extends ArchiveFilter {
-  projectId: string
+export type CardStatus = z.infer<typeof cardStatus>
+
+/**
+ * Shared filter shape for focused reads — reused by `listCards` and
+ * `searchCards` (see CO-222/CO-216 coordination) so the two never diverge.
+ * `status` takes a single value (back-compat) or a list; `activeOnly` is the
+ * ergonomic shortcut for "everything but done/backlog".
+ */
+export interface CardFilters extends ArchiveFilter {
   sprintId?: string | null
-  status?: z.infer<typeof cardStatus>
+  status?: CardStatus | CardStatus[]
+  activeOnly?: boolean
+  tag?: string
   backlogOnly?: boolean
+}
+
+export interface ListCardsFilters extends CardFilters {
+  projectId: string
 }
 
 const cardSummaryColumns = {
@@ -83,8 +108,35 @@ const cardSummaryColumns = {
   updatedAt: schema.cards.updatedAt
 }
 
-export async function listCards(db: Database, filters: ListCardsFilters) {
-  const conditions = [eq(schema.cards.projectId, filters.projectId)]
+function statusCondition(filters: CardFilters): SQL | undefined {
+  if (filters.activeOnly) {
+    return notInArray(schema.cards.status, ['done', 'backlog'])
+  }
+  if (Array.isArray(filters.status)) {
+    return filters.status.length
+      ? inArray(schema.cards.status, filters.status)
+      : undefined
+  }
+  if (filters.status) return eq(schema.cards.status, filters.status)
+  return undefined
+}
+
+function tagCondition(db: Database, tag: string | undefined): SQL | undefined {
+  if (!tag) return undefined
+  const cardIds = db
+    .select({ id: schema.cardTags.cardId })
+    .from(schema.cardTags)
+    .innerJoin(schema.tags, eq(schema.cardTags.tagId, schema.tags.id))
+    .where(or(eq(schema.tags.id, tag), eq(schema.tags.name, tag)))
+  return inArray(schema.cards.id, cardIds)
+}
+
+function cardFilterConditions(
+  db: Database,
+  projectId: string,
+  filters: CardFilters
+): SQL[] {
+  const conditions: SQL[] = [eq(schema.cards.projectId, projectId)]
   if (filters.backlogOnly) {
     conditions.push(isNull(schema.cards.sprintId))
   } else if (filters.sprintId !== undefined) {
@@ -94,16 +146,19 @@ export async function listCards(db: Database, filters: ListCardsFilters) {
         : eq(schema.cards.sprintId, filters.sprintId)
     )
   }
-  if (filters.status) {
-    conditions.push(eq(schema.cards.status, filters.status))
-  }
+  const status = statusCondition(filters)
+  if (status) conditions.push(status)
+  const tag = tagCondition(db, filters.tag)
+  if (tag) conditions.push(tag)
   const archived = archivedCondition(schema.cards.archivedAt, filters)
   if (archived) conditions.push(archived)
-  const rows = await db
-    .select(cardSummaryColumns)
-    .from(schema.cards)
-    .where(and(...conditions))
-    .orderBy(asc(schema.cards.position), desc(schema.cards.createdAt))
+  return conditions
+}
+
+/** Attach tags, subtask counts, parent key, blocker count and claim to card rows. */
+export async function enrichCardRows<
+  T extends { id: string, parentId: string | null }
+>(db: Database, rows: T[]) {
   const ids = rows.map(r => r.id)
   const [tagMap, counts, parentKeys, blockerCounts, claimMap] = await Promise.all([
     tagsByCardIds(db, ids),
@@ -121,6 +176,118 @@ export async function listCards(db: Database, filters: ListCardsFilters) {
     blockedByPending: blockerCounts.get(r.id) ?? 0,
     claim: claimMap.get(r.id) ?? null
   }))
+}
+
+export async function listCards(db: Database, filters: ListCardsFilters) {
+  const conditions = cardFilterConditions(db, filters.projectId, filters)
+  const rows = await db
+    .select(cardSummaryColumns)
+    .from(schema.cards)
+    .where(and(...conditions))
+    .orderBy(asc(schema.cards.position), desc(schema.cards.createdAt))
+  return enrichCardRows(db, rows)
+}
+
+export interface MatchedComment {
+  commentId: string
+  snippet: string
+}
+
+// Snippet feeds <AppMarkdown>, so HTML highlight tags would render raw — use markdown bold.
+const SNIPPET_OPTS = 'StartSel=**,StopSel=**,MaxFragments=1,MaxWords=24,MinWords=6,ShortWord=2'
+
+/**
+ * Ranked full-text search over cards AND their comments. A card matches when the
+ * term hits the card (key/title/summary/description via tsvector, or
+ * substring/typo via pg_trgm/ILIKE) OR any of its comments. Rank = best signal
+ * among the card's tsvector, its best-matching comment, and trigram similarity.
+ * Reuses the focused-read filters (status/sprint/tag/archived). Read-only — it
+ * never marks comments as read.
+ */
+export async function searchCards(
+  db: Database,
+  projectId: string,
+  query: string,
+  filters: CardFilters = {}
+) {
+  // Without this, an empty query degenerates into ILIKE '%%' (matches every card).
+  const q = query.trim()
+  if (!q) return []
+  const tsQuery = sql`websearch_to_tsquery('simple', ${q})`
+  const term = `%${q}%`
+  const cardRank = sql<number>`ts_rank(${schema.cards.searchTsv}, ${tsQuery})`
+  const commentRank = sql<number>`coalesce((
+    select max(ts_rank(c.body_tsv, ${tsQuery}))
+    from comments c
+    where c.card_id = ${schema.cards.id} and c.body_tsv @@ ${tsQuery}
+  ), 0)`
+  const trgmSim = sql<number>`greatest(
+    word_similarity(${q}, ${schema.cards.title}),
+    word_similarity(${q}, coalesce(${schema.cards.summary}, ''))
+  )`
+  const rank = sql<number>`greatest(${cardRank}, ${commentRank}, ${trgmSim})`
+
+  const match = or(
+    sql`${schema.cards.searchTsv} @@ ${tsQuery}`,
+    sql`exists (
+      select 1 from comments c
+      where c.card_id = ${schema.cards.id} and c.body_tsv @@ ${tsQuery}
+    )`,
+    ilike(schema.cards.title, term),
+    ilike(schema.cards.summary, term),
+    ilike(schema.cards.key, term),
+    sql`${q} <% ${schema.cards.title}`,
+    sql`${q} <% coalesce(${schema.cards.summary}, '')`
+  )
+
+  const conditions = cardFilterConditions(db, projectId, filters)
+  if (match) conditions.push(match)
+
+  const rows = await db
+    .select(cardSummaryColumns)
+    .from(schema.cards)
+    .where(and(...conditions))
+    .orderBy(desc(rank), desc(schema.cards.updatedAt))
+    .limit(50)
+
+  const [enriched, snippets] = await Promise.all([
+    enrichCardRows(db, rows),
+    matchedCommentSnippets(db, rows.map(r => r.id), tsQuery)
+  ])
+  return enriched.map(c => ({
+    ...c,
+    matchedComment: snippets.get(c.id) ?? null
+  }))
+}
+
+/** Best-ranked matching comment per card, with a highlighted snippet. */
+async function matchedCommentSnippets(
+  db: Database,
+  cardIds: string[],
+  tsQuery: SQL
+): Promise<Map<string, MatchedComment>> {
+  const map = new Map<string, MatchedComment>()
+  if (cardIds.length === 0) return map
+  const rows = await db
+    .select({
+      cardId: schema.comments.cardId,
+      id: schema.comments.id,
+      snippet: sql<string>`ts_headline('simple', ${schema.comments.bodyMd}, ${tsQuery}, ${SNIPPET_OPTS})`
+    })
+    .from(schema.comments)
+    .where(
+      and(
+        inArray(schema.comments.cardId, cardIds),
+        sql`${schema.comments.bodyTsv} @@ ${tsQuery}`
+      )
+    )
+    .orderBy(desc(sql`ts_rank(${schema.comments.bodyTsv}, ${tsQuery})`))
+  for (const r of rows) {
+    if (!map.has(r.cardId)) {
+      map.set(r.cardId, { commentId: r.id, snippet: r.snippet })
+    }
+  }
+  return map
 }
 
 export async function getCard(db: Database, id: string) {

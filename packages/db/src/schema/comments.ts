@@ -9,6 +9,7 @@ import {
 
 import { users } from './auth'
 import { cards } from './cards'
+import { tsvector } from './columns'
 import { commentAuthorEnum } from './enums'
 
 export const comments = pgTable(
@@ -22,13 +23,17 @@ export const comments = pgTable(
     userId: text('user_id').references(() => users.id, { onDelete: 'set null' }),
     bodyMd: text('body_md').notNull(),
     readByAi: boolean('read_by_ai').notNull().default(false),
+    bodyTsv: tsvector('body_tsv').generatedAlwaysAs(
+      sql`to_tsvector('simple', coalesce(body_md, ''))`
+    ),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .default(sql`now()`)
   },
   t => [
     index('comments_card_idx').on(t.cardId),
-    index('comments_unread_idx').on(t.readByAi, t.author)
+    index('comments_unread_idx').on(t.readByAi, t.author),
+    index('comments_body_tsv_idx').using('gin', t.bodyTsv)
   ]
 )
 
