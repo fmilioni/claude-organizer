@@ -14,6 +14,7 @@ import {
   moveCardToSprint,
   reorderCards,
   restoreCard,
+  searchCards,
   updateCard
 } from '@claude-organizer/core'
 import type { Database } from '@claude-organizer/db'
@@ -72,6 +73,32 @@ export function registerCardTools(server: McpServer, db: Database) {
       }
     },
     async input => asJson(await listCards(db, input))
+  )
+
+  server.registerTool(
+    'search_cards',
+    {
+      description:
+        'Ranked full-text search over cards AND their comments. Searches key/title/summary/description AND comment bodies — a card matches if the term hits the card OR any of its comments. Ranked by relevance; accepts web-style queries (quoted phrases, OR, -exclude) and tolerates substring/typo (trigram). Returns card summaries WITHOUT descriptionMd PLUS the matched comment snippet when the hit came from a comment — use get_card for the full detail. Accepts the focused-read filters (status/activeOnly, sprintId, tag) to search within a slice. Read-only: never marks comments as read.',
+      inputSchema: {
+        projectId: z.string(),
+        query: z.string().min(1),
+        status: z
+          .union([cardStatus, z.array(cardStatus)])
+          .optional()
+          .describe('Restrict to one status or a list of statuses.'),
+        activeOnly: z
+          .boolean()
+          .optional()
+          .describe('Shortcut for everything but done/backlog.'),
+        sprintId: z.string().optional(),
+        tag: z.string().optional().describe('Tag id or name.'),
+        includeArchived: z.boolean().optional(),
+        archivedOnly: z.boolean().optional()
+      }
+    },
+    async ({ projectId, query, ...filters }) =>
+      asJson(await searchCards(db, projectId, query, filters))
   )
 
   server.registerTool(

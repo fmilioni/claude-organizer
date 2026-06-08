@@ -76,6 +76,7 @@ async function resolveToolProjectIds(
 
   switch (tool) {
     case 'list_cards':
+    case 'search_cards':
     case 'create_card':
     case 'list_sprints':
     case 'get_active_sprint':
