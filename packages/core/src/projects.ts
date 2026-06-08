@@ -26,6 +26,20 @@ export const createProjectInput = z.object({
 })
 export type CreateProjectInput = z.infer<typeof createProjectInput>
 
+const projectColumns = {
+  id: schema.projects.id,
+  slug: schema.projects.slug,
+  name: schema.projects.name,
+  description: schema.projects.description,
+  keyPrefix: schema.projects.keyPrefix,
+  nextKeySeq: schema.projects.nextKeySeq,
+  repoProvider: schema.projects.repoProvider,
+  repoWebUrl: schema.projects.repoWebUrl,
+  createdAt: schema.projects.createdAt,
+  updatedAt: schema.projects.updatedAt,
+  archivedAt: schema.projects.archivedAt
+}
+
 export async function createProject(db: Database, input: CreateProjectInput) {
   const parsed = createProjectInput.parse(input)
   const keyPrefix = parsed.keyPrefix ?? derivePrefixFromSlug(parsed.slug)
@@ -46,7 +60,7 @@ export async function createProject(db: Database, input: CreateProjectInput) {
 
 export async function listProjects(db: Database, filter?: ArchiveFilter) {
   const archived = archivedCondition(schema.projects.archivedAt, filter)
-  const base = db.select().from(schema.projects)
+  const base = db.select(projectColumns).from(schema.projects)
   const rows = archived
     ? await base.where(archived).orderBy(schema.projects.createdAt)
     : await base.orderBy(schema.projects.createdAt)
@@ -98,7 +112,7 @@ export async function destroyProject(
 
 export async function getProjectBySlug(db: Database, slug: string) {
   const [row] = await db
-    .select()
+    .select(projectColumns)
     .from(schema.projects)
     .where(eq(schema.projects.slug, slug))
     .limit(1)
@@ -107,7 +121,7 @@ export async function getProjectBySlug(db: Database, slug: string) {
 
 export async function getProjectById(db: Database, id: string) {
   const [row] = await db
-    .select()
+    .select(projectColumns)
     .from(schema.projects)
     .where(eq(schema.projects.id, id))
     .limit(1)

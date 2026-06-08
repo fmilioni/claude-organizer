@@ -24,6 +24,20 @@ export const updateSprintInput = z.object({
 })
 export type UpdateSprintInput = z.infer<typeof updateSprintInput>
 
+const sprintColumns = {
+  id: schema.sprints.id,
+  projectId: schema.sprints.projectId,
+  roadmapId: schema.sprints.roadmapId,
+  name: schema.sprints.name,
+  goal: schema.sprints.goal,
+  status: schema.sprints.status,
+  startsAt: schema.sprints.startsAt,
+  endsAt: schema.sprints.endsAt,
+  createdAt: schema.sprints.createdAt,
+  updatedAt: schema.sprints.updatedAt,
+  archivedAt: schema.sprints.archivedAt
+}
+
 export async function listSprints(
   db: Database,
   projectId: string,
@@ -33,7 +47,7 @@ export async function listSprints(
   const archived = archivedCondition(schema.sprints.archivedAt, filter)
   if (archived) conditions.push(archived)
   return db
-    .select()
+    .select(sprintColumns)
     .from(schema.sprints)
     .where(and(...conditions))
     .orderBy(schema.sprints.createdAt)
@@ -41,7 +55,7 @@ export async function listSprints(
 
 export async function getActiveSprint(db: Database, projectId: string) {
   const [row] = await db
-    .select()
+    .select(sprintColumns)
     .from(schema.sprints)
     .where(
       and(
@@ -56,7 +70,7 @@ export async function getActiveSprint(db: Database, projectId: string) {
 
 export async function getSprint(db: Database, id: string) {
   const [row] = await db
-    .select()
+    .select(sprintColumns)
     .from(schema.sprints)
     .where(eq(schema.sprints.id, id))
     .limit(1)

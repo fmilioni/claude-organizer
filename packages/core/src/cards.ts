@@ -112,6 +112,13 @@ const cardSummaryColumns = {
   updatedAt: schema.cards.updatedAt
 }
 
+// Allow-list, not a bare select: searchTsv (or any future column) can't leak
+// into get_card or a card mutation return.
+const cardDetailColumns = {
+  ...cardSummaryColumns,
+  descriptionMd: schema.cards.descriptionMd
+}
+
 function statusCondition(filters: CardFilters): SQL | undefined {
   if (filters.activeOnly) {
     return notInArray(schema.cards.status, ['done', 'backlog'])
@@ -303,7 +310,7 @@ async function matchedCommentSnippets(
 
 export async function getCard(db: Database, id: string) {
   const [row] = await db
-    .select()
+    .select(cardDetailColumns)
     .from(schema.cards)
     .where(eq(schema.cards.id, id))
     .limit(1)
@@ -313,7 +320,7 @@ export async function getCard(db: Database, id: string) {
 
 export async function getCardByKey(db: Database, key: string) {
   const [row] = await db
-    .select()
+    .select(cardDetailColumns)
     .from(schema.cards)
     .where(eq(schema.cards.key, key))
     .limit(1)
@@ -330,7 +337,7 @@ export async function getCardByKey(db: Database, key: string) {
 export async function getCardsByIds(db: Database, refs: string[]) {
   if (refs.length === 0) return []
   const rows = await db
-    .select()
+    .select(cardDetailColumns)
     .from(schema.cards)
     .where(or(inArray(schema.cards.id, refs), inArray(schema.cards.key, refs)))
     .orderBy(asc(schema.cards.position), desc(schema.cards.createdAt))
@@ -372,7 +379,7 @@ export async function createCard(db: Database, input: CreateCardInput) {
         priority: parsed.priority ?? 0,
         dueDate: parsed.dueDate
       })
-      .returning()
+      .returning(cardDetailColumns)
     return created
   })
   if (row) {
@@ -397,7 +404,7 @@ export async function updateCard(db: Database, input: UpdateCardInput) {
       .update(schema.cards)
       .set({ ...rest, updatedAt: sql`now()` })
       .where(eq(schema.cards.id, id))
-      .returning()
+      .returning(cardDetailColumns)
     // Auto-release the claim atomically with the status write (a done card never
     // stays reserved), mirroring the reorder path.
     if (updated[0] && rest.status === 'done') {
@@ -483,7 +490,7 @@ export async function archiveCard(db: Database, id: string) {
     .update(schema.cards)
     .set({ archivedAt: sql`now()`, updatedAt: sql`now()` })
     .where(eq(schema.cards.id, id))
-    .returning()
+    .returning(cardDetailColumns)
   if (row) {
     // Default: free the heavy diff blobs, keep the commit metadata (hash,
     // message, stat…); restoring does NOT bring the diff back — re-run
@@ -511,7 +518,7 @@ export async function restoreCard(db: Database, id: string) {
     .update(schema.cards)
     .set({ archivedAt: null, updatedAt: sql`now()` })
     .where(eq(schema.cards.id, id))
-    .returning()
+    .returning(cardDetailColumns)
   if (row) {
     await syncIntakeForCard(db, row.projectId, row.key)
     await notify(db, {
@@ -578,7 +585,10 @@ export async function listSubtasks(db: Database, parentId: string) {
     .orderBy(asc(schema.cards.position), asc(schema.cards.key))
 }
 
-async function enrichCard(db: Database, row: typeof schema.cards.$inferSelect) {
+async function enrichCard<T extends { id: string, parentId: string | null }>(
+  db: Database,
+  row: T
+) {
   const [tags, subtasks, parent, blockedBy, blocking, claim] = await Promise.all([
     listCardTags(db, row.id),
     listSubtasks(db, row.id),

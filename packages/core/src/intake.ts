@@ -24,6 +24,17 @@ export type UpdateIntakeItemInput = z.infer<typeof updateIntakeItemInput>
 
 export const intakeStatus = z.enum(INTAKE_STATUSES)
 
+const intakeColumns = {
+  id: schema.intakeItems.id,
+  projectId: schema.intakeItems.projectId,
+  bodyMd: schema.intakeItems.bodyMd,
+  status: schema.intakeItems.status,
+  plannedCardKeys: schema.intakeItems.plannedCardKeys,
+  createdAt: schema.intakeItems.createdAt,
+  updatedAt: schema.intakeItems.updatedAt,
+  archivedAt: schema.intakeItems.archivedAt
+}
+
 async function notifyChanged(db: Database, row: { id: string, projectId: string }) {
   await notify(db, {
     type: 'inbox.changed',
@@ -89,7 +100,7 @@ export async function listIntakeItems(
     conditions.push(eq(schema.intakeItems.status, options.status))
   }
   const items = await db
-    .select()
+    .select(intakeColumns)
     .from(schema.intakeItems)
     .where(and(...conditions))
     .orderBy(desc(schema.intakeItems.createdAt))

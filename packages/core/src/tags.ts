@@ -32,9 +32,18 @@ export const updateTagInput = z.object({
 })
 export type UpdateTagInput = z.infer<typeof updateTagInput>
 
-export async function listTags(db: Database, projectId: string) {
+// The `Tag` wire type omits `createdAt`; allow-list keeps it (and any future
+// column) out of the listing.
+const tagColumns = {
+  id: schema.tags.id,
+  projectId: schema.tags.projectId,
+  name: schema.tags.name,
+  color: schema.tags.color
+}
+
+export async function listTags(db: Database, projectId: string): Promise<Tag[]> {
   return db
-    .select()
+    .select(tagColumns)
     .from(schema.tags)
     .where(eq(schema.tags.projectId, projectId))
     .orderBy(asc(schema.tags.name))

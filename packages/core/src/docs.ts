@@ -42,6 +42,13 @@ const docListColumns = {
   updatedAt: schema.docs.updatedAt
 }
 
+// Allow-list, not a bare select: bodyTsv can't leak into read_doc or a doc
+// mutation return.
+const docDetailColumns = {
+  ...docListColumns,
+  bodyMd: schema.docs.bodyMd
+}
+
 export async function listDocs(
   db: Database,
   projectId: string,
@@ -87,7 +94,7 @@ async function archivedDocSubtreeIds(
 
 export async function getDoc(db: Database, id: string) {
   const [row] = await db
-    .select()
+    .select(docDetailColumns)
     .from(schema.docs)
     .where(eq(schema.docs.id, id))
     .limit(1)
@@ -108,7 +115,7 @@ export async function createDoc(db: Database, input: CreateDocInput) {
       kind: parsed.kind ?? 'note',
       position: parsed.position ?? 0
     })
-    .returning()
+    .returning(docDetailColumns)
   if (row) {
     await notify(db, { type: 'doc.changed', projectId: row.projectId, docId: row.id })
   }
@@ -122,7 +129,7 @@ export async function updateDoc(db: Database, input: UpdateDocInput) {
     .update(schema.docs)
     .set({ ...rest, updatedAt: sql`now()` })
     .where(eq(schema.docs.id, id))
-    .returning()
+    .returning(docDetailColumns)
   if (row) {
     await notify(db, { type: 'doc.changed', projectId: row.projectId, docId: row.id })
   }
@@ -136,7 +143,7 @@ export async function archiveDoc(db: Database, id: string) {
     .update(schema.docs)
     .set({ archivedAt: sql`now()`, updatedAt: sql`now()` })
     .where(eq(schema.docs.id, id))
-    .returning()
+    .returning(docDetailColumns)
   if (row) {
     await notify(db, { type: 'doc.changed', projectId: row.projectId, docId: row.id })
   }
@@ -148,7 +155,7 @@ export async function restoreDoc(db: Database, id: string) {
     .update(schema.docs)
     .set({ archivedAt: null, updatedAt: sql`now()` })
     .where(eq(schema.docs.id, id))
-    .returning()
+    .returning(docDetailColumns)
   if (row) {
     await notify(db, { type: 'doc.changed', projectId: row.projectId, docId: row.id })
   }
