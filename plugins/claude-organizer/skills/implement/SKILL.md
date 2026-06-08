@@ -41,6 +41,7 @@ This is the step most often skipped, and skipping it is where the work goes wron
 - **Re-read even if you read them earlier** — something **new** may have landed since: a correction, a constraint, a scope change posted after the briefing or while you were on another card.
 - Reading the **history's** comments does **not** cover its children, and a sibling task having none does **not** mean this one does. Comments are **per-card**.
 - **Comments are where settled decisions live** — the answer to a question you'd otherwise ask may already be here. Read them so you don't re-ask, and don't assume past what they say.
+- **`list_comments` is read-only — it doesn't mark anything.** Once you've **addressed** the user's comments on this card (not just read them), mark them with **`mark_comments_read([...commentIds])`** so they leave the unread queue — do it as you take the card up, not while merely browsing.
 
 ### 3. Read the relevant docs
 
@@ -133,7 +134,7 @@ A **history** (a parent card with sub-tasks) is a container; its status tracks i
 Per card, in order — no step skipped. **Standing rule: never assume — any ambiguity or decision the card doesn't settle goes to the user before you build; for a story, clear all of them up front.**
 
 1. Re-read the board → `claim_task` (conflict → ask, then take-over) → `in_progress` (history too, if a sub-task).
-2. `list_comments(cardId)` — even if read before.
+2. `list_comments(cardId)` (read-only) — even if read before; `mark_comments_read` once you've addressed them.
 3. Read the relevant docs.
 4. Implement — clean code, no needless comments; hit a doubt → stop and ask.
 5. Comment the signal.

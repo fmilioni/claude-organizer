@@ -78,7 +78,9 @@ export type CardStatus = z.infer<typeof cardStatus>
  * Shared filter shape for focused reads — reused by `listCards` and
  * `searchCards` (see CO-222/CO-216 coordination) so the two never diverge.
  * `status` takes a single value (back-compat) or a list; `activeOnly` is the
- * ergonomic shortcut for "everything but done/backlog".
+ * ergonomic shortcut for "everything but done/backlog". `limit`/`offset` page
+ * the result — no default here (callers/the MCP layer set a safe cap; the web
+ * board needs the full set, so the core stays uncapped).
  */
 export interface CardFilters extends ArchiveFilter {
   sprintId?: string | null
@@ -86,6 +88,8 @@ export interface CardFilters extends ArchiveFilter {
   activeOnly?: boolean
   tag?: string
   backlogOnly?: boolean
+  limit?: number
+  offset?: number
 }
 
 export interface ListCardsFilters extends CardFilters {
@@ -180,11 +184,15 @@ export async function enrichCardRows<
 
 export async function listCards(db: Database, filters: ListCardsFilters) {
   const conditions = cardFilterConditions(db, filters.projectId, filters)
-  const rows = await db
+  let query = db
     .select(cardSummaryColumns)
     .from(schema.cards)
     .where(and(...conditions))
     .orderBy(asc(schema.cards.position), desc(schema.cards.createdAt))
+    .$dynamic()
+  if (filters.limit !== undefined) query = query.limit(filters.limit)
+  if (filters.offset !== undefined) query = query.offset(filters.offset)
+  const rows = await query
   return enrichCardRows(db, rows)
 }
 
@@ -243,12 +251,15 @@ export async function searchCards(
   const conditions = cardFilterConditions(db, projectId, filters)
   if (match) conditions.push(match)
 
-  const rows = await db
+  let search = db
     .select(cardSummaryColumns)
     .from(schema.cards)
     .where(and(...conditions))
     .orderBy(desc(rank), desc(schema.cards.updatedAt))
-    .limit(50)
+    .limit(filters.limit ?? 50)
+    .$dynamic()
+  if (filters.offset !== undefined) search = search.offset(filters.offset)
+  const rows = await search
 
   const [enriched, snippets] = await Promise.all([
     enrichCardRows(db, rows),
@@ -308,6 +319,22 @@ export async function getCardByKey(db: Database, key: string) {
     .limit(1)
   if (!row) return null
   return enrichCard(db, row)
+}
+
+/**
+ * Batch read of full cards (with `descriptionMd`) by id or key — a ref matches
+ * either column, so callers can mix `crd_*` ids and `CO-*` keys freely (the two
+ * prefixes never collide). Reuses `enrichCardRows`, so it's one round of
+ * relation queries for the whole batch instead of N× `getCard`.
+ */
+export async function getCardsByIds(db: Database, refs: string[]) {
+  if (refs.length === 0) return []
+  const rows = await db
+    .select()
+    .from(schema.cards)
+    .where(or(inArray(schema.cards.id, refs), inArray(schema.cards.key, refs)))
+    .orderBy(asc(schema.cards.position), desc(schema.cards.createdAt))
+  return enrichCardRows(db, rows)
 }
 
 export async function createCard(db: Database, input: CreateCardInput) {

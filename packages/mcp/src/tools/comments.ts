@@ -18,14 +18,12 @@ export function registerCommentTools(server: McpServer, db: Database) {
     'list_comments',
     {
       description:
-        'List comments of a card. By default, marks user comments as read by AI.',
+        'List comments of a card. Read-only: it never marks anything as read, so scanning history is safe and never clears the user\'s unread flags. When you actually pick the card up to work it, mark the user comments you\'ve addressed with mark_comments_read.',
       inputSchema: {
-        cardId: z.string(),
-        markAsRead: z.boolean().optional().default(true)
+        cardId: z.string()
       }
     },
-    async ({ cardId, markAsRead }) =>
-      asJson(await listComments(db, cardId, { markAsRead }))
+    async ({ cardId }) => asJson(await listComments(db, cardId))
   )
 
   server.registerTool(

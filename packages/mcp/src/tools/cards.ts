@@ -7,6 +7,7 @@ import {
   destroyCard,
   getCard,
   getCardByKey,
+  getCardsByIds,
   getCommitBySha,
   listCardCommits,
   listCards,
@@ -56,12 +57,34 @@ export function registerCardTools(server: McpServer, db: Database) {
     'list_cards',
     {
       description:
-        'List cards of a project. Returns key/title/summary/status/etc but NOT descriptionMd (call get_card for full description). Filter by sprint, status, or backlog-only. Archived cards are hidden by default.',
+        'List cards of a project, focused. Returns key/title/summary/status/etc but NOT descriptionMd (call get_card for full description). Filter by sprint, status (single OR a list), activeOnly (everything but done/backlog), tag, or backlog-only, and page with limit/offset. Defaults to limit 100 so a broad listing never blows the context. Response is { cards, hasMore, offset } — raise offset (or narrow the filter) to see the rest. Archived cards are hidden by default.',
       inputSchema: {
         projectId: z.string(),
         sprintId: z.string().nullable().optional(),
-        status: cardStatus.optional(),
+        status: z
+          .union([cardStatus, z.array(cardStatus)])
+          .optional()
+          .describe('Restrict to one status or a list of statuses.'),
+        activeOnly: z
+          .boolean()
+          .optional()
+          .describe('Shortcut for everything but done/backlog.'),
+        tag: z.string().optional().describe('Tag id or name.'),
         backlogOnly: z.boolean().optional(),
+        limit: z
+          .number()
+          .int()
+          .min(1)
+          .max(200)
+          .optional()
+          .default(100)
+          .describe('Max cards to return (default 100, max 200).'),
+        offset: z
+          .number()
+          .int()
+          .min(0)
+          .optional()
+          .describe('Skip N cards — page through results with limit + offset.'),
         includeArchived: z
           .boolean()
           .optional()
@@ -72,7 +95,16 @@ export function registerCardTools(server: McpServer, db: Database) {
           .describe('Return ONLY archived cards (e.g. archived column of a sprint or the backlog).')
       }
     },
-    async input => asJson(await listCards(db, input))
+    async ({ limit, offset, ...filters }) => {
+      // Probe one past the page so `hasMore` is exact without a COUNT query.
+      const rows = await listCards(db, { ...filters, limit: limit + 1, offset })
+      const hasMore = rows.length > limit
+      return asJson({
+        cards: hasMore ? rows.slice(0, limit) : rows,
+        hasMore,
+        offset: offset ?? 0
+      })
+    }
   )
 
   server.registerTool(
@@ -119,6 +151,22 @@ export function registerCardTools(server: McpServer, db: Database) {
       inputSchema: { key: z.string() }
     },
     async ({ key }) => asJson(await withCommits(db, await getCardByKey(db, key)))
+  )
+
+  server.registerTool(
+    'get_cards',
+    {
+      description:
+        'Batch-read full cards (WITH descriptionMd) by id (crd_xxx) and/or key (CO-12) in one call — the post-search companion to get_card when you need the detail of several hits at once. Mix ids and keys freely. Capped at 50 per call to keep the response bounded.',
+      inputSchema: {
+        ids: z
+          .array(z.string())
+          .min(1)
+          .max(50)
+          .describe('Card ids (crd_xxx) and/or keys (CO-12), mixed — max 50 per call.')
+      }
+    },
+    async ({ ids }) => asJson(await getCardsByIds(db, ids))
   )
 
   server.registerTool(

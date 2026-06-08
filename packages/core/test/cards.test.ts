@@ -1,15 +1,19 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  addTagToCard,
   createCard,
   createSprint,
+  createTag,
   getCard,
+  getCardsByIds,
+  listCards,
   moveCardToBacklog,
   moveCardToSprint,
   reorderCards,
   updateCard
 } from '../src/index'
-import { freshProject, useTestDb } from './helpers'
+import { freshProject, uniqueKeyPrefix, useTestDb } from './helpers'
 
 const ctx = useTestDb()
 
@@ -165,5 +169,125 @@ describe('reordering cards', () => {
     expect(reloaded?.status).toBe('todo')
     expect(reloaded?.sprintId).toBe(sprint.id)
     expect(reloaded?.position).toBe(0)
+  })
+})
+
+describe('listCards focused filters', () => {
+  it('filters by a list of statuses', async () => {
+    const project = await freshProject(ctx.db)
+    await createCard(ctx.db, { projectId: project.id, title: 'a', status: 'todo' })
+    await createCard(ctx.db, { projectId: project.id, title: 'b', status: 'in_progress' })
+    await createCard(ctx.db, { projectId: project.id, title: 'c', status: 'done' })
+    await createCard(ctx.db, { projectId: project.id, title: 'd', status: 'backlog' })
+
+    const rows = await listCards(ctx.db, {
+      projectId: project.id,
+      status: ['todo', 'in_progress']
+    })
+    expect(rows.map(r => r.status).sort()).toEqual(['in_progress', 'todo'])
+  })
+
+  it('keeps the single-status filter working (back-compat)', async () => {
+    const project = await freshProject(ctx.db)
+    await createCard(ctx.db, { projectId: project.id, title: 'a', status: 'todo' })
+    await createCard(ctx.db, { projectId: project.id, title: 'b', status: 'done' })
+
+    const rows = await listCards(ctx.db, { projectId: project.id, status: 'done' })
+    expect(rows.map(r => r.title)).toEqual(['b'])
+  })
+
+  it('activeOnly excludes done and backlog', async () => {
+    const project = await freshProject(ctx.db)
+    await createCard(ctx.db, { projectId: project.id, title: 'a', status: 'todo' })
+    await createCard(ctx.db, { projectId: project.id, title: 'c', status: 'done' })
+    await createCard(ctx.db, { projectId: project.id, title: 'd', status: 'backlog' })
+
+    const rows = await listCards(ctx.db, { projectId: project.id, activeOnly: true })
+    expect(rows.map(r => r.title)).toEqual(['a'])
+  })
+
+  it('filters by tag, resolved by id or name', async () => {
+    const project = await freshProject(ctx.db)
+    const tagged = await createCard(ctx.db, {
+      projectId: project.id,
+      title: 'tagged'
+    })
+    await createCard(ctx.db, { projectId: project.id, title: 'untagged' })
+    const tag = await createTag(ctx.db, {
+      projectId: project.id,
+      name: 'bug',
+      color: '#ef4444'
+    })
+    await addTagToCard(ctx.db, tagged.id, tag!.id)
+
+    const byId = await listCards(ctx.db, { projectId: project.id, tag: tag!.id })
+    expect(byId.map(r => r.title)).toEqual(['tagged'])
+    const byName = await listCards(ctx.db, { projectId: project.id, tag: 'bug' })
+    expect(byName.map(r => r.title)).toEqual(['tagged'])
+  })
+
+  it('caps with limit and pages with disjoint offset windows', async () => {
+    const project = await freshProject(ctx.db)
+    for (let i = 0; i < 5; i++) {
+      await createCard(ctx.db, { projectId: project.id, title: `card-${i}` })
+    }
+    expect(await listCards(ctx.db, { projectId: project.id })).toHaveLength(5)
+
+    const firstTwo = await listCards(ctx.db, { projectId: project.id, limit: 2 })
+    expect(firstTwo).toHaveLength(2)
+
+    const nextTwo = await listCards(ctx.db, {
+      projectId: project.id,
+      limit: 2,
+      offset: 2
+    })
+    expect(nextTwo).toHaveLength(2)
+    const seen = new Set(firstTwo.map(r => r.id))
+    expect(nextTwo.every(r => !seen.has(r.id))).toBe(true)
+  })
+})
+
+describe('getCardsByIds batch read', () => {
+  it('returns full cards (with descriptionMd) by id, key, or a mix', async () => {
+    // Resolves cards BY KEY, so use a globally-unique prefix — the default 'CO'
+    // repeats across parallel test projects and would match the wrong cards.
+    const project = await freshProject(ctx.db, uniqueKeyPrefix())
+    const a = await createCard(ctx.db, {
+      projectId: project.id,
+      title: 'A',
+      descriptionMd: 'body A'
+    })
+    const b = await createCard(ctx.db, {
+      projectId: project.id,
+      title: 'B',
+      descriptionMd: 'body B'
+    })
+
+    const byId = await getCardsByIds(ctx.db, [a.id, b.id])
+    expect(byId.map(r => r.title).sort()).toEqual(['A', 'B'])
+    expect(byId.find(r => r.id === a.id)?.descriptionMd).toBe('body A')
+
+    const byKey = await getCardsByIds(ctx.db, [a.key, b.key])
+    expect(byKey.map(r => r.id).sort()).toEqual([a.id, b.id].sort())
+
+    const mixed = await getCardsByIds(ctx.db, [a.id, b.key])
+    expect(mixed).toHaveLength(2)
+  })
+
+  it('matches the descriptionMd a single get_card would return', async () => {
+    const project = await freshProject(ctx.db)
+    const card = await createCard(ctx.db, {
+      projectId: project.id,
+      title: 'detail',
+      descriptionMd: '## full body'
+    })
+    const [batched] = await getCardsByIds(ctx.db, [card.id])
+    const single = await getCard(ctx.db, card.id)
+    expect(batched?.descriptionMd).toBe(single?.descriptionMd)
+    expect(batched?.key).toBe(single?.key)
+  })
+
+  it('returns an empty array for no refs', async () => {
+    expect(await getCardsByIds(ctx.db, [])).toEqual([])
   })
 })
