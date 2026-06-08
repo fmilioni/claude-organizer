@@ -11,7 +11,7 @@ A fresh session starts with no memory of past work. This system is how continuit
 
 > **Four skills, one board.** This skill covers **operating** the board — orienting, reading state, keeping it honest, comments and docs. The other three own distinct phases, and each holds its own workflow rules: **switch to the skill instead of working from memory.**
 >
-> - **`plan`** — a **new demand** (a feature, a change, a fix) to turn into work: it understands the demand and organizes it into sprints/histories/tasks. Planning, not code. **Creating any card goes through here** — never call `create_card` ad-hoc from this context or mid-execution.
+> - **`plan`** — a **new demand** (a feature, a change, a fix) to turn into work: it understands the demand and organizes it into sprints/histories/tasks. Planning, not code. **Creating any card goes through here** — never call `create_card` ad-hoc from this context or mid-execution. A task that lives in an **external tracker** is also a new demand — it enters through `plan` to be re-mapped as card(s), not executed directly.
 > - **`implement`** — **executing** a card that already exists (a task, a story, a sprint's cards): it owns the **mandatory execution lifecycle** (`in_progress` → read comments → implement → review → commit → done). The moment you start building a specific card, that skill drives.
 > - **`review`** — the **mandatory review gate** `implement` fires before work closes: a per-task review and a story-level review, run by a **fresh subagent** that checks acceptance criteria and hunts for reuse/dead-code/comment issues.
 >

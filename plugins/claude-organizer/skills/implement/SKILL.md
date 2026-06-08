@@ -1,11 +1,13 @@
 ---
 name: implement
-description: Use to EXECUTE a card that already exists on the board in claude-organizer — implement a sprint, a history/story, or a single task. Trigger the moment you start, resume, or carry out development on a specific card ("work CO-42", "let's implement this story", "continue the task", "build it now"). This skill owns the mandatory execution lifecycle: in_progress → read comments → implement → review → commit → done. It NEVER assumes — any ambiguity or open decision the card doesn't settle goes to the user first (options + recommendation, like `plan`), and answers live in comments. To turn a NEW fuzzy demand into cards, use `plan` instead; to orient/keep the board honest, see `claude-organizer`. Do NOT skip steps.
+description: Use to EXECUTE a card that already exists on the board in claude-organizer — implement a sprint, a history/story, or a single task. Trigger the moment you start, resume, or carry out development on a specific card ("work CO-42", "let's implement this story", "continue the task", "build it now"). This skill owns the mandatory execution lifecycle: in_progress → read comments → implement → review → commit → done. It NEVER assumes — any ambiguity or open decision the card doesn't settle goes to the user first (options + recommendation, like `plan`), and answers live in comments. To turn a NEW fuzzy demand into cards, use `plan` instead — this includes a task that lives in an external tracker (no local card key yet), which is a planning input you re-map via `plan`, never execute here; to orient/keep the board honest, see `claude-organizer`. Do NOT skip steps.
 ---
 
 # Implementing a card
 
 This skill governs the **execution of a card that already exists** on the board — a task, a history (story), or the cards of a sprint. Planning produced the card; here you build it and walk it through its lifecycle while keeping the board honest. To break a new demand into cards, use **`plan`** — not this skill.
+
+**Guard — a task from an external tracker is not a card here.** If the user asks you to implement a task that lives in another tracker (a company issue tracker, a different tool) and hasn't given you a local `CO-N`, that's a **planning input**: send it through **`plan`** to be understood, dimensioned, and re-mapped into local card(s) first. Only a local card key is executable here.
 
 <SKILL-GATE>
 **Load the `claude-organizer` panorama first.** This skill assumes you are oriented on the board. If you have **not** already loaded the **`claude-organizer`** skill in this conversation, invoke it now (Skill tool) and run its start-of-session orientation **before** anything below. If it is already loaded in this conversation, don't reload it — just continue. Don't enter this skill cold.

@@ -1,6 +1,6 @@
 ---
 name: plan
-description: Use to turn a NEW fuzzy demand — a feature, a change, a fix — into structured work in claude-organizer (sprints, histories/stories, tasks). Trigger whenever the user describes something new to build (a feature, a change, a fix) before it's broken down, asks to plan/organize the work, or asks to CREATE A CARD (or several) — card creation always runs through this skill, never a direct create_card call. Even a single obvious card goes through here. Understands the demand, organizes it, gets the design approved, then creates the cards. This is PLANNING, not execution — do NOT write code here.
+description: Use to turn a NEW fuzzy demand — a feature, a change, a fix — into structured work in claude-organizer (sprints, histories/stories, tasks). Trigger whenever the user describes something new to build (a feature, a change, a fix) before it's broken down, asks to plan/organize the work, or asks to CREATE A CARD (or several) — card creation always runs through this skill, never a direct create_card call. A request to implement a task that lives in an external tracker is also a planning input — re-map it into card(s) here, don't execute it. Even a single obvious card goes through here. Understands the demand, organizes it, gets the design approved, then creates the cards. This is PLANNING, not execution — do NOT write code here.
 ---
 
 # Planning a demand into sprints, histories and tasks
@@ -99,6 +99,16 @@ A card doesn't need a sprint to be worked. A sprint-less card in a board status 
 - **Now, or later?** Worked now → the board (active sprint or standalone). Parked for later → the **backlog** (status `backlog`) or a **future sprint**.
 
 Judge by size and cohesion, not habit. **When in doubt, suggest** a placement — and say why — then confirm with the user; don't silently pick one.
+
+## A task from an external tracker is a planning input
+
+When the user asks to **implement a task that lives in another tracker** — a company issue tracker, a board in a different tool — that request is a **planning input, not a trigger for `implement`**. The external board's granularity rarely matches ours: a "task" there may be a **story** here (several deliverables) or part of a **sprint**, and our flow (self-sufficient card, resolved decisions, review gate, lifecycle) needs a **local card** to run against — without one, `implement` runs blind. So the demand enters here, through `plan`:
+
+- **Treat the external task as a raw demand** — like an inbox item or any new demand: understand it, then **dimension** it (single task, history + tasks, or a sprint — see _Where the work lives_), surface decisions, get approval, then create the card(s).
+- **Capture the origin reference.** Record the external id/title in the card's description or summary so the work traces back to its source; don't invent a positional alias for it.
+- **A restriction from the source is a constraint, not prescribed code.** The _behavior and intent, not code_ rule still holds (see _Writing a task_). But when the external task **imposes** something concrete — "use library X", "hit endpoint Y", "follow contract Z" — that isn't writing code in the description, it's a **real constraint**: fold it in as an **acceptance criterion / decision** (the same exception that lets a card be specific for a real constraint or an already-diagnosed bug). Outside such constraints, don't prescribe the _how_ — the executor decides.
+
+Keep the language **generic** — describe the mechanism (an external tracker), never name a specific product.
 
 ## Key principles
 
