@@ -35,6 +35,28 @@ describe('docs full-text search', () => {
     expect(results.map(d => d.title)).toContain('Arquitetura')
   })
 
+  it('matches a title typo via pg_trgm where FTS and ILIKE would not', async () => {
+    const project = await freshProject(ctx.db)
+    await createDoc(ctx.db, {
+      projectId: project.id,
+      title: 'Kubernetes deployment',
+      bodyMd: 'conteúdo'
+    })
+
+    // "kubernets" is neither a whole token (FTS) nor a substring (ILIKE) of the
+    // title; only trigram word-similarity finds it.
+    const results = await searchDocs(ctx.db, project.id, 'kubernets')
+    expect(results.map(d => d.title)).toContain('Kubernetes deployment')
+  })
+
+  it('returns nothing for an empty/whitespace query', async () => {
+    const project = await freshProject(ctx.db)
+    await createDoc(ctx.db, { projectId: project.id, title: 'qualquer doc' })
+
+    expect(await searchDocs(ctx.db, project.id, '')).toEqual([])
+    expect(await searchDocs(ctx.db, project.id, '   ')).toEqual([])
+  })
+
   it('scopes results to the given project', async () => {
     const p1 = await freshProject(ctx.db)
     const p2 = await freshProject(ctx.db)

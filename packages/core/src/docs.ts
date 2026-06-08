@@ -176,22 +176,37 @@ export async function searchDocs(
   projectId: string,
   query: string
 ) {
+  // Without this, a whitespace-only query degenerates into ILIKE '%   %' (matches all).
+  const q = query.trim()
+  if (!q) return []
   // Full-text ranked via tsvector (config `simple`, language-agnostic).
   // websearch_to_tsquery accepts free user input without throwing a syntax error.
-  const tsQuery = sql`websearch_to_tsquery('simple', ${query})`
+  const tsQuery = sql`websearch_to_tsquery('simple', ${q})`
   const rank = sql<number>`ts_rank(${schema.docs.bodyTsv}, ${tsQuery})`
-  // FTS `simple` matches whole tokens only; ILIKE on the title preserves
-  // substring/prefix matching (e.g. "arch" -> "Architecture").
-  const term = `%${query}%`
+  // FTS `simple` matches whole tokens only; ILIKE covers substring/prefix and
+  // pg_trgm `<%` (word-similarity) covers typos on title/summary. ts_rank stays
+  // the primary sort; the trigram similarity is only a tie-breaker (additional
+  // recall), so it never outranks a real full-text hit.
+  const trgmSim = sql<number>`greatest(
+    word_similarity(${q}, ${schema.docs.title}),
+    word_similarity(${q}, coalesce(${schema.docs.summary}, ''))
+  )`
+  const term = `%${q}%`
   return db
     .select(docListColumns)
     .from(schema.docs)
     .where(
       and(
         eq(schema.docs.projectId, projectId),
-        or(sql`${schema.docs.bodyTsv} @@ ${tsQuery}`, ilike(schema.docs.title, term))
+        or(
+          sql`${schema.docs.bodyTsv} @@ ${tsQuery}`,
+          ilike(schema.docs.title, term),
+          ilike(schema.docs.summary, term),
+          sql`${q} <% ${schema.docs.title}`,
+          sql`${q} <% coalesce(${schema.docs.summary}, '')`
+        )
       )
     )
-    .orderBy(desc(rank), desc(schema.docs.updatedAt))
+    .orderBy(desc(rank), desc(trgmSim), desc(schema.docs.updatedAt))
     .limit(50)
 }
