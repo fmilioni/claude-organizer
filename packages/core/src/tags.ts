@@ -41,12 +41,21 @@ const tagColumns = {
   color: schema.tags.color
 }
 
-export async function listTags(db: Database, projectId: string): Promise<Tag[]> {
-  return db
+export async function listTags(
+  db: Database,
+  projectId: string,
+  limit?: number,
+  offset?: number
+): Promise<Tag[]> {
+  let query = db
     .select(tagColumns)
     .from(schema.tags)
     .where(eq(schema.tags.projectId, projectId))
     .orderBy(asc(schema.tags.name))
+    .$dynamic()
+  if (limit !== undefined) query = query.limit(limit)
+  if (offset !== undefined) query = query.offset(offset)
+  return query
 }
 
 export async function createTag(db: Database, input: CreateTagInput) {

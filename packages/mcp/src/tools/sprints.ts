@@ -15,14 +15,14 @@ import {
 } from '@claude-organizer/core'
 import type { Database } from '@claude-organizer/db'
 
-import { asJson } from './index'
+import { asJson, pageEnvelope, pageInputs } from './index'
 
 export function registerSprintTools(server: McpServer, db: Database) {
   server.registerTool(
     'list_sprints',
     {
       description:
-        'List sprints of a project. Archived sprints are hidden by default.',
+        'List sprints of a project. Pages with limit/offset; response is { sprints, hasMore, offset }. Archived sprints are hidden by default.',
       inputSchema: {
         projectId: z.string(),
         includeArchived: z
@@ -32,11 +32,20 @@ export function registerSprintTools(server: McpServer, db: Database) {
         archivedOnly: z
           .boolean()
           .optional()
-          .describe('Return ONLY archived sprints.')
+          .describe('Return ONLY archived sprints.'),
+        ...pageInputs
       }
     },
-    async ({ projectId, includeArchived, archivedOnly }) =>
-      asJson(await listSprints(db, projectId, { includeArchived, archivedOnly }))
+    async ({ projectId, includeArchived, archivedOnly, limit, offset }) => {
+      const rows = await listSprints(
+        db,
+        projectId,
+        { includeArchived, archivedOnly },
+        limit + 1,
+        offset
+      )
+      return asJson(pageEnvelope('sprints', rows, limit, offset))
+    }
   )
 
   server.registerTool(

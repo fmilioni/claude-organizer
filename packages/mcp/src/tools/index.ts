@@ -1,4 +1,5 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
+import { z } from 'zod'
 
 import type { Database } from '@claude-organizer/db'
 
@@ -42,5 +43,43 @@ export function asJson(value: unknown) {
         text: JSON.stringify(value, null, 2)
       }
     ]
+  }
+}
+
+// The MCP border caps every listing; the core stays uncapped (the web reuses
+// the same functions and renders whole lists). See ADR doc_p6w3rck1ssu3.
+export const pageInputs = {
+  limit: z
+    .number()
+    .int()
+    .min(1)
+    .max(200)
+    .optional()
+    .default(100)
+    .describe('Max items to return (default 100, max 200).'),
+  offset: z
+    .number()
+    .int()
+    .min(0)
+    .optional()
+    .describe('Skip N items — page through results with limit + offset.')
+}
+
+/**
+ * Build the `{ <key>, hasMore, offset }` envelope from a `limit + 1` probe:
+ * `rows` was fetched with one extra row, so `length > limit` means there's a
+ * next page without a COUNT. Caller names the array per entity (`docs`, etc.).
+ */
+export function pageEnvelope<T>(
+  key: string,
+  rows: T[],
+  limit: number,
+  offset?: number
+) {
+  const hasMore = rows.length > limit
+  return {
+    [key]: hasMore ? rows.slice(0, limit) : rows,
+    hasMore,
+    offset: offset ?? 0
   }
 }

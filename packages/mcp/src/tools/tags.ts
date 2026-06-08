@@ -10,16 +10,20 @@ import {
 } from '@claude-organizer/core'
 import type { Database } from '@claude-organizer/db'
 
-import { asJson } from './index'
+import { asJson, pageEnvelope, pageInputs } from './index'
 
 export function registerTagTools(server: McpServer, db: Database) {
   server.registerTool(
     'list_tags',
     {
-      description: 'List all tags of a project (id, name, color).',
-      inputSchema: { projectId: z.string() }
+      description:
+        'List all tags of a project (id, name, color). Pages with limit/offset; response is { tags, hasMore, offset }.',
+      inputSchema: { projectId: z.string(), ...pageInputs }
     },
-    async ({ projectId }) => asJson(await listTags(db, projectId))
+    async ({ projectId, limit, offset }) => {
+      const rows = await listTags(db, projectId, limit + 1, offset)
+      return asJson(pageEnvelope('tags', rows, limit, offset))
+    }
   )
 
   server.registerTool(

@@ -334,13 +334,20 @@ export async function getCardByKey(db: Database, key: string) {
  * prefixes never collide). Reuses `enrichCardRows`, so it's one round of
  * relation queries for the whole batch instead of N× `getCard`.
  */
-export async function getCardsByIds(db: Database, refs: string[]) {
+export async function getCardsByIds(
+  db: Database,
+  refs: string[],
+  offset?: number
+) {
   if (refs.length === 0) return []
-  const rows = await db
+  let query = db
     .select(cardDetailColumns)
     .from(schema.cards)
     .where(or(inArray(schema.cards.id, refs), inArray(schema.cards.key, refs)))
     .orderBy(asc(schema.cards.position), desc(schema.cards.createdAt))
+    .$dynamic()
+  if (offset !== undefined) query = query.offset(offset)
+  const rows = await query
   return enrichCardRows(db, rows)
 }
 

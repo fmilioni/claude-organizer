@@ -20,7 +20,7 @@ import {
 } from '@claude-organizer/core'
 import type { Database } from '@claude-organizer/db'
 
-import { asJson } from './index'
+import { asJson, pageEnvelope, pageInputs } from './index'
 
 // get_card/get_card_by_key embed the card's commits as METADATA only (no diff):
 // the agent has the local git and can `git show <sha>`, and a squashed PR commit
@@ -71,20 +71,7 @@ export function registerCardTools(server: McpServer, db: Database) {
           .describe('Shortcut for everything but done/backlog.'),
         tag: z.string().optional().describe('Tag id or name.'),
         backlogOnly: z.boolean().optional(),
-        limit: z
-          .number()
-          .int()
-          .min(1)
-          .max(200)
-          .optional()
-          .default(100)
-          .describe('Max cards to return (default 100, max 200).'),
-        offset: z
-          .number()
-          .int()
-          .min(0)
-          .optional()
-          .describe('Skip N cards — page through results with limit + offset.'),
+        ...pageInputs,
         includeArchived: z
           .boolean()
           .optional()
@@ -98,12 +85,7 @@ export function registerCardTools(server: McpServer, db: Database) {
     async ({ limit, offset, ...filters }) => {
       // Probe one past the page so `hasMore` is exact without a COUNT query.
       const rows = await listCards(db, { ...filters, limit: limit + 1, offset })
-      const hasMore = rows.length > limit
-      return asJson({
-        cards: hasMore ? rows.slice(0, limit) : rows,
-        hasMore,
-        offset: offset ?? 0
-      })
+      return asJson(pageEnvelope('cards', rows, limit, offset))
     }
   )
 
@@ -157,16 +139,22 @@ export function registerCardTools(server: McpServer, db: Database) {
     'get_cards',
     {
       description:
-        'Batch-read full cards (WITH descriptionMd) by id (crd_xxx) and/or key (CO-12) in one call — the post-search companion to get_card when you need the detail of several hits at once. Mix ids and keys freely. Capped at 50 per call to keep the response bounded.',
+        'Batch-read full cards (WITH descriptionMd) by id (crd_xxx) and/or key (CO-12) in one call — the post-search companion to get_card when you need the detail of several hits at once. Mix ids and keys freely. Capped at 50 per call to keep the response bounded; pass offset to page when you have more than 50 refs.',
       inputSchema: {
         ids: z
           .array(z.string())
           .min(1)
           .max(50)
-          .describe('Card ids (crd_xxx) and/or keys (CO-12), mixed — max 50 per call.')
+          .describe('Card ids (crd_xxx) and/or keys (CO-12), mixed — max 50 per call.'),
+        offset: z
+          .number()
+          .int()
+          .min(0)
+          .optional()
+          .describe('Skip N matched cards — page through a larger ref set with offset.')
       }
     },
-    async ({ ids }) => asJson(await getCardsByIds(db, ids))
+    async ({ ids, offset }) => asJson(await getCardsByIds(db, ids, offset))
   )
 
   server.registerTool(

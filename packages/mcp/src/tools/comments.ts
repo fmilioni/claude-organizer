@@ -11,30 +11,41 @@ import {
 } from '@claude-organizer/core'
 import type { Database } from '@claude-organizer/db'
 
-import { asJson } from './index'
+import { asJson, pageEnvelope, pageInputs } from './index'
 
 export function registerCommentTools(server: McpServer, db: Database) {
   server.registerTool(
     'list_comments',
     {
       description:
-        'List comments of a card. Read-only: it never marks anything as read, so scanning history is safe and never clears the user\'s unread flags. When you actually pick the card up to work it, mark the user comments you\'ve addressed with mark_comments_read.',
+        'List comments of a card. Read-only: it never marks anything as read, so scanning history is safe and never clears the user\'s unread flags. When you actually pick the card up to work it, mark the user comments you\'ve addressed with mark_comments_read. Pages with limit/offset; response is { comments, hasMore, offset }.',
       inputSchema: {
-        cardId: z.string()
+        cardId: z.string(),
+        ...pageInputs
       }
     },
-    async ({ cardId }) => asJson(await listComments(db, cardId))
+    async ({ cardId, limit, offset }) => {
+      const rows = await listComments(db, cardId, { limit: limit + 1, offset })
+      return asJson(pageEnvelope('comments', rows, limit, offset))
+    }
   )
 
   server.registerTool(
     'list_unread_comments',
     {
       description:
-        'List all user comments not yet read by the AI for a project. Does NOT mark them as read.',
-      inputSchema: { projectId: z.string() }
+        'List all user comments not yet read by the AI for a project. Does NOT mark them as read. Pages with limit/offset; response is { comments, hasMore, offset }.',
+      inputSchema: { projectId: z.string(), ...pageInputs }
     },
-    async ({ projectId }) =>
-      asJson(await listUnreadCommentsForProject(db, projectId))
+    async ({ projectId, limit, offset }) => {
+      const rows = await listUnreadCommentsForProject(
+        db,
+        projectId,
+        limit + 1,
+        offset
+      )
+      return asJson(pageEnvelope('comments', rows, limit, offset))
+    }
   )
 
   server.registerTool(

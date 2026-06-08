@@ -14,7 +14,7 @@ import {
 import type { Database } from '@claude-organizer/db'
 
 import { filterProjectsByScope, type McpScope } from '../scope'
-import { asJson } from './index'
+import { asJson, pageInputs } from './index'
 
 export function registerProjectTools(
   server: McpServer,
@@ -25,7 +25,7 @@ export function registerProjectTools(
     'list_projects',
     {
       description:
-        'List all projects tracked by claude-organizer. Archived projects are hidden by default.',
+        'List all projects tracked by claude-organizer. Pages with limit/offset; response is { projects, hasMore, offset }. Archived projects are hidden by default.',
       inputSchema: {
         includeArchived: z
           .boolean()
@@ -34,16 +34,24 @@ export function registerProjectTools(
         archivedOnly: z
           .boolean()
           .optional()
-          .describe('Return ONLY archived projects.')
+          .describe('Return ONLY archived projects.'),
+        ...pageInputs
       }
     },
-    async ({ includeArchived, archivedOnly }) =>
-      asJson(
-        filterProjectsByScope(
-          await listProjects(db, { includeArchived, archivedOnly }),
-          scope
-        )
+    async ({ includeArchived, archivedOnly, limit, offset }) => {
+      // Scope filtering must precede the page (it removes rows the token can't
+      // see), so a DB limit/offset would page the wrong set — slice in memory.
+      const all = filterProjectsByScope(
+        await listProjects(db, { includeArchived, archivedOnly }),
+        scope
       )
+      const start = offset ?? 0
+      return asJson({
+        projects: all.slice(start, start + limit),
+        hasMore: all.length > start + limit,
+        offset: start
+      })
+    }
   )
 
   server.registerTool(

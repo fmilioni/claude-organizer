@@ -22,9 +22,9 @@ export type UpdateCommentInput = z.infer<typeof updateCommentInput>
 export async function listComments(
   db: Database,
   cardId: string,
-  options: { markAsRead?: boolean } = {}
+  options: { markAsRead?: boolean, limit?: number, offset?: number } = {}
 ) {
-  const rows = await db
+  let query = db
     .select({
       id: schema.comments.id,
       cardId: schema.comments.cardId,
@@ -40,6 +40,10 @@ export async function listComments(
     .leftJoin(schema.users, eq(schema.users.id, schema.comments.userId))
     .where(eq(schema.comments.cardId, cardId))
     .orderBy(asc(schema.comments.createdAt))
+    .$dynamic()
+  if (options.limit !== undefined) query = query.limit(options.limit)
+  if (options.offset !== undefined) query = query.offset(options.offset)
+  const rows = await query
 
   if (options.markAsRead) {
     const unreadIds = rows
@@ -137,9 +141,11 @@ export async function updateComment(db: Database, input: UpdateCommentInput) {
 
 export async function listUnreadCommentsForProject(
   db: Database,
-  projectId: string
+  projectId: string,
+  limit?: number,
+  offset?: number
 ) {
-  return db
+  let query = db
     .select({
       id: schema.comments.id,
       cardId: schema.comments.cardId,
@@ -157,6 +163,10 @@ export async function listUnreadCommentsForProject(
       )
     )
     .orderBy(asc(schema.comments.createdAt))
+    .$dynamic()
+  if (limit !== undefined) query = query.limit(limit)
+  if (offset !== undefined) query = query.offset(offset)
+  return query
 }
 
 export async function deleteComment(db: Database, id: string) {

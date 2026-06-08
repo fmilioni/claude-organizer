@@ -93,17 +93,21 @@ function deriveCompleted(
 export async function listIntakeItems(
   db: Database,
   projectId: string,
-  options: { status?: IntakeStatus } = {}
+  options: { status?: IntakeStatus, limit?: number, offset?: number } = {}
 ) {
   const conditions = [eq(schema.intakeItems.projectId, projectId)]
   if (options.status) {
     conditions.push(eq(schema.intakeItems.status, options.status))
   }
-  const items = await db
+  let query = db
     .select(intakeColumns)
     .from(schema.intakeItems)
     .where(and(...conditions))
     .orderBy(desc(schema.intakeItems.createdAt))
+    .$dynamic()
+  if (options.limit !== undefined) query = query.limit(options.limit)
+  if (options.offset !== undefined) query = query.offset(options.offset)
+  const items = await query
 
   const keys = [...new Set(items.flatMap(i => parseCardKeys(i.plannedCardKeys)))]
   const states = await cardStatesByKeys(db, projectId, keys)

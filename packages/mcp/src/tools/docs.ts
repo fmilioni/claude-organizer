@@ -13,7 +13,7 @@ import {
 } from '@claude-organizer/core'
 import type { Database } from '@claude-organizer/db'
 
-import { asJson } from './index'
+import { asJson, pageEnvelope, pageInputs } from './index'
 
 const docKind = z.enum(['module', 'adr', 'guide', 'note'])
 
@@ -22,7 +22,7 @@ export function registerDocTools(server: McpServer, db: Database) {
     'list_docs',
     {
       description:
-        'List project docs (modules, ADRs, guides, notes). Returns metadata (id/title/kind/parentId) WITHOUT bodyMd. Use read_doc for full content. Optionally filter by kind. Archived docs (and their descendants) are hidden by default.',
+        'List project docs (modules, ADRs, guides, notes). Returns metadata (id/title/kind/parentId) WITHOUT bodyMd. Use read_doc for full content. Optionally filter by kind. Pages with limit/offset; response is { docs, hasMore, offset }. Archived docs (and their descendants) are hidden by default.',
       inputSchema: {
         projectId: z.string(),
         kind: docKind.optional(),
@@ -33,11 +33,21 @@ export function registerDocTools(server: McpServer, db: Database) {
         archivedOnly: z
           .boolean()
           .optional()
-          .describe('Return ONLY archived docs.')
+          .describe('Return ONLY archived docs.'),
+        ...pageInputs
       }
     },
-    async ({ projectId, kind, includeArchived, archivedOnly }) =>
-      asJson(await listDocs(db, projectId, kind, { includeArchived, archivedOnly }))
+    async ({ projectId, kind, includeArchived, archivedOnly, limit, offset }) => {
+      const rows = await listDocs(
+        db,
+        projectId,
+        kind,
+        { includeArchived, archivedOnly },
+        limit + 1,
+        offset
+      )
+      return asJson(pageEnvelope('docs', rows, limit, offset))
+    }
   )
 
   server.registerTool(
@@ -53,11 +63,13 @@ export function registerDocTools(server: McpServer, db: Database) {
     'search_docs',
     {
       description:
-        'Full-text search docs of a project (title/summary/body), ranked by relevance via Postgres tsvector. Supports web-style queries (quoted phrases, OR, -exclude). Returns metadata WITHOUT bodyMd; use read_doc for full content.',
-      inputSchema: { projectId: z.string(), query: z.string().min(1) }
+        'Full-text search docs of a project (title/summary/body), ranked by relevance via Postgres tsvector. Supports web-style queries (quoted phrases, OR, -exclude). Returns metadata WITHOUT bodyMd; use read_doc for full content. Pages with limit/offset; response is { docs, hasMore, offset }.',
+      inputSchema: { projectId: z.string(), query: z.string().min(1), ...pageInputs }
     },
-    async ({ projectId, query }) =>
-      asJson(await searchDocs(db, projectId, query))
+    async ({ projectId, query, limit, offset }) => {
+      const rows = await searchDocs(db, projectId, query, limit + 1, offset)
+      return asJson(pageEnvelope('docs', rows, limit, offset))
+    }
   )
 
   server.registerTool(

@@ -11,7 +11,7 @@ import {
 } from '@claude-organizer/core'
 import type { Database } from '@claude-organizer/db'
 
-import { asJson } from './index'
+import { asJson, pageEnvelope, pageInputs } from './index'
 
 export function registerIntakeTools(server: McpServer, db: Database) {
   server.registerTool(
@@ -32,16 +32,21 @@ export function registerIntakeTools(server: McpServer, db: Database) {
     'list_inbox',
     {
       description:
-        'List the raw intake demands of a project (the Inbox). Defaults to pending demands; pass status to filter. Each item has id, bodyMd, status, plannedCardKeys and timestamps.',
+        'List the raw intake demands of a project (the Inbox). Defaults to pending demands; pass status to filter. Each item has id, bodyMd, status, plannedCardKeys and timestamps. Pages with limit/offset; response is { items, hasMore, offset }.',
       inputSchema: {
         projectId: z.string(),
-        status: intakeStatus.optional()
+        status: intakeStatus.optional(),
+        ...pageInputs
       }
     },
-    async ({ projectId, status }) =>
-      asJson(
-        await listIntakeItems(db, projectId, { status: status ?? 'pending' })
-      )
+    async ({ projectId, status, limit, offset }) => {
+      const rows = await listIntakeItems(db, projectId, {
+        status: status ?? 'pending',
+        limit: limit + 1,
+        offset
+      })
+      return asJson(pageEnvelope('items', rows, limit, offset))
+    }
   )
 
   server.registerTool(

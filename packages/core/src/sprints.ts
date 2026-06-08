@@ -41,16 +41,22 @@ const sprintColumns = {
 export async function listSprints(
   db: Database,
   projectId: string,
-  filter?: ArchiveFilter
+  filter?: ArchiveFilter,
+  limit?: number,
+  offset?: number
 ) {
   const conditions = [eq(schema.sprints.projectId, projectId)]
   const archived = archivedCondition(schema.sprints.archivedAt, filter)
   if (archived) conditions.push(archived)
-  return db
+  let query = db
     .select(sprintColumns)
     .from(schema.sprints)
     .where(and(...conditions))
     .orderBy(schema.sprints.createdAt)
+    .$dynamic()
+  if (limit !== undefined) query = query.limit(limit)
+  if (offset !== undefined) query = query.offset(offset)
+  return query
 }
 
 export async function getActiveSprint(db: Database, projectId: string) {

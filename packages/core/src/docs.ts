@@ -53,7 +53,9 @@ export async function listDocs(
   db: Database,
   projectId: string,
   kind?: z.infer<typeof docKind>,
-  filter?: ArchiveFilter
+  filter?: ArchiveFilter,
+  limit?: number,
+  offset?: number
 ) {
   const conditions = [eq(schema.docs.projectId, projectId)]
   if (kind) conditions.push(eq(schema.docs.kind, kind))
@@ -67,11 +69,15 @@ export async function listDocs(
       conditions.push(notInArray(schema.docs.id, hidden))
     }
   }
-  return db
+  let query = db
     .select(docListColumns)
     .from(schema.docs)
     .where(and(...conditions))
     .orderBy(asc(schema.docs.position), asc(schema.docs.title))
+    .$dynamic()
+  if (limit !== undefined) query = query.limit(limit)
+  if (offset !== undefined) query = query.offset(offset)
+  return query
 }
 
 /** Ids of every doc that is archived or descends from an archived doc. */
@@ -181,7 +187,9 @@ export async function destroyDoc(db: Database, id: string) {
 export async function searchDocs(
   db: Database,
   projectId: string,
-  query: string
+  query: string,
+  limit?: number,
+  offset?: number
 ) {
   // Without this, a whitespace-only query degenerates into ILIKE '%   %' (matches all).
   const q = query.trim()
@@ -199,7 +207,7 @@ export async function searchDocs(
     word_similarity(${q}, coalesce(${schema.docs.summary}, ''))
   )`
   const term = `%${q}%`
-  return db
+  let search = db
     .select(docListColumns)
     .from(schema.docs)
     .where(
@@ -215,5 +223,8 @@ export async function searchDocs(
       )
     )
     .orderBy(desc(rank), desc(trgmSim), desc(schema.docs.updatedAt))
-    .limit(50)
+    .$dynamic()
+  if (limit !== undefined) search = search.limit(limit)
+  if (offset !== undefined) search = search.offset(offset)
+  return search
 }
