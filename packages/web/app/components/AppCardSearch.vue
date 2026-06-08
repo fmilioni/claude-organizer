@@ -56,9 +56,11 @@ async function runSearch(value: string) {
   }
 }
 
-function runNow() {
-  if (timer) clearTimeout(timer)
-  if (term.value) void runSearch(term.value)
+function goToSearchPage() {
+  const q = term.value
+  if (!q) return
+  reset()
+  void navigateTo({ path: '/search', query: { q } })
 }
 
 function goTo(result: CardSearchResult) {
@@ -87,7 +89,7 @@ onBeforeUnmount(() => {
 // One keydown listener: two `@keydown.*` on a component both compile to
 // `onKeydown`, which vue-tsc rejects as a duplicate object key.
 function onKeydown(e: KeyboardEvent) {
-  if (e.key === 'Enter') runNow()
+  if (e.key === 'Enter') goToSearchPage()
   else if (e.key === 'Escape') reset()
 }
 </script>
@@ -127,13 +129,7 @@ function onKeydown(e: KeyboardEvent) {
         class="block w-full cursor-pointer border-b border-default px-3 py-2 last:border-0 hover:bg-elevated"
         @mousedown.prevent="goTo(r)"
       >
-        <div class="flex min-w-0 items-center gap-2">
-          <span class="shrink-0 whitespace-nowrap font-mono text-xs text-muted">{{ r.key }}</span>
-          <span class="truncate text-sm font-medium">{{ r.title }}</span>
-        </div>
-        <p v-if="r.summary" class="truncate text-xs text-muted">
-          {{ r.summary }}
-        </p>
+        <AppCardResultRow :result="r" />
         <AppMarkdown
           v-if="r.matchedComment"
           :value="r.matchedComment.snippet"
