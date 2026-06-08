@@ -4,6 +4,7 @@ import { z } from 'zod'
 import { createId, type Database, schema } from '@claude-organizer/db'
 
 import { notify } from './events'
+import { paginate } from './pagination'
 
 export interface Tag {
   id: string
@@ -47,15 +48,16 @@ export async function listTags(
   limit?: number,
   offset?: number
 ): Promise<Tag[]> {
-  let query = db
-    .select(tagColumns)
-    .from(schema.tags)
-    .where(eq(schema.tags.projectId, projectId))
-    .orderBy(asc(schema.tags.name))
-    .$dynamic()
-  if (limit !== undefined) query = query.limit(limit)
-  if (offset !== undefined) query = query.offset(offset)
-  return query
+  return paginate(
+    db
+      .select(tagColumns)
+      .from(schema.tags)
+      .where(eq(schema.tags.projectId, projectId))
+      .orderBy(asc(schema.tags.name))
+      .$dynamic(),
+    limit,
+    offset
+  )
 }
 
 export async function createTag(db: Database, input: CreateTagInput) {

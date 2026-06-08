@@ -22,6 +22,7 @@ import { claimsByCardIds, getClaim, releaseClaimOnDone } from './cardClaims'
 import { InputError } from './errors'
 import { notify } from './events'
 import { pruneIntakeForDestroyedCards, syncIntakeForCard } from './intake'
+import { paginate } from './pagination'
 import { listCardTags, tagsByCardIds } from './tags'
 
 const cardStatus = z.enum([
@@ -340,14 +341,16 @@ export async function getCardsByIds(
   offset?: number
 ) {
   if (refs.length === 0) return []
-  let query = db
-    .select(cardDetailColumns)
-    .from(schema.cards)
-    .where(or(inArray(schema.cards.id, refs), inArray(schema.cards.key, refs)))
-    .orderBy(asc(schema.cards.position), desc(schema.cards.createdAt))
-    .$dynamic()
-  if (offset !== undefined) query = query.offset(offset)
-  const rows = await query
+  const rows = await paginate(
+    db
+      .select(cardDetailColumns)
+      .from(schema.cards)
+      .where(or(inArray(schema.cards.id, refs), inArray(schema.cards.key, refs)))
+      .orderBy(asc(schema.cards.position), desc(schema.cards.createdAt))
+      .$dynamic(),
+    undefined,
+    offset
+  )
   return enrichCardRows(db, rows)
 }
 

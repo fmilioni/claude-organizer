@@ -9,6 +9,7 @@ import {
 } from '@claude-organizer/shared'
 
 import { notify } from './events'
+import { paginate } from './pagination'
 
 export const createIntakeItemInput = z.object({
   projectId: z.string(),
@@ -99,15 +100,16 @@ export async function listIntakeItems(
   if (options.status) {
     conditions.push(eq(schema.intakeItems.status, options.status))
   }
-  let query = db
-    .select(intakeColumns)
-    .from(schema.intakeItems)
-    .where(and(...conditions))
-    .orderBy(desc(schema.intakeItems.createdAt))
-    .$dynamic()
-  if (options.limit !== undefined) query = query.limit(options.limit)
-  if (options.offset !== undefined) query = query.offset(options.offset)
-  const items = await query
+  const items = await paginate(
+    db
+      .select(intakeColumns)
+      .from(schema.intakeItems)
+      .where(and(...conditions))
+      .orderBy(desc(schema.intakeItems.createdAt))
+      .$dynamic(),
+    options.limit,
+    options.offset
+  )
 
   const keys = [...new Set(items.flatMap(i => parseCardKeys(i.plannedCardKeys)))]
   const states = await cardStatesByKeys(db, projectId, keys)
@@ -126,7 +128,7 @@ export async function createIntakeItem(db: Database, input: CreateIntakeItemInpu
       projectId: parsed.projectId,
       bodyMd: parsed.bodyMd
     })
-    .returning()
+    .returning(intakeColumns)
   if (row) await notifyChanged(db, row)
   return row
 }
@@ -137,7 +139,7 @@ export async function updateIntakeItem(db: Database, input: UpdateIntakeItemInpu
     .update(schema.intakeItems)
     .set({ bodyMd: parsed.bodyMd, updatedAt: sql`now()` })
     .where(eq(schema.intakeItems.id, parsed.id))
-    .returning()
+    .returning(intakeColumns)
   if (row) await notifyChanged(db, row)
   return row ?? null
 }
@@ -156,7 +158,7 @@ export async function markIntakePlanned(
       updatedAt: sql`now()`
     })
     .where(eq(schema.intakeItems.id, id))
-    .returning()
+    .returning(intakeColumns)
   if (row) await notifyChanged(db, row)
   return row ?? null
 }
@@ -166,7 +168,7 @@ export async function archiveIntakeItem(db: Database, id: string) {
     .update(schema.intakeItems)
     .set({ status: 'archived', archivedAt: sql`now()`, updatedAt: sql`now()` })
     .where(eq(schema.intakeItems.id, id))
-    .returning()
+    .returning(intakeColumns)
   if (row) await notifyChanged(db, row)
   return row ?? null
 }
@@ -183,7 +185,7 @@ export async function restoreIntakeItem(db: Database, id: string) {
     .update(schema.intakeItems)
     .set({ status: nextStatus, archivedAt: null, updatedAt: sql`now()` })
     .where(eq(schema.intakeItems.id, id))
-    .returning()
+    .returning(intakeColumns)
   if (row) await notifyChanged(db, row)
   return row ?? null
 }
@@ -283,7 +285,7 @@ export async function destroyIntakeItem(db: Database, id: string) {
   const [row] = await db
     .delete(schema.intakeItems)
     .where(eq(schema.intakeItems.id, id))
-    .returning()
+    .returning(intakeColumns)
   if (row) {
     await notify(db, {
       type: 'inbox.deleted',

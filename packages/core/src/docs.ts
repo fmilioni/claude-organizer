@@ -5,6 +5,7 @@ import { createId, type Database, schema } from '@claude-organizer/db'
 
 import type { ArchiveFilter } from './archive'
 import { notify } from './events'
+import { paginate } from './pagination'
 
 const docKind = z.enum(['module', 'adr', 'guide', 'note'])
 
@@ -69,15 +70,16 @@ export async function listDocs(
       conditions.push(notInArray(schema.docs.id, hidden))
     }
   }
-  let query = db
-    .select(docListColumns)
-    .from(schema.docs)
-    .where(and(...conditions))
-    .orderBy(asc(schema.docs.position), asc(schema.docs.title))
-    .$dynamic()
-  if (limit !== undefined) query = query.limit(limit)
-  if (offset !== undefined) query = query.offset(offset)
-  return query
+  return paginate(
+    db
+      .select(docListColumns)
+      .from(schema.docs)
+      .where(and(...conditions))
+      .orderBy(asc(schema.docs.position), asc(schema.docs.title))
+      .$dynamic(),
+    limit,
+    offset
+  )
 }
 
 /** Ids of every doc that is archived or descends from an archived doc. */
@@ -207,24 +209,25 @@ export async function searchDocs(
     word_similarity(${q}, coalesce(${schema.docs.summary}, ''))
   )`
   const term = `%${q}%`
-  let search = db
-    .select(docListColumns)
-    .from(schema.docs)
-    .where(
-      and(
-        eq(schema.docs.projectId, projectId),
-        or(
-          sql`${schema.docs.bodyTsv} @@ ${tsQuery}`,
-          ilike(schema.docs.title, term),
-          ilike(schema.docs.summary, term),
-          sql`${q} <% ${schema.docs.title}`,
-          sql`${q} <% coalesce(${schema.docs.summary}, '')`
+  return paginate(
+    db
+      .select(docListColumns)
+      .from(schema.docs)
+      .where(
+        and(
+          eq(schema.docs.projectId, projectId),
+          or(
+            sql`${schema.docs.bodyTsv} @@ ${tsQuery}`,
+            ilike(schema.docs.title, term),
+            ilike(schema.docs.summary, term),
+            sql`${q} <% ${schema.docs.title}`,
+            sql`${q} <% coalesce(${schema.docs.summary}, '')`
+          )
         )
       )
-    )
-    .orderBy(desc(rank), desc(trgmSim), desc(schema.docs.updatedAt))
-    .$dynamic()
-  if (limit !== undefined) search = search.limit(limit)
-  if (offset !== undefined) search = search.offset(offset)
-  return search
+      .orderBy(desc(rank), desc(trgmSim), desc(schema.docs.updatedAt))
+      .$dynamic(),
+    limit,
+    offset
+  )
 }

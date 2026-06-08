@@ -6,6 +6,7 @@ import { createId, type Database, schema } from '@claude-organizer/db'
 import { archivedCondition, type ArchiveFilter } from './archive'
 import { getSystemSettings } from './authz'
 import { notify } from './events'
+import { paginate } from './pagination'
 
 export const createSprintInput = z.object({
   projectId: z.string(),
@@ -48,15 +49,16 @@ export async function listSprints(
   const conditions = [eq(schema.sprints.projectId, projectId)]
   const archived = archivedCondition(schema.sprints.archivedAt, filter)
   if (archived) conditions.push(archived)
-  let query = db
-    .select(sprintColumns)
-    .from(schema.sprints)
-    .where(and(...conditions))
-    .orderBy(schema.sprints.createdAt)
-    .$dynamic()
-  if (limit !== undefined) query = query.limit(limit)
-  if (offset !== undefined) query = query.offset(offset)
-  return query
+  return paginate(
+    db
+      .select(sprintColumns)
+      .from(schema.sprints)
+      .where(and(...conditions))
+      .orderBy(schema.sprints.createdAt)
+      .$dynamic(),
+    limit,
+    offset
+  )
 }
 
 export async function getActiveSprint(db: Database, projectId: string) {
@@ -97,7 +99,7 @@ export async function createSprint(db: Database, input: CreateSprintInput) {
       endsAt: parsed.endsAt,
       status: 'planned'
     })
-    .returning()
+    .returning(sprintColumns)
   if (row) {
     await notify(db, {
       type: 'sprint.changed',
@@ -115,7 +117,7 @@ export async function updateSprint(db: Database, input: UpdateSprintInput) {
     .update(schema.sprints)
     .set({ ...rest, updatedAt: sql`now()` })
     .where(eq(schema.sprints.id, id))
-    .returning()
+    .returning(sprintColumns)
   if (row) {
     await notify(db, {
       type: 'sprint.changed',
@@ -133,7 +135,7 @@ export async function archiveSprint(db: Database, id: string) {
     .update(schema.sprints)
     .set({ archivedAt: sql`now()`, updatedAt: sql`now()` })
     .where(eq(schema.sprints.id, id))
-    .returning()
+    .returning(sprintColumns)
   if (row) {
     // Default: drop the diffs of every commit on this sprint's cards (the cards
     // stay active; only the heavy blobs go) — re-run attach-commit to restore.
@@ -167,7 +169,7 @@ export async function restoreSprint(db: Database, id: string) {
     .update(schema.sprints)
     .set({ archivedAt: null, updatedAt: sql`now()` })
     .where(eq(schema.sprints.id, id))
-    .returning()
+    .returning(sprintColumns)
   if (row) {
     await notify(db, {
       type: 'sprint.changed',
@@ -231,7 +233,7 @@ export async function startSprint(db: Database, sprintId: string) {
         updatedAt: sql`now()`
       })
       .where(eq(schema.sprints.id, sprintId))
-      .returning()
+      .returning(sprintColumns)
     return activated ?? null
   })
   if (row) {
@@ -260,7 +262,7 @@ export async function reopenSprint(db: Database, sprintId: string) {
       updatedAt: sql`now()`
     })
     .where(eq(schema.sprints.id, sprintId))
-    .returning()
+    .returning(sprintColumns)
   if (row) {
     await notify(db, {
       type: 'sprint.changed',
@@ -280,7 +282,7 @@ export async function completeSprint(db: Database, sprintId: string) {
       updatedAt: sql`now()`
     })
     .where(eq(schema.sprints.id, sprintId))
-    .returning()
+    .returning(sprintColumns)
   if (row) {
     await notify(db, {
       type: 'sprint.changed',
