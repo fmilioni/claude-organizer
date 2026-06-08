@@ -113,6 +113,13 @@ function cancelEdit() {
   editingId.value = null
 }
 
+// One keydown listener: two `@keydown.enter`/`@keydown.esc` on a component both
+// compile to `onKeydown`, which vue-tsc rejects as a duplicate object key.
+function onEditKeydown(e: KeyboardEvent, tag: Tag) {
+  if (e.key === 'Enter') saveEdit(tag)
+  else if (e.key === 'Escape') cancelEdit()
+}
+
 async function saveEdit(tag: Tag) {
   const name = editName.value.trim()
   if (!name || busy.value) return
@@ -202,8 +209,7 @@ async function deleteProjectTag(tag: Tag) {
                     size="xs"
                     autofocus
                     class="flex-1"
-                    @keydown.enter="saveEdit(t)"
-                    @keydown.esc="cancelEdit"
+                    @keydown="onEditKeydown($event, t)"
                   />
                   <UButton
                     icon="i-lucide-check"
