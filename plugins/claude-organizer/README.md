@@ -7,7 +7,7 @@ Four skills:
 - **`implement`** — **execute** a card that already exists, through a mandatory lifecycle (`in_progress` → read comments → implement → review → commit → done). Triggers when you start building a specific card.
 - **`review`** — the **mandatory review gate** before work closes (per-task and story-level), run by a fresh subagent: checks acceptance criteria and hunts for reuse/dead-code/comment improvements. Fired by `implement` at task/story completion.
 
-The shared "never assume — resolve open decisions" doctrine lives once in `shared/deciding.md`; `plan` and `implement` reference it.
+The "never assume — resolve open decisions" doctrine is carried inline in each skill that uses it (`plan` and `implement`).
 
 ## Installation
 

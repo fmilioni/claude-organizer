@@ -18,9 +18,9 @@ Four skills drive the work (packaged in `plugins/claude-organizer`):
   run by a fresh subagent: checks acceptance criteria and hunts for reuse/dead-code/
   comment improvements. Fired by `implement` at task/story completion.
 
-The shared "never assume — resolve open decisions" doctrine lives once in
-`plugins/claude-organizer/shared/deciding.md`; `plan` and `implement` reference
-it instead of each restating it.
+The "never assume — resolve open decisions" doctrine is carried **inline** in
+each skill that uses it (`plan` and `implement`), so each skill is
+self-contained.
 
 Let the skills drive. **What** to do (active sprint, cards, backlog, comments,
 docs) is the source of truth and lives **in the MCP**, not here — query it via

@@ -19,7 +19,22 @@ The board is only honest if **every** card walks the **full** lifecycle in locks
 
 ## Never assume — ask the user
 
-Execution constantly hits things the card didn't fully nail down. **Never assume your way past one — ask.** The full doctrine (the two kinds of unknown, how to surface a decision as ready-made options with trade-offs and a recommendation, one topic per message, chaining, checking the card first, recording the answer) lives in **`../../shared/deciding.md`**. Read it and apply it. Two things specific to execution:
+Execution constantly hits things the card didn't fully nail down. **Never assume your way past one — ask.** Two kinds of unknown both block well-formed work; resolve both **before** writing code:
+
+- **Ambiguity** — anything unclear about what the user wants: vague wording, an unstated expectation, an edge case nothing mentions, "did they mean X or Y?". Even a *small* one gets a question — don't settle it by guessing the "probably intended" reading.
+- **Decision** — an open choice where more than one reasonable path exists: which library or existing helper, how to shape data, where code lives, a naming/contract call, behavior on an edge case.
+
+The **method**:
+
+- **Ambiguity → a direct question** (open-ended where that fits). **Decision → ready-made options**, never "what do you think?": each option concrete and worked out, with its **trade-offs**. Mark the one you recommend with **`(Recommended)`** in the option's **title/label** — not buried in its description — and list it **first** (the marker goes in the title; the *why* may go in the description). That serves both the user who takes the recommendation and the one who knows enough to choose differently. This is what `AskUserQuestion` expects: recommended option first, marked in its label.
+- **One topic per message**; prefer multiple-choice via the `AskUserQuestion` tool.
+- **Unknowns chain** — settle the earlier one first; it narrows the next.
+- **Research when knowledge alone won't yield good options**, then present what you found.
+- **State the approach before building** — say in plain terms what you're about to do, so the user can catch a wrong assumption *before* it's code.
+
+**Check before you ask** — the answer may already exist in the card's **description** or its **comments** (step 2); read them first and don't re-litigate a settled call. **Record the answer** as a **comment** (step 5), and when it changes the spec, fold it into the **description** too, so a fresh executor reads a card that's already decided. **When to stop:** keep going until nothing material is left to guess — assuming instead of asking is a **defect**, the same as skipping a lifecycle step.
+
+Two things specific to execution:
 
 - **Hit one mid-build → stop and ask.** Don't push past it. Fold the answer back in and record it as a **comment** (it's signal — step 5), so it survives for the next session.
 - **A story is decided up front, as a whole.** Before building a story, **read all of its cards** (description + comments) and gather **every** open decision and ambiguity across them, then clear them with the user **before writing code** — surface the batch one per message, chained. Don't start card 1, hit a fork mid-way, and guess.

@@ -18,7 +18,7 @@ Do NOT write code, scaffold, edit files, or take any implementation action until
 ## Flow
 
 1. **Orient.** Read the current state first: `list_projects` → `get_active_sprint` → `list_unread_comments` → `list_cards` (and, when planning the **inbox**, `list_inbox` for the pending demands you'll convert). Then scan the **docs tree** (Modules / Decisions / Notes) and read what's relevant to the demand's area — a past decision or a note can change the design, and modules tell you how the area already works. Don't read everything; glance and decide. Know what exists before proposing anything.
-2. **Understand & surface decisions.** Two kinds of unknowns block a well-formed card; resolve both _with the user_ before creating anything (the method is the shared doctrine in **`../../shared/deciding.md`** — read it):
+2. **Understand & surface decisions.** Two kinds of unknown block a well-formed card; resolve both _with the user_ before creating anything. The **method** for surfacing them — ready-made options with trade-offs and a recommendation, one topic per message, chaining — lives in _Surfacing decisions, not assuming them_ below; in planning terms the two kinds are:
    - **Ambiguities** — what the user actually wants: goal, scope, constraints, edge cases, what "done" looks like.
    - **Decisions** — open choices with more than one reasonable path (runtime/language, which API or library, auth model, session strategy, storage…). Never pick one silently — surface each as **ready-made options** the user chooses from.
    - **Likely gaps (suggest complements)** — assume the description may be **incomplete**: points the user wanted but didn't think to state. Map the probable gaps and downstream consequences and **offer them as suggestions** to accept or drop. Keep the framing **general** — don't invent concrete specifics the user didn't raise (that biases the plan). The **decision is always the user's**: you suggest, you never decide for them.
@@ -53,7 +53,15 @@ Do NOT write code, scaffold, edit files, or take any implementation action until
 
 A demand almost always hides choices with more than one defensible answer. The wrong move — and the easy one — is to silently pick one and bake it into a card; that's a decision made _for_ the user instead of _by_ them. Surface it. This holds even for demands that look trivial: "too simple to have decisions" is exactly where a silent assumption slips in.
 
-The method — ready-made options with trade-offs and a recommendation, one topic per message, chaining (settle the earlier choice first because it narrows the next), research when you can't offer good options from knowledge alone — is the shared doctrine in **`../../shared/deciding.md`**. Read it and apply it. Example chain: "get the current temperature" hides *how to access it* (Node/Python/shell) then *which weather API* (free tier, accuracy, rate limits); "build an auth system" hides OAuth-or-not, identity providers, session as token or cookie, hashing algorithm, and so on.
+The **method** for surfacing a decision:
+
+- **Ambiguity → a direct question** (open-ended where that fits). **Decision → ready-made options**, never "what do you think?": each option concrete and worked out, with its **trade-offs**. Mark the one you recommend with **`(Recommended)`** in the option's **title/label** — not buried in its description — and list it **first** (the marker goes in the title; the *why* may go in the description). That serves both the user who takes the recommendation and the one who knows enough to choose differently. This is what `AskUserQuestion` expects: recommended option first, marked in its label.
+- **One topic per message**; prefer multiple-choice via the `AskUserQuestion` tool.
+- **Unknowns chain** — settle the earlier one first; it narrows the next. Example chain: "get the current temperature" hides *how to access it* (Node/Python/shell) then *which weather API* (free tier, accuracy, rate limits); "build an auth system" hides OAuth-or-not, identity providers, session as token or cookie, hashing algorithm, and so on.
+- **Research when knowledge alone won't yield good options** (which library exists, its free tier, trade-offs), then present what you found.
+- **State the approach before building** — say in plain terms what you're about to do, so the user can catch a wrong assumption *before* it's baked into a card; don't disappear and return with the choices already made.
+
+Before you ask, **check what's already settled** — a past decision in the docs, an existing not-yet-started card, the demand's own text — and don't re-litigate a settled call.
 
 **What's specific to planning: these are the decisions that shape the _card_ — the _what_, not the _how_.** Stop at the choices needed to write a well-formed card, and fold each answer into the card before creating it (a decision that lives only in chat is lost). The implementation may surface further decisions later; those belong to execution (the `implement` skill), not here. Don't drift into designing the code.
 
