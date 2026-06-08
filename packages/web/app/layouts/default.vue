@@ -81,6 +81,7 @@ async function onLogout() {
       </template>
 
       <template #default="{ collapsed }">
+        <AppCardSearch v-if="!collapsed" class="mb-2" />
         <UNavigationMenu
           :items="projectLinks"
           orientation="vertical"

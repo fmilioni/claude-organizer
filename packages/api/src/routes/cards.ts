@@ -10,6 +10,7 @@ import {
   listCards,
   reorderCards,
   restoreCard,
+  searchCards,
   updateCard
 } from '@claude-organizer/core'
 import type { Database } from '@claude-organizer/db'
@@ -19,6 +20,7 @@ import { projectIdQuery, queryBool } from '../lib/query'
 
 const listCardsQuery = z.object({
   projectId: projectIdQuery,
+  q: z.string().optional(),
   sprintId: z.string().optional(),
   status: z.enum(CARD_STATUSES).optional(),
   backlogOnly: queryBool,
@@ -29,9 +31,18 @@ const listCardsQuery = z.object({
 export function registerCardRoutes(app: FastifyInstance, db: Database) {
   app.get('/cards', async (req) => {
     const q = listCardsQuery.parse(req.query)
+    const sprintId = q.sprintId === 'null' ? null : q.sprintId
+    if (q.q) {
+      return searchCards(db, q.projectId, q.q, {
+        status: q.status,
+        sprintId,
+        includeArchived: q.includeArchived,
+        archivedOnly: q.archivedOnly
+      })
+    }
     return listCards(db, {
       projectId: q.projectId,
-      sprintId: q.sprintId === 'null' ? null : q.sprintId,
+      sprintId,
       status: q.status,
       backlogOnly: q.backlogOnly,
       includeArchived: q.includeArchived,

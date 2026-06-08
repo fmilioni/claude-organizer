@@ -1,4 +1,4 @@
-import type { CardStatus } from '@claude-organizer/shared'
+import type { Card, CardStatus } from '@claude-organizer/shared'
 
 export type {
   Card,
@@ -7,6 +7,11 @@ export type {
   CardStatus,
   CardSubtask
 } from '@claude-organizer/shared'
+
+/** A card from `/cards?q=`, plus the matched comment snippet when the hit came from a comment. */
+export interface CardSearchResult extends Card {
+  matchedComment: { commentId: string, snippet: string } | null
+}
 
 // Board columns, in order. `backlog` is intentionally absent: backlog cards
 // live on the Tasks page, not in a board column.
