@@ -38,6 +38,28 @@ export interface EmbeddingConfig {
   e5Prefix: boolean
 }
 
+/** State of an in-flight (or last) runtime model swap; `idle` ⇒ none this process. */
+export type EmbeddingRuntimeState
+  = | 'idle'
+    | 'reconciling'
+    | 'backfilling'
+    | 'done'
+    | 'error'
+
+/** Effective embedding config + progress of the last/ongoing model swap (CO-252). */
+export interface EmbeddingRuntimeStatus {
+  state: EmbeddingRuntimeState
+  model: string | null
+  dim: number
+  enabled: boolean
+  /** A dim change dropped the old vectors → search is lexical-only until backfill ends. */
+  dimChanged: boolean
+  /** The MCP is a separate process/bundle — restart it to use the new model. */
+  mcpRestartRequired: boolean
+  backfill: { docs: number, cards: number, comments: number }
+  error: string | null
+}
+
 type Env = Record<string, string | undefined>
 
 // `shared` is zero-dep (no @types/node), so reach process.env via globalThis.

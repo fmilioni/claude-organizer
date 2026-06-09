@@ -2,9 +2,11 @@ import type { FastifyInstance } from 'fastify'
 import { z } from 'zod'
 
 import {
+  applyEmbeddingModel,
   approveUser,
   ConflictError,
   deleteUser,
+  getEmbeddingStatus,
   getSystemSettings,
   listAllUsers,
   setAuthEnabled,
@@ -28,6 +30,10 @@ const settingsBody = z
   .refine(b => b.authEnabled !== undefined || b.keepDiffsOnArchive !== undefined, {
     message: 'No setting to update'
   })
+
+// `model` is the registry id, 'none' (off), or null (unset → env/default); the
+// core setter validates the value against the registry.
+const embeddingBody = z.object({ model: z.string().nullable() })
 
 export function registerAdminRoutes(app: FastifyInstance, db: Database) {
   app.get('/admin/users', async () => listAllUsers(db))
@@ -62,5 +68,12 @@ export function registerAdminRoutes(app: FastifyInstance, db: Database) {
       await setKeepDiffsOnArchive(db, body.keepDiffsOnArchive)
     }
     return getSystemSettings(db)
+  })
+
+  app.get('/admin/embedding', async () => getEmbeddingStatus(db))
+
+  app.post('/admin/embedding', async (req) => {
+    const { model } = embeddingBody.parse(req.body)
+    return applyEmbeddingModel(db, model)
   })
 }

@@ -7,12 +7,14 @@ import { schema } from '@claude-organizer/db'
 
 import {
   addComment,
+  applyEmbeddingModel,
   approveUser,
   canAccessProject,
   claimOrCreateUserAuthz,
   ConflictError,
   createCard,
   deleteUser,
+  getEmbeddingStatus,
   getSystemSettings,
   getUserAuthz,
   InputError,
@@ -272,5 +274,62 @@ describe('system settings', () => {
       if (prevEnv === undefined) delete process.env.EMBEDDING_MODEL
       else process.env.EMBEDDING_MODEL = prevEnv
     }
+  })
+})
+
+// Co-located with the system-settings tests so the shared singleton row mutates
+// sequentially (no cross-file race). These cases never change the column dim
+// (the suite runs with EMBEDDING_MODEL=none, so none/null stay at 384) — a real
+// dim-change reconcile would mutate the global pgvector column and flake the
+// parallel embedding-foundation test, so that path is validated functionally.
+describe('embedding runtime apply', () => {
+  async function settle(db: typeof ctx.db) {
+    for (let i = 0; i < 100; i++) {
+      const s = await getEmbeddingStatus(db)
+      if (s.state !== 'reconciling' && s.state !== 'backfilling') return s
+      await new Promise(r => setTimeout(r, 10))
+    }
+    throw new Error('embedding apply did not settle')
+  }
+
+  it('reports the effective config (idle, disabled under EMBEDDING_MODEL=none)', async () => {
+    await setEmbeddingModel(ctx.db, null)
+    expect(await getEmbeddingStatus(ctx.db)).toMatchObject({
+      model: null,
+      dim: 384,
+      enabled: false
+    })
+  })
+
+  it('rejects an unknown model and applies nothing', async () => {
+    await setEmbeddingModel(ctx.db, null)
+    await expect(applyEmbeddingModel(ctx.db, 'acme/nope')).rejects.toThrow(InputError)
+    expect(await getSystemSettings(ctx.db)).toMatchObject({ embeddingModel: null })
+  })
+
+  it('applying none persists the choice and settles the backfill', async () => {
+    await applyEmbeddingModel(ctx.db, 'none')
+    expect(await getSystemSettings(ctx.db)).toMatchObject({ embeddingModel: 'none' })
+    const s = await settle(ctx.db)
+    expect(s).toMatchObject({
+      state: 'done',
+      model: null,
+      enabled: false,
+      backfill: { docs: 0, cards: 0, comments: 0 }
+    })
+    await setEmbeddingModel(ctx.db, null)
+  })
+
+  it('rejects a concurrent apply (the slot is claimed before the first await)', async () => {
+    await setEmbeddingModel(ctx.db, null)
+    const [a, b] = await Promise.allSettled([
+      applyEmbeddingModel(ctx.db, 'none'),
+      applyEmbeddingModel(ctx.db, 'none')
+    ])
+    expect([a.status, b.status].sort()).toEqual(['fulfilled', 'rejected'])
+    const rejected = (a.status === 'rejected' ? a : b) as PromiseRejectedResult
+    expect(rejected.reason).toBeInstanceOf(ConflictError)
+    await settle(ctx.db)
+    await setEmbeddingModel(ctx.db, null)
   })
 })

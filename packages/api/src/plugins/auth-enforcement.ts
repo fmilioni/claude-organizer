@@ -84,7 +84,9 @@ const ADMIN_ONLY: Array<{ method: string, url: string }> = [
   { method: 'DELETE', url: '/admin/users/:id' },
   // Reachable in sem-auth mode (the gate bypasses before this list), so an open
   // board can re-enable auth; admin-only once auth is on with users.
-  { method: 'POST', url: '/admin/settings' }
+  { method: 'POST', url: '/admin/settings' },
+  { method: 'GET', url: '/admin/embedding' },
+  { method: 'POST', url: '/admin/embedding' }
 ]
 
 function isAdminOnly(method: string, url: string | undefined): boolean {
