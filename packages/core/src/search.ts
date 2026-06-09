@@ -49,6 +49,11 @@ export function reciprocalRankFusion<T>(
     .sort((a, b) => b.score - a.score)
 }
 
+// Candidate cap for the HYBRID search path only (lexical-only search stays
+// uncapped). Bounds the lexical list fed to RRF; generous so deep-ish pagination
+// still has ranked rows. Shared by searchDocs and searchCards.
+export const LEXICAL_POOL = 200
+
 /** pgvector text literal (`[a,b,c]`) for a KNN query param (`… <=> $1::vector`). */
 export function toVectorParam(vec: number[]): string {
   return `[${vec.join(',')}]`

@@ -19,11 +19,12 @@ import { archivedCondition, type ArchiveFilter } from './archive'
 import { getSystemSettings } from './authz'
 import { listBlockedBy, listBlocking, pendingBlockerCounts } from './blockers'
 import { claimsByCardIds, getClaim, releaseClaimOnDone } from './cardClaims'
+import { backfillEmbeddings, embed } from './embedding'
 import { InputError } from './errors'
 import { notify } from './events'
 import { pruneIntakeForDestroyedCards, syncIntakeForCard } from './intake'
 import { paginate } from './pagination'
-import { excludedTsQuery, orTsQuery } from './search'
+import { excludedTsQuery, hybridOrder, LEXICAL_POOL, orTsQuery, toVectorParam, vectorK } from './search'
 import { listCardTags, tagsByCardIds } from './tags'
 
 const cardStatus = z.enum([
@@ -121,6 +122,16 @@ const cardDetailColumns = {
   descriptionMd: schema.cards.descriptionMd
 }
 
+/** Text embedded for a card — key + title + summary + description (e5 `passage:`). */
+function cardContentText(c: {
+  key: string
+  title: string
+  summary?: string | null
+  descriptionMd?: string | null
+}): string {
+  return [c.key, c.title, c.summary, c.descriptionMd].filter(Boolean).join('\n')
+}
+
 function statusCondition(filters: CardFilters): SQL | undefined {
   if (filters.activeOnly) {
     return notInArray(schema.cards.status, ['done', 'backlog'])
@@ -214,12 +225,41 @@ export interface MatchedComment {
 const SNIPPET_OPTS = 'StartSel=**,StopSel=**,MaxFragments=1,MaxWords=24,MinWords=6,ShortWord=2'
 
 /**
- * Ranked full-text search over cards AND their comments. A card matches when the
- * term hits the card (key/title/summary/description via tsvector, or
- * substring/typo via pg_trgm/ILIKE) OR any of its comments. Rank = best signal
- * among the card's tsvector, its best-matching comment, and trigram similarity.
- * Reuses the focused-read filters (status/sprint/tag/archived). Read-only — it
- * never marks comments as read.
+ * Enrich card rows and attach each card's best-matching comment snippet. The
+ * lexical snippet (ts_headline highlight) wins; for a card matched only via a
+ * comment's vector (`param` given, no lexical comment hit) the nearest comment by
+ * cosine distance supplies the snippet, so a semantic comment match still shows one.
+ */
+async function withMatchedComments<T extends { id: string, parentId: string | null }>(
+  db: Database,
+  rows: T[],
+  tsQuery: SQL,
+  param?: string
+) {
+  const ids = rows.map(r => r.id)
+  const [enriched, lexicalSnippets] = await Promise.all([
+    enrichCardRows(db, rows),
+    matchedCommentSnippets(db, ids, tsQuery)
+  ])
+  let vectorSnippets = new Map<string, MatchedComment>()
+  if (param) {
+    const need = ids.filter(id => !lexicalSnippets.has(id))
+    vectorSnippets = await nearestCommentSnippets(db, need, param, tsQuery)
+  }
+  return enriched.map(c => ({
+    ...c,
+    matchedComment: lexicalSnippets.get(c.id) ?? vectorSnippets.get(c.id) ?? null
+  }))
+}
+
+/**
+ * Hybrid search over cards AND their comments. The lexical ranking (card/comment
+ * FTS + substring/typo + `-exclude`, unchanged from CO-239) is fused by RRF with a
+ * vector KNN — a card's vector distance OR its nearest comment's, whichever is
+ * closer. A card surfaces by its own semantic signal or any comment's; the matched
+ * comment snippet (lexical) is kept. Degrades to lexical-only when the query can't
+ * be embedded. Reuses the focused-read filters (status/sprint/tag/archived).
+ * Read-only — it never marks comments as read.
  */
 export async function searchCards(
   db: Database,
@@ -266,28 +306,74 @@ export async function searchCards(
     sql`${q} <% coalesce(${schema.cards.descriptionMd}, '')`
   )
 
-  const conditions = cardFilterConditions(db, projectId, filters)
-  if (match) conditions.push(match)
-  conditions.push(sql`not (${schema.cards.searchTsv} @@ ${excluded})`)
+  const notExcluded = sql`not (${schema.cards.searchTsv} @@ ${excluded})`
+  const lexicalConditions = cardFilterConditions(db, projectId, filters)
+  if (match) lexicalConditions.push(match)
+  lexicalConditions.push(notExcluded)
+  const lexicalOrder = [desc(rank), desc(trgmSim), desc(schema.cards.updatedAt)]
 
-  let search = db
+  const queryVec = await embed(q, 'query')
+  // Lexical-only (model off/unavailable): the original behavior, untouched.
+  if (!queryVec) {
+    let search = db
+      .select(cardSummaryColumns)
+      .from(schema.cards)
+      .where(and(...lexicalConditions))
+      .orderBy(...lexicalOrder)
+      .limit(filters.limit ?? 50)
+      .$dynamic()
+    if (filters.offset !== undefined) search = search.offset(filters.offset)
+    return withMatchedComments(db, await search, tsQuery)
+  }
+
+  // Hybrid: bounded lexical pool ⊕ vector top-K (card OR comment KNN), fused by RRF.
+  const lexRows = await db
+    .select({ id: schema.cards.id })
+    .from(schema.cards)
+    .where(and(...lexicalConditions))
+    .orderBy(...lexicalOrder)
+    .limit(LEXICAL_POOL)
+
+  const param = toVectorParam(queryVec)
+  const vectorConditions = cardFilterConditions(db, projectId, filters)
+  vectorConditions.push(notExcluded)
+  vectorConditions.push(sql`(
+    ${schema.cards.embedding} is not null
+    or exists (select 1 from comments c where c.card_id = ${schema.cards.id} and c.embedding is not null)
+  )`)
+  // Best (smallest) cosine distance over the card's own vector OR any of its
+  // comments' — coalesce a missing vector to 2 (max) so it never wins.
+  const dist = sql<number>`least(
+    coalesce(${schema.cards.embedding} <=> ${param}::vector, 2),
+    coalesce((
+      select min(c.embedding <=> ${param}::vector)
+      from comments c
+      where c.card_id = ${schema.cards.id} and c.embedding is not null
+    ), 2)
+  )`
+  const vecRows = await db
+    .select({ id: schema.cards.id })
+    .from(schema.cards)
+    .where(and(...vectorConditions))
+    .orderBy(dist)
+    .limit(vectorK())
+
+  const ordered = hybridOrder(
+    lexRows.map(r => r.id),
+    vecRows.map(r => r.id)
+  )
+  const start = filters.offset ?? 0
+  const pageIds = ordered.slice(start, start + (filters.limit ?? 50))
+  if (pageIds.length === 0) return []
+  const rows = await db
     .select(cardSummaryColumns)
     .from(schema.cards)
-    .where(and(...conditions))
-    .orderBy(desc(rank), desc(trgmSim), desc(schema.cards.updatedAt))
-    .limit(filters.limit ?? 50)
-    .$dynamic()
-  if (filters.offset !== undefined) search = search.offset(filters.offset)
-  const rows = await search
-
-  const [enriched, snippets] = await Promise.all([
-    enrichCardRows(db, rows),
-    matchedCommentSnippets(db, rows.map(r => r.id), tsQuery)
-  ])
-  return enriched.map(c => ({
-    ...c,
-    matchedComment: snippets.get(c.id) ?? null
-  }))
+    .where(inArray(schema.cards.id, pageIds))
+  const byId = new Map(rows.map(r => [r.id, r]))
+  const orderedRows = pageIds
+    .map(id => byId.get(id))
+    .filter(row => row !== undefined)
+  return withMatchedComments(db, orderedRows, tsQuery, param)
 }
 
 /** Best-ranked matching comment per card, with a highlighted snippet. */
@@ -318,6 +404,62 @@ async function matchedCommentSnippets(
     }
   }
   return map
+}
+
+/**
+ * Nearest comment per card by cosine distance to the query vector, with a snippet.
+ * Used for cards matched only via a comment's semantic signal (no lexical comment
+ * hit) — `ts_headline` then returns the comment's leading fragment (no highlight).
+ */
+async function nearestCommentSnippets(
+  db: Database,
+  cardIds: string[],
+  param: string,
+  tsQuery: SQL
+): Promise<Map<string, MatchedComment>> {
+  const map = new Map<string, MatchedComment>()
+  if (cardIds.length === 0) return map
+  const rows = await db
+    .selectDistinctOn([schema.comments.cardId], {
+      cardId: schema.comments.cardId,
+      id: schema.comments.id,
+      snippet: sql<string>`ts_headline('simple', ${schema.comments.bodyMd}, ${tsQuery}, ${SNIPPET_OPTS})`
+    })
+    .from(schema.comments)
+    .where(
+      and(
+        inArray(schema.comments.cardId, cardIds),
+        sql`${schema.comments.embedding} is not null`
+      )
+    )
+    .orderBy(schema.comments.cardId, sql`${schema.comments.embedding} <=> ${param}::vector`)
+  for (const r of rows) {
+    map.set(r.cardId, { commentId: r.id, snippet: r.snippet })
+  }
+  return map
+}
+
+/** Backfill embeddings for cards missing one. See `backfillEmbeddings`. */
+export function backfillCardEmbeddings(db: Database, batchSize = 50): Promise<number> {
+  return backfillEmbeddings(
+    batchSize,
+    async (limit) => {
+      const rows = await db
+        .select({
+          id: schema.cards.id,
+          key: schema.cards.key,
+          title: schema.cards.title,
+          summary: schema.cards.summary,
+          descriptionMd: schema.cards.descriptionMd
+        })
+        .from(schema.cards)
+        .where(isNull(schema.cards.embedding))
+        .limit(limit)
+      return rows.map(r => ({ id: r.id, text: cardContentText(r) }))
+    },
+    text => embed(text, 'passage'),
+    (id, embedding) => db.update(schema.cards).set({ embedding }).where(eq(schema.cards.id, id))
+  )
 }
 
 export async function getCard(db: Database, id: string) {
@@ -404,6 +546,11 @@ export async function createCard(db: Database, input: CreateCardInput) {
     return created
   })
   if (row) {
+    // Embed after insert: the content text includes the key, generated in the txn.
+    const embedding = await embed(cardContentText(row), 'passage')
+    if (embedding) {
+      await db.update(schema.cards).set({ embedding }).where(eq(schema.cards.id, row.id))
+    }
     await notify(db, {
       type: 'card.changed',
       projectId: row.projectId,
@@ -434,6 +581,14 @@ export async function updateCard(db: Database, input: UpdateCardInput) {
     return updated
   })
   if (row) {
+    // Re-embed off the merged row only when an embedded field changed, and only
+    // on a successful embed — a transient failure must not wipe a valid vector.
+    if (rest.title !== undefined || rest.summary !== undefined || rest.descriptionMd !== undefined) {
+      const embedding = await embed(cardContentText(row), 'passage')
+      if (embedding) {
+        await db.update(schema.cards).set({ embedding }).where(eq(schema.cards.id, row.id))
+      }
+    }
     await notify(db, {
       type: 'card.changed',
       projectId: row.projectId,

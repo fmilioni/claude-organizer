@@ -1,7 +1,8 @@
 import { sql } from 'drizzle-orm'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-vi.mock('../src/embedding', () => ({
+vi.mock('../src/embedding', async importOriginal => ({
+  ...(await importOriginal<typeof import('../src/embedding')>()),
   embed: vi.fn(async () => null),
   embedMany: vi.fn(async () => null)
 }))

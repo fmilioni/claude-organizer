@@ -4,10 +4,10 @@ import { z } from 'zod'
 import { createId, type Database, schema } from '@claude-organizer/db'
 
 import type { ArchiveFilter } from './archive'
-import { embed } from './embedding'
+import { backfillEmbeddings, embed } from './embedding'
 import { notify } from './events'
 import { paginate } from './pagination'
-import { excludedTsQuery, hybridOrder, orTsQuery, toVectorParam, vectorK } from './search'
+import { excludedTsQuery, hybridOrder, LEXICAL_POOL, orTsQuery, toVectorParam, vectorK } from './search'
 
 const docKind = z.enum(['module', 'adr', 'guide', 'note'])
 
@@ -209,11 +209,6 @@ export async function destroyDoc(db: Database, id: string) {
   return row ?? null
 }
 
-// Candidate cap for the HYBRID path only (lexical-only search stays uncapped).
-// Bounds the lexical list fed to RRF; generous so deep-ish pagination still has
-// ranked rows. A project rarely has >200 doc matches for one query.
-const LEXICAL_POOL = 200
-
 /**
  * Hybrid search over docs: the lexical ranking (FTS + substring/typo recall +
  * `-exclude`, unchanged from CO-239) fused by RRF with a vector KNN (cosine) over
@@ -314,38 +309,24 @@ export async function searchDocs(
   return pageIds.map(id => byId.get(id)).filter(row => row !== undefined)
 }
 
-/**
- * Backfill embeddings for docs missing one (post-deploy, or after a model/dim
- * change). Idempotent — only fills `embedding is null` rows, in batches. A no-op
- * when embeddings are disabled. Returns the count embedded.
- */
-export async function backfillDocEmbeddings(
-  db: Database,
-  batchSize = 50
-): Promise<number> {
-  let total = 0
-  for (;;) {
-    const rows = await db
-      .select({
-        id: schema.docs.id,
-        title: schema.docs.title,
-        summary: schema.docs.summary,
-        bodyMd: schema.docs.bodyMd
-      })
-      .from(schema.docs)
-      .where(isNull(schema.docs.embedding))
-      .limit(batchSize)
-    if (rows.length === 0) break
-    for (const row of rows) {
-      const embedding = await embed(docContentText(row), 'passage')
-      if (!embedding) return total // embeddings disabled/unavailable — stop early
-      await db
-        .update(schema.docs)
-        .set({ embedding })
-        .where(eq(schema.docs.id, row.id))
-      total++
-    }
-    if (rows.length < batchSize) break
-  }
-  return total
+/** Backfill embeddings for docs missing one. See `backfillEmbeddings`. */
+export function backfillDocEmbeddings(db: Database, batchSize = 50): Promise<number> {
+  return backfillEmbeddings(
+    batchSize,
+    async (limit) => {
+      const rows = await db
+        .select({
+          id: schema.docs.id,
+          title: schema.docs.title,
+          summary: schema.docs.summary,
+          bodyMd: schema.docs.bodyMd
+        })
+        .from(schema.docs)
+        .where(isNull(schema.docs.embedding))
+        .limit(limit)
+      return rows.map(r => ({ id: r.id, text: docContentText(r) }))
+    },
+    text => embed(text, 'passage'),
+    (id, embedding) => db.update(schema.docs).set({ embedding }).where(eq(schema.docs.id, id))
+  )
 }

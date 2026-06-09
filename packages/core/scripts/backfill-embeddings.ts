@@ -4,7 +4,11 @@ import { fileURLToPath } from 'node:url'
 
 import { createDb } from '@claude-organizer/db'
 
-import { backfillDocEmbeddings } from '../src/index'
+import {
+  backfillCardEmbeddings,
+  backfillCommentEmbeddings,
+  backfillDocEmbeddings
+} from '../src/index'
 
 try {
   loadEnvFile(resolve(fileURLToPath(import.meta.url), '../../../../.env'))
@@ -22,7 +26,9 @@ const { db, close } = createDb({ url, max: 1 })
 
 try {
   const docs = await backfillDocEmbeddings(db)
-  console.log(`Backfilled embeddings — docs: ${docs}`)
+  const cards = await backfillCardEmbeddings(db)
+  const comments = await backfillCommentEmbeddings(db)
+  console.log(`Backfilled embeddings — docs: ${docs}, cards: ${cards}, comments: ${comments}`)
 } catch (err) {
   console.error('Backfill failed:', err)
   process.exitCode = 1

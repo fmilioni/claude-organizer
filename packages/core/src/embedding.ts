@@ -88,3 +88,32 @@ export async function embed(
   const vectors = await embedMany([text], kind)
   return vectors ? (vectors[0] ?? null) : null
 }
+
+/**
+ * Generic embedding backfill loop shared by the docs/cards/comments verticals.
+ * Pulls batches of `{ id, text }` still missing an embedding, embeds each
+ * (`passage`), and stores it. Idempotent; stops early (returning the count so
+ * far) the moment an embed yields `null` — embeddings are disabled/unavailable,
+ * so there's no point scanning the rest. The caller supplies the table-specific
+ * fetch (mapping its rows to id + content text) and store.
+ */
+export async function backfillEmbeddings(
+  batchSize: number,
+  fetchBatch: (limit: number) => Promise<Array<{ id: string, text: string }>>,
+  embedOne: (text: string) => Promise<number[] | null>,
+  store: (id: string, embedding: number[]) => Promise<unknown>
+): Promise<number> {
+  let total = 0
+  for (;;) {
+    const rows = await fetchBatch(batchSize)
+    if (rows.length === 0) break
+    for (const row of rows) {
+      const embedding = await embedOne(row.text)
+      if (!embedding) return total
+      await store(row.id, embedding)
+      total++
+    }
+    if (rows.length < batchSize) break
+  }
+  return total
+}
