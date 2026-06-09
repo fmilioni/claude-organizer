@@ -1,6 +1,7 @@
 export * from './auth'
 export * from './backup'
 export * from './commits'
+export * from './embedding'
 export * from './entities'
 export * from './enums'
 export * from './events'

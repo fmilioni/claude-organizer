@@ -20,3 +20,31 @@ export function orTsQuery(q: string): SQL {
 export function excludedTsQuery(q: string): SQL {
   return sql`excluded_tsquery('simple', ${q})`
 }
+
+export interface FusedRank<T> {
+  id: T
+  score: number
+}
+
+/**
+ * Reciprocal Rank Fusion: merge ranked id lists (each ordered best-first) into a
+ * single ranking by summing `1 / (k + rank)` across the lists an id appears in.
+ * Fuses signals on different scales (lexical ts_rank vs. cosine distance) without
+ * normalizing scores — only their per-list ranks matter. `k` (default 60, the
+ * canonical constant) damps the weight of top ranks. Result is sorted desc.
+ */
+export function reciprocalRankFusion<T>(
+  lists: T[][],
+  k = 60
+): FusedRank<T>[] {
+  const scores = new Map<T, number>()
+  for (const list of lists) {
+    for (let rank = 0; rank < list.length; rank++) {
+      const id = list[rank]!
+      scores.set(id, (scores.get(id) ?? 0) + 1 / (k + rank + 1))
+    }
+  }
+  return [...scores.entries()]
+    .map(([id, score]) => ({ id, score }))
+    .sort((a, b) => b.score - a.score)
+}

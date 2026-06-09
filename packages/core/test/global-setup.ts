@@ -12,7 +12,7 @@ export default async function setup({
 }: {
   provide: (key: 'databaseUrl', value: string) => void
 }) {
-  container = await new PostgreSqlContainer('postgres:16-alpine').start()
+  container = await new PostgreSqlContainer('pgvector/pgvector:pg16').start()
   const url = container.getConnectionUri()
 
   const { db, close } = createDb({ url, max: 1 })

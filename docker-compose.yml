@@ -16,7 +16,9 @@ x-db-env: &db-env
 
 services:
   postgres:
-    image: postgres:16-alpine
+    # pgvector overlay on postgres:16 — adds the `vector` extension for semantic
+    # search (CO-241). The prod overlay inherits this image (it only resets ports).
+    image: pgvector/pgvector:pg16
     container_name: claude-organizer-postgres
     restart: unless-stopped
     environment:

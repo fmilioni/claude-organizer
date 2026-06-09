@@ -3,7 +3,10 @@
 #   - migrate / api -> tsx (TS source + workspace deps)
 #   - mcp           -> node on its tsup bundle (dist/server.mjs)
 #   - web           -> node on the Nuxt/Nitro build output (.output)
-FROM node:20-alpine AS base
+# Debian (glibc), not alpine (musl): onnxruntime-node — the embedding runtime for
+# semantic search (CO-241) — ships glibc-only prebuilt bindings and won't load on
+# musl. Slim keeps the image lean while staying glibc.
+FROM node:20-slim AS base
 RUN corepack enable && corepack prepare pnpm@9.12.0 --activate
 WORKDIR /app
 

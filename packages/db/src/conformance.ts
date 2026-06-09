@@ -73,16 +73,16 @@ type Assert<T extends true> = T
  * Every entry must stay `true`. A mismatch makes the corresponding `Assert`
  * fail its `extends true` constraint, breaking the build. Exported so it counts
  * as used. The generated full-text search columns (`searchTsv` on cards,
- * `bodyTsv` on comments/docs) are not part of the API contract, so they are
- * excluded.
+ * `bodyTsv` on comments/docs) and the `embedding` vector are not part of the API
+ * contract, so they are excluded.
  */
 export type SchemaConformance = [
-  Assert<Equal<CardRow, Wire<Omit<InferSelectModel<typeof cards>, 'searchTsv'>>>>,
+  Assert<Equal<CardRow, Wire<Omit<InferSelectModel<typeof cards>, 'searchTsv' | 'embedding'>>>>,
   Assert<Equal<SprintRow, Wire<InferSelectModel<typeof sprints>>>>,
-  Assert<Equal<CommentRow, Wire<Omit<InferSelectModel<typeof comments>, 'bodyTsv'>>>>,
+  Assert<Equal<CommentRow, Wire<Omit<InferSelectModel<typeof comments>, 'bodyTsv' | 'embedding'>>>>,
   Assert<Equal<CardCommitRow, Wire<InferSelectModel<typeof cardCommits>>>>,
   Assert<Equal<CardClaimRow, Wire<InferSelectModel<typeof cardClaims>>>>,
-  Assert<Equal<DocRow, Wire<Omit<InferSelectModel<typeof docs>, 'bodyTsv'>>>>,
+  Assert<Equal<DocRow, Wire<Omit<InferSelectModel<typeof docs>, 'bodyTsv' | 'embedding'>>>>,
   Assert<Equal<ProjectRow, Wire<InferSelectModel<typeof projects>>>>,
   Assert<Equal<TagRow, Wire<InferSelectModel<typeof tags>>>>,
   Assert<Equal<RoadmapRow, Wire<InferSelectModel<typeof roadmaps>>>>,
