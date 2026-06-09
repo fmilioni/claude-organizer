@@ -23,6 +23,7 @@ import { InputError } from './errors'
 import { notify } from './events'
 import { pruneIntakeForDestroyedCards, syncIntakeForCard } from './intake'
 import { paginate } from './pagination'
+import { excludedTsQuery, orTsQuery } from './search'
 import { listCardTags, tagsByCardIds } from './tags'
 
 const cardStatus = z.enum([
@@ -229,7 +230,11 @@ export async function searchCards(
   // Without this, an empty query degenerates into ILIKE '%%' (matches every card).
   const q = query.trim()
   if (!q) return []
-  const tsQuery = sql`websearch_to_tsquery('simple', ${q})`
+  // OR-recall between terms: a card matches on ANY term, not all of them.
+  const tsQuery = orTsQuery(q)
+  // `-exclude` guard on the card's own text, across every recall branch. No-op
+  // without negation.
+  const excluded = excludedTsQuery(q)
   const term = `%${q}%`
   const cardRank = sql<number>`ts_rank(${schema.cards.searchTsv}, ${tsQuery})`
   const commentRank = sql<number>`coalesce((
@@ -239,9 +244,12 @@ export async function searchCards(
   ), 0)`
   const trgmSim = sql<number>`greatest(
     word_similarity(${q}, ${schema.cards.title}),
-    word_similarity(${q}, coalesce(${schema.cards.summary}, ''))
+    word_similarity(${q}, coalesce(${schema.cards.summary}, '')),
+    word_similarity(${q}, coalesce(${schema.cards.descriptionMd}, ''))
   )`
-  const rank = sql<number>`greatest(${cardRank}, ${commentRank}, ${trgmSim})`
+  // Full-text rank (best of card / comment) is the primary sort; trigram is only
+  // a tie-breaker, so a real full-text hit never loses to a pure typo match.
+  const rank = sql<number>`greatest(${cardRank}, ${commentRank})`
 
   const match = or(
     sql`${schema.cards.searchTsv} @@ ${tsQuery}`,
@@ -252,18 +260,21 @@ export async function searchCards(
     ilike(schema.cards.title, term),
     ilike(schema.cards.summary, term),
     ilike(schema.cards.key, term),
+    ilike(schema.cards.descriptionMd, term),
     sql`${q} <% ${schema.cards.title}`,
-    sql`${q} <% coalesce(${schema.cards.summary}, '')`
+    sql`${q} <% coalesce(${schema.cards.summary}, '')`,
+    sql`${q} <% coalesce(${schema.cards.descriptionMd}, '')`
   )
 
   const conditions = cardFilterConditions(db, projectId, filters)
   if (match) conditions.push(match)
+  conditions.push(sql`not (${schema.cards.searchTsv} @@ ${excluded})`)
 
   let search = db
     .select(cardSummaryColumns)
     .from(schema.cards)
     .where(and(...conditions))
-    .orderBy(desc(rank), desc(schema.cards.updatedAt))
+    .orderBy(desc(rank), desc(trgmSim), desc(schema.cards.updatedAt))
     .limit(filters.limit ?? 50)
     .$dynamic()
   if (filters.offset !== undefined) search = search.offset(filters.offset)

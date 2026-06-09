@@ -6,6 +6,7 @@ import { createId, type Database, schema } from '@claude-organizer/db'
 import type { ArchiveFilter } from './archive'
 import { notify } from './events'
 import { paginate } from './pagination'
+import { excludedTsQuery, orTsQuery } from './search'
 
 const docKind = z.enum(['module', 'adr', 'guide', 'note'])
 
@@ -197,16 +198,20 @@ export async function searchDocs(
   const q = query.trim()
   if (!q) return []
   // Full-text ranked via tsvector (config `simple`, language-agnostic).
-  // websearch_to_tsquery accepts free user input without throwing a syntax error.
-  const tsQuery = sql`websearch_to_tsquery('simple', ${q})`
+  // OR-recall between terms: a doc matches on ANY term, not all of them.
+  const tsQuery = orTsQuery(q)
+  // `-exclude` guard: drops docs containing a negated term, across every recall
+  // branch (not just full-text). No-op when the query has no negation.
+  const excluded = excludedTsQuery(q)
   const rank = sql<number>`ts_rank(${schema.docs.bodyTsv}, ${tsQuery})`
   // FTS `simple` matches whole tokens only; ILIKE covers substring/prefix and
-  // pg_trgm `<%` (word-similarity) covers typos on title/summary. ts_rank stays
-  // the primary sort; the trigram similarity is only a tie-breaker (additional
-  // recall), so it never outranks a real full-text hit.
+  // pg_trgm `<%` (word-similarity) covers typos — both over title/summary/body.
+  // ts_rank stays the primary sort; the trigram similarity is only a tie-breaker
+  // (additional recall), so it never outranks a real full-text hit.
   const trgmSim = sql<number>`greatest(
     word_similarity(${q}, ${schema.docs.title}),
-    word_similarity(${q}, coalesce(${schema.docs.summary}, ''))
+    word_similarity(${q}, coalesce(${schema.docs.summary}, '')),
+    word_similarity(${q}, coalesce(${schema.docs.bodyMd}, ''))
   )`
   const term = `%${q}%`
   return paginate(
@@ -220,9 +225,12 @@ export async function searchDocs(
             sql`${schema.docs.bodyTsv} @@ ${tsQuery}`,
             ilike(schema.docs.title, term),
             ilike(schema.docs.summary, term),
+            ilike(schema.docs.bodyMd, term),
             sql`${q} <% ${schema.docs.title}`,
-            sql`${q} <% coalesce(${schema.docs.summary}, '')`
-          )
+            sql`${q} <% coalesce(${schema.docs.summary}, '')`,
+            sql`${q} <% coalesce(${schema.docs.bodyMd}, '')`
+          ),
+          sql`not (${schema.docs.bodyTsv} @@ ${excluded})`
         )
       )
       .orderBy(desc(rank), desc(trgmSim), desc(schema.docs.updatedAt))

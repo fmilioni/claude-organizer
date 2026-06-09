@@ -81,6 +81,92 @@ describe('searchCards', () => {
     expect(results.map(r => r.title)).toContain('Kubernetes deployment guide')
   })
 
+  it('recovers a card via OR-recall when some query terms are absent', async () => {
+    const project = await freshProject(ctx.db)
+    const target = await createCard(ctx.db, {
+      projectId: project.id,
+      title: 'Pipeline de emissão fiscal NFC-e',
+      summary: 'gera o QR Code'
+    })
+    await createCard(ctx.db, {
+      projectId: project.id,
+      title: 'Tarefa sem relação',
+      summary: 'outro tema'
+    })
+
+    const results = await searchCards(
+      ctx.db,
+      project.id,
+      'NFC-e DANFCE fiscal QR Code PDF'
+    )
+    expect(results.map(r => r.id)).toContain(target!.id)
+  })
+
+  it('matches a card by comment via OR-recall when some terms are absent', async () => {
+    const project = await freshProject(ctx.db)
+    const card = await createCard(ctx.db, {
+      projectId: project.id,
+      title: 'Card neutro'
+    })
+    await addComment(ctx.db, {
+      cardId: card!.id,
+      author: 'user',
+      bodyMd: 'decidimos emitir o QR Code fiscal'
+    })
+
+    const results = await searchCards(
+      ctx.db,
+      project.id,
+      'NFC-e DANFCE fiscal QR Code PDF'
+    )
+    expect(results.map(r => r.id)).toContain(card!.id)
+    expect(
+      results.find(r => r.id === card!.id)?.matchedComment?.snippet
+    ).toMatch(/QR|Code|fiscal/i)
+  })
+
+  it('keeps a full-text hit ahead of a pure trigram/typo match', async () => {
+    const project = await freshProject(ctx.db)
+    await createCard(ctx.db, { projectId: project.id, title: 'deploy guide' })
+    // Only reachable via trigram ("kubernets" typo, "deployment" ≠ "deploy"):
+    // under the old recall-first rank its high word_similarity beat the real
+    // full-text hit; standardized rank now puts the full-text hit first.
+    await createCard(ctx.db, {
+      projectId: project.id,
+      title: 'Kubernetes deployment'
+    })
+
+    const results = await searchCards(ctx.db, project.id, 'kubernets deploy')
+    expect(results[0]?.title).toBe('deploy guide')
+  })
+
+  it('honors -exclude: keeps positives, drops cards with the negated term', async () => {
+    const project = await freshProject(ctx.db)
+    await createCard(ctx.db, { projectId: project.id, title: 'alpha included' })
+    await createCard(ctx.db, {
+      projectId: project.id,
+      title: 'alpha excluded',
+      descriptionMd: 'contém betaword'
+    })
+
+    const results = await searchCards(ctx.db, project.id, 'alpha -betaword')
+    const titles = results.map(r => r.title)
+    expect(titles).toContain('alpha included')
+    expect(titles).not.toContain('alpha excluded')
+  })
+
+  it('matches a description substring via ILIKE when title/summary do not', async () => {
+    const project = await freshProject(ctx.db)
+    const card = await createCard(ctx.db, {
+      projectId: project.id,
+      title: 'Card genérico',
+      descriptionMd: 'usa o operador supercalifragilistico'
+    })
+
+    const results = await searchCards(ctx.db, project.id, 'califragili')
+    expect(results.map(r => r.id)).toContain(card!.id)
+  })
+
   it('returns nothing for an empty/whitespace query', async () => {
     const project = await freshProject(ctx.db)
     await createCard(ctx.db, { projectId: project.id, title: 'qualquer card' })
