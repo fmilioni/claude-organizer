@@ -1,12 +1,13 @@
-import { and, asc, desc, eq, ilike, isNotNull, notInArray, or, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, ilike, inArray, isNotNull, isNull, notInArray, or, sql } from 'drizzle-orm'
 import { z } from 'zod'
 
 import { createId, type Database, schema } from '@claude-organizer/db'
 
 import type { ArchiveFilter } from './archive'
+import { embed } from './embedding'
 import { notify } from './events'
 import { paginate } from './pagination'
-import { excludedTsQuery, orTsQuery } from './search'
+import { excludedTsQuery, hybridOrder, orTsQuery, toVectorParam, vectorK } from './search'
 
 const docKind = z.enum(['module', 'adr', 'guide', 'note'])
 
@@ -101,6 +102,15 @@ async function archivedDocSubtreeIds(
   return rows.map(r => r.id)
 }
 
+/** Text embedded for semantic search — title + summary + body (e5 `passage:`). */
+function docContentText(d: {
+  title: string
+  summary?: string | null
+  bodyMd?: string | null
+}): string {
+  return [d.title, d.summary, d.bodyMd].filter(Boolean).join('\n')
+}
+
 export async function getDoc(db: Database, id: string) {
   const [row] = await db
     .select(docDetailColumns)
@@ -112,6 +122,7 @@ export async function getDoc(db: Database, id: string) {
 
 export async function createDoc(db: Database, input: CreateDocInput) {
   const parsed = createDocInput.parse(input)
+  const embedding = await embed(docContentText(parsed), 'passage')
   const [row] = await db
     .insert(schema.docs)
     .values({
@@ -122,7 +133,8 @@ export async function createDoc(db: Database, input: CreateDocInput) {
       summary: parsed.summary,
       bodyMd: parsed.bodyMd,
       kind: parsed.kind ?? 'note',
-      position: parsed.position ?? 0
+      position: parsed.position ?? 0,
+      embedding
     })
     .returning(docDetailColumns)
   if (row) {
@@ -140,6 +152,16 @@ export async function updateDoc(db: Database, input: UpdateDocInput) {
     .where(eq(schema.docs.id, id))
     .returning(docDetailColumns)
   if (row) {
+    // Re-embed off the merged row (the patch is partial) only when an embedded
+    // field changed; a metadata-only edit keeps the existing vector. Only
+    // overwrite on a successful embed — a transient failure (null) must not wipe
+    // a valid vector (search would silently lose this doc until a backfill).
+    if (rest.title !== undefined || rest.summary !== undefined || rest.bodyMd !== undefined) {
+      const embedding = await embed(docContentText(row), 'passage')
+      if (embedding) {
+        await db.update(schema.docs).set({ embedding }).where(eq(schema.docs.id, id))
+      }
+    }
     await notify(db, { type: 'doc.changed', projectId: row.projectId, docId: row.id })
   }
   return row ?? null
@@ -187,6 +209,19 @@ export async function destroyDoc(db: Database, id: string) {
   return row ?? null
 }
 
+// Candidate cap for the HYBRID path only (lexical-only search stays uncapped).
+// Bounds the lexical list fed to RRF; generous so deep-ish pagination still has
+// ranked rows. A project rarely has >200 doc matches for one query.
+const LEXICAL_POOL = 200
+
+/**
+ * Hybrid search over docs: the lexical ranking (FTS + substring/typo recall +
+ * `-exclude`, unchanged from CO-239) fused by RRF with a vector KNN (cosine) over
+ * the doc embedding. A query with no lexical overlap still recovers the doc via
+ * the vector signal; exact lexical queries keep their ranking. Degrades to
+ * lexical-only when the query can't be embedded (model off/unavailable). Returns
+ * the same `docListColumns` rows, paginated.
+ */
 export async function searchDocs(
   db: Database,
   projectId: string,
@@ -197,45 +232,120 @@ export async function searchDocs(
   // Without this, a whitespace-only query degenerates into ILIKE '%   %' (matches all).
   const q = query.trim()
   if (!q) return []
-  // Full-text ranked via tsvector (config `simple`, language-agnostic).
-  // OR-recall between terms: a doc matches on ANY term, not all of them.
+  // OR-recall between terms (a doc matches on ANY term); `-exclude` guard drops
+  // negated terms across every recall branch. No-op when the query has no negation.
   const tsQuery = orTsQuery(q)
-  // `-exclude` guard: drops docs containing a negated term, across every recall
-  // branch (not just full-text). No-op when the query has no negation.
   const excluded = excludedTsQuery(q)
   const rank = sql<number>`ts_rank(${schema.docs.bodyTsv}, ${tsQuery})`
   // FTS `simple` matches whole tokens only; ILIKE covers substring/prefix and
   // pg_trgm `<%` (word-similarity) covers typos — both over title/summary/body.
-  // ts_rank stays the primary sort; the trigram similarity is only a tie-breaker
-  // (additional recall), so it never outranks a real full-text hit.
+  // ts_rank stays primary; the trigram similarity is only a tie-breaker.
   const trgmSim = sql<number>`greatest(
     word_similarity(${q}, ${schema.docs.title}),
     word_similarity(${q}, coalesce(${schema.docs.summary}, '')),
     word_similarity(${q}, coalesce(${schema.docs.bodyMd}, ''))
   )`
   const term = `%${q}%`
-  return paginate(
-    db
-      .select(docListColumns)
-      .from(schema.docs)
-      .where(
-        and(
-          eq(schema.docs.projectId, projectId),
-          or(
-            sql`${schema.docs.bodyTsv} @@ ${tsQuery}`,
-            ilike(schema.docs.title, term),
-            ilike(schema.docs.summary, term),
-            ilike(schema.docs.bodyMd, term),
-            sql`${q} <% ${schema.docs.title}`,
-            sql`${q} <% coalesce(${schema.docs.summary}, '')`,
-            sql`${q} <% coalesce(${schema.docs.bodyMd}, '')`
-          ),
-          sql`not (${schema.docs.bodyTsv} @@ ${excluded})`
-        )
-      )
-      .orderBy(desc(rank), desc(trgmSim), desc(schema.docs.updatedAt))
-      .$dynamic(),
-    limit,
-    offset
+  const notExcluded = sql`not (${schema.docs.bodyTsv} @@ ${excluded})`
+  const lexicalWhere = and(
+    eq(schema.docs.projectId, projectId),
+    or(
+      sql`${schema.docs.bodyTsv} @@ ${tsQuery}`,
+      ilike(schema.docs.title, term),
+      ilike(schema.docs.summary, term),
+      ilike(schema.docs.bodyMd, term),
+      sql`${q} <% ${schema.docs.title}`,
+      sql`${q} <% coalesce(${schema.docs.summary}, '')`,
+      sql`${q} <% coalesce(${schema.docs.bodyMd}, '')`
+    ),
+    notExcluded
   )
+  const lexicalOrder = [desc(rank), desc(trgmSim), desc(schema.docs.updatedAt)]
+
+  const queryVec = await embed(q, 'query')
+  // Lexical-only fallback (model off/unavailable): keep the original uncapped,
+  // directly-paginated contract — no candidate pool, no re-fetch.
+  if (!queryVec) {
+    return paginate(
+      db
+        .select(docListColumns)
+        .from(schema.docs)
+        .where(lexicalWhere)
+        .orderBy(...lexicalOrder)
+        .$dynamic(),
+      limit,
+      offset
+    )
+  }
+
+  // Hybrid: bounded lexical pool ⊕ vector top-K (cosine KNN), fused by RRF.
+  const lexicalRows = await db
+    .select({ id: schema.docs.id })
+    .from(schema.docs)
+    .where(lexicalWhere)
+    .orderBy(...lexicalOrder)
+    .limit(LEXICAL_POOL)
+  const param = toVectorParam(queryVec)
+  const vecRows = await db
+    .select({ id: schema.docs.id })
+    .from(schema.docs)
+    .where(
+      and(
+        eq(schema.docs.projectId, projectId),
+        isNotNull(schema.docs.embedding),
+        notExcluded
+      )
+    )
+    .orderBy(sql`${schema.docs.embedding} <=> ${param}::vector`)
+    .limit(vectorK())
+
+  const ordered = hybridOrder(
+    lexicalRows.map(r => r.id),
+    vecRows.map(r => r.id)
+  )
+  const start = offset ?? 0
+  const pageIds = limit !== undefined ? ordered.slice(start, start + limit) : ordered.slice(start)
+  if (pageIds.length === 0) return []
+  const rows = await db
+    .select(docListColumns)
+    .from(schema.docs)
+    .where(inArray(schema.docs.id, pageIds))
+  const byId = new Map(rows.map(r => [r.id, r]))
+  return pageIds.map(id => byId.get(id)).filter(row => row !== undefined)
+}
+
+/**
+ * Backfill embeddings for docs missing one (post-deploy, or after a model/dim
+ * change). Idempotent — only fills `embedding is null` rows, in batches. A no-op
+ * when embeddings are disabled. Returns the count embedded.
+ */
+export async function backfillDocEmbeddings(
+  db: Database,
+  batchSize = 50
+): Promise<number> {
+  let total = 0
+  for (;;) {
+    const rows = await db
+      .select({
+        id: schema.docs.id,
+        title: schema.docs.title,
+        summary: schema.docs.summary,
+        bodyMd: schema.docs.bodyMd
+      })
+      .from(schema.docs)
+      .where(isNull(schema.docs.embedding))
+      .limit(batchSize)
+    if (rows.length === 0) break
+    for (const row of rows) {
+      const embedding = await embed(docContentText(row), 'passage')
+      if (!embedding) return total // embeddings disabled/unavailable — stop early
+      await db
+        .update(schema.docs)
+        .set({ embedding })
+        .where(eq(schema.docs.id, row.id))
+      total++
+    }
+    if (rows.length < batchSize) break
+  }
+  return total
 }

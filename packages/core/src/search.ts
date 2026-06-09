@@ -48,3 +48,32 @@ export function reciprocalRankFusion<T>(
     .map(([id, score]) => ({ id, score }))
     .sort((a, b) => b.score - a.score)
 }
+
+/** pgvector text literal (`[a,b,c]`) for a KNN query param (`… <=> $1::vector`). */
+export function toVectorParam(vec: number[]): string {
+  return `[${vec.join(',')}]`
+}
+
+/**
+ * How many nearest neighbours the vector branch contributes to the fusion
+ * (`EMBEDDING_VECTOR_K`, default 10). e5's high cosine baseline makes an absolute
+ * distance threshold unreliable (measured: related ~0.09–0.15 vs unrelated
+ * ~0.16–0.18 — overlapping), so the bound is a small top-K by rank, not a cutoff:
+ * the true semantic hit ranks first and surfaces, while the far tail is capped.
+ */
+export function vectorK(): number {
+  const raw = process.env.EMBEDDING_VECTOR_K?.trim()
+  const n = raw ? Number(raw) : 10
+  return Number.isInteger(n) && n > 0 ? n : 10
+}
+
+/**
+ * Final id order for a hybrid search: fuse the lexical and vector rankings by RRF.
+ * The lexical list is passed first so it wins score ties — RRF sums into a Map
+ * (insertion-ordered) and the sort is stable, so an exact lexical hit never loses
+ * to a vector-only hit on an equal RRF score. (Callers take the lexical-only path
+ * when the query can't be embedded, so both lists are always present here.)
+ */
+export function hybridOrder(lexicalIds: string[], vectorIds: string[]): string[] {
+  return reciprocalRankFusion([lexicalIds, vectorIds]).map(f => f.id)
+}
