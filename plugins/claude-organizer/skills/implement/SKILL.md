@@ -76,6 +76,15 @@ Build the card, following the repo's `CLAUDE.md` and the agreed git flow (see _G
 
 This is the **source** of the clean-code rule; the review gate (step 7) only catches what slips through — a safety net, not where cleanup is born.
 
+**Self-review before you hand off.** Before you treat the card as built, read your **own diff back with fresh eyes**. You're the worst judge of code you just wrote — but an honest quick pass still catches the easy misses, and that's far cheaper than spending the review gate on them. Check:
+
+- **Acceptance criteria** — does the change meet **every** criterion the card states, not just the headline one?
+- **YAGNI / discipline** — did you build **only** what was asked — nothing speculative or extra — following the codebase's existing patterns?
+- **Quality** — do names say what things do; is the code clean; did you leave a comment the gate will only flag?
+- **Verification** — do your checks actually exercise the **behavior**, not just a happy-path smoke?
+
+Fix what you find **inline**, now. This does **not** replace the per-task review gate (step 7) — the fresh subagent stays mandatory because your confidence is exactly what it exists to test; the self-review just keeps the obvious from reaching it.
+
 ### 5. Record signal as comments
 
 As you work, **`add_comment(cardId, …)`** for what carries **signal** — decisions and why, scope changes, deviations from what the card asked, domain insights, edge cases. Skip noise (the plan, narration, "typecheck passed"). The signal-vs-noise criterion lives in the **`claude-organizer`** skill — follow it. This is the project's memory for the next session.
@@ -164,7 +173,7 @@ Per card, in order — no step skipped. **Standing rule: never assume — any am
 1. Re-read the board → `claim_task` (conflict → ask, then take-over) → `in_progress` (history too, if a sub-task).
 2. `list_comments(cardId)` (read-only) — even if read before; `mark_comments_read` once you've addressed them.
 3. Read the relevant docs.
-4. Implement — clean code, no needless comments; hit a doubt → stop and ask.
+4. Implement — clean code, no needless comments; hit a doubt → stop and ask; then self-review your own diff with fresh eyes before handing off (doesn't replace the gate).
 5. Comment the signal.
 6. `review` status + test-plan comment + `attach-worktree-diff` → wait for validation.
 7. Per-task review gate (fresh subagent; skip only if trivial) → fixes fold in → re-run `attach-worktree-diff`.

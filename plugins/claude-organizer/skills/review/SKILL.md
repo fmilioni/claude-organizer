@@ -42,11 +42,11 @@ Both gates are **mandatory** and the `implement` skill fires them automatically 
 
 > **On comments:** the `implement` skill already requires code to be written without needless comments from the start, so the reviewer treats comment noise as a **safety net** — flagging what slipped through, not running a cleanup the implementer should never have left for it.
 
-## How — dispatch the `card-reviewer` agent
+## How — dispatch the `reviewer` agent
 
 Do **not** review in this context. Spawn a **fresh subagent** per pass, starting from a clean slate.
 
-**Use the dedicated `claude-organizer:card-reviewer` agent** (`Agent` tool, `subagent_type: "claude-organizer:card-reviewer"`). It is **read-only by construction** — its tool roster has no `Edit`/`Write` and no board-write MCP tools, so it physically **cannot** fix code or touch the board, only read code + git + the board and report. The full review **mandate** (scope discipline, the checks, the output format) lives in the **agent definition** — this skill doesn't restate it; it just hands the agent the scope and the changeset:
+**Use the dedicated `claude-organizer:reviewer` agent** (`Agent` tool, `subagent_type: "claude-organizer:reviewer"`). It is **read-only by construction** — its tool roster has no `Edit`/`Write` and no board-write MCP tools, so it physically **cannot** fix code or touch the board, only read code + git + the board and report. The full review **mandate** (scope discipline, the checks, the output format) lives in the **agent definition** — this skill doesn't restate it; it just hands the agent the scope and the changeset:
 
 - **The card** — the **card id or key** (e.g. `CO-42`) **and the scope** (per-task / story / standalone). The agent pulls the card itself (`get_card` / `get_card_by_key` + `list_comments`; for a story, the parent **and all children**), so it has the acceptance criteria and constraints straight from the source.
 - **The changeset spec** — how to see exactly the code in scope (it runs the git itself; don't paste diffs):
@@ -55,7 +55,7 @@ Do **not** review in this context. Spawn a **fresh subagent** per pass, starting
 
 The agent returns a structured report — **Acceptance criteria** (met/partial/not-met per criterion, with evidence), **Findings** (typed, ordered by severity, with `file:line` + fix + severity), and a one-line **Verdict** — as data, not prose. It **finds and reports**; it does not fix and does not touch the board.
 
-> If `subagent_type: "claude-organizer:card-reviewer"` isn't resolvable in this environment (agent not loaded), fall back to `general-purpose` and paste the mandate from `agents/card-reviewer.md` into the prompt — but prefer the named agent, so the read-only roster is enforced.
+> If `subagent_type: "claude-organizer:reviewer"` isn't resolvable in this environment (agent not loaded), fall back to `general-purpose` and paste the mandate from `agents/reviewer.md` into the prompt — but prefer the named agent, so the read-only roster is enforced.
 
 ## After the subagent returns — report, then ask
 
