@@ -66,6 +66,14 @@ overrides below, and points to the docs for the rest.
   `attach-commit` / `attach-worktree-diff` scripts need a card-scoped token. Mint
   `issue_commit_token(<CO-N>)` and pass it as `CO_COMMIT_TOKEN=<token> pnpm
   attach-… <arg>` (one token per attach).
+  - **Run from the repo root.** `attach-commit` / `attach-worktree-diff` are
+    **root** `package.json` scripts. If the shell's cwd drifted into a package
+    (e.g. a prior `cd packages/core`), `pnpm attach-…` fails with *"Command not
+    found"* (pnpm looks in that package) and the bundled `node …/scripts/*.mjs`
+    path breaks too (it's relative to root). So `cd` back to the repo root first,
+    or prefix the command with the absolute root path — then run
+    `CO_COMMIT_TOKEN=<token> pnpm attach-commit <sha>` /
+    `pnpm attach-worktree-diff <CO-N>`.
 - **Versioning**: every version (each `package.json`, the plugin manifests and
   the MCP server) stays in sync — to set it, run `pnpm bump <version>` (the
   unified bump script); never edit version fields by hand.
