@@ -14,6 +14,16 @@ store.ensureLoaded()
 
 const version = useRuntimeConfig().public.appVersion
 
+// First load follows the OS (preference stays 'system' until an explicit pick);
+// @nuxt/ui ships @nuxtjs/color-mode, so the value/preference persist on their own.
+const colorMode = useColorMode()
+const isDark = computed(() => colorMode.value === 'dark')
+const themeLabel = computed(() => (isDark.value ? 'Dark mode' : 'Light mode'))
+const themeIcon = computed(() => (isDark.value ? 'i-lucide-moon' : 'i-lucide-sun'))
+function toggleTheme() {
+  colorMode.preference = isDark.value ? 'light' : 'dark'
+}
+
 // Admin, or sem-auth mode (an open board has no admin to gate). The same gate the
 // settings page applies to system actions — here it drives both project creation
 // and whether the system-config section is visible at all.
@@ -55,11 +65,25 @@ const systemLinks = computed<NavigationMenuItem[]>(() => [
   ...(isAdmin.value
     ? [{ label: 'Users', icon: 'i-lucide-users', to: '/admin/users' }]
     : []),
-  { label: 'Settings', icon: 'i-lucide-settings', to: '/settings' }
+  { label: 'Settings', icon: 'i-lucide-settings', to: '/settings' },
+  // No-auth mode has no user menu, so the theme toggle rides the system menu here
+  // (open mode always renders it); logged in, the toggle lives in the user menu.
+  ...(!user.value
+    ? [{ label: themeLabel.value, icon: themeIcon.value, onSelect: () => toggleTheme() }]
+    : [])
 ])
 
 const accountItems = computed<DropdownMenuItem[][]>(() => [
   [{ label: user.value?.email ?? '', type: 'label' }],
+  [{
+    label: themeLabel.value,
+    icon: themeIcon.value,
+    // preventDefault keeps the menu open so you can see the theme flip.
+    onSelect: (e: Event) => {
+      e.preventDefault()
+      toggleTheme()
+    }
+  }],
   [{ label: 'Log out', icon: 'i-lucide-log-out', onSelect: onLogout }]
 ])
 
