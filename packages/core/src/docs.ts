@@ -221,12 +221,16 @@ export async function searchDocs(
   db: Database,
   projectId: string,
   query: string,
-  limit?: number,
-  offset?: number
+  opts: { includeArchived?: boolean, limit?: number, offset?: number } = {}
 ) {
+  const { includeArchived = false, limit, offset } = opts
   // Without this, a whitespace-only query degenerates into ILIKE '%   %' (matches all).
   const q = query.trim()
   if (!q) return []
+  // Mirror listDocs: archived docs (and their subtree) are out of search unless
+  // the caller opts in — without this they'd leak into every search result.
+  const hidden = includeArchived ? [] : await archivedDocSubtreeIds(db, projectId)
+  const notArchived = hidden.length > 0 ? notInArray(schema.docs.id, hidden) : undefined
   // OR-recall between terms (a doc matches on ANY term); `-exclude` guard drops
   // negated terms across every recall branch. No-op when the query has no negation.
   const tsQuery = orTsQuery(q)
@@ -253,7 +257,8 @@ export async function searchDocs(
       sql`${q} <% coalesce(${schema.docs.summary}, '')`,
       sql`${q} <% coalesce(${schema.docs.bodyMd}, '')`
     ),
-    notExcluded
+    notExcluded,
+    notArchived
   )
   const lexicalOrder = [desc(rank), desc(trgmSim), desc(schema.docs.updatedAt)]
 
@@ -288,7 +293,8 @@ export async function searchDocs(
       and(
         eq(schema.docs.projectId, projectId),
         isNotNull(schema.docs.embedding),
-        notExcluded
+        notExcluded,
+        notArchived
       )
     )
     .orderBy(sql`${schema.docs.embedding} <=> ${param}::vector`)

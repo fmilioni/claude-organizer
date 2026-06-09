@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { createDoc, searchDocs } from '../src/index'
+import { archiveDoc, createDoc, searchDocs } from '../src/index'
 import { freshProject, useTestDb } from './helpers'
 
 const ctx = useTestDb()
@@ -142,5 +142,20 @@ describe('docs full-text search', () => {
 
     expect(await searchDocs(ctx.db, p2.id, 'palavrachave')).toHaveLength(0)
     expect(await searchDocs(ctx.db, p1.id, 'palavrachave')).toHaveLength(1)
+  })
+
+  it('excludes archived docs by default, includes them on opt-in', async () => {
+    const project = await freshProject(ctx.db)
+    const doc = await createDoc(ctx.db, {
+      projectId: project.id,
+      title: 'Doc arquivado',
+      bodyMd: 'termoraro só no corpo'
+    })
+    await archiveDoc(ctx.db, doc!.id)
+
+    expect(await searchDocs(ctx.db, project.id, 'termoraro')).toHaveLength(0)
+    expect(
+      await searchDocs(ctx.db, project.id, 'termoraro', { includeArchived: true })
+    ).toHaveLength(1)
   })
 })

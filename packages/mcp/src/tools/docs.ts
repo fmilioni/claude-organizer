@@ -63,11 +63,23 @@ export function registerDocTools(server: McpServer, db: Database) {
     'search_docs',
     {
       description:
-        'Full-text search docs of a project (title/summary/body), ranked by relevance via Postgres tsvector. Supports web-style queries (quoted phrases, OR, -exclude). Returns metadata WITHOUT bodyMd; use read_doc for full content. Pages with limit/offset; response is { docs, hasMore, offset }.',
-      inputSchema: { projectId: z.string(), query: z.string().min(1), ...pageInputs }
+        'Full-text search docs of a project (title/summary/body), ranked by relevance via Postgres tsvector. Supports web-style queries (quoted phrases, OR, -exclude). Archived docs (and their subtree) are excluded by default — set includeArchived to search them too. Returns metadata WITHOUT bodyMd; use read_doc for full content. Pages with limit/offset; response is { docs, hasMore, offset }.',
+      inputSchema: {
+        projectId: z.string(),
+        query: z.string().min(1),
+        includeArchived: z
+          .boolean()
+          .optional()
+          .describe('Search archived docs (and their subtree) too; off by default.'),
+        ...pageInputs
+      }
     },
-    async ({ projectId, query, limit, offset }) => {
-      const rows = await searchDocs(db, projectId, query, limit + 1, offset)
+    async ({ projectId, query, includeArchived, limit, offset }) => {
+      const rows = await searchDocs(db, projectId, query, {
+        includeArchived,
+        limit: limit + 1,
+        offset
+      })
       return asJson(pageEnvelope('docs', rows, limit, offset))
     }
   )

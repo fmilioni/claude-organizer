@@ -50,14 +50,60 @@ onScopeDispose(stopResize)
 
 const tree = computed(() => buildDocTree(docs.value))
 
-const filteredDocs = computed(() => {
-  if (!search.value.trim()) return docs.value
-  const q = search.value.toLowerCase()
-  return docs.value.filter(d => d.title.toLowerCase().includes(q))
+const term = computed(() => search.value.trim())
+
+const filteredTree = computed(() => (term.value ? null : tree.value))
+
+const searchResults = ref<DocSummary[]>([])
+const searching = ref(false)
+const searched = ref(false)
+
+// A monotonic ticket discards out-of-order responses (same guard as search.vue).
+let ticket = 0
+let searchTimer: ReturnType<typeof setTimeout> | undefined
+
+async function runDocSearch(value: string, projectId: string) {
+  const mine = ++ticket
+  searching.value = true
+  try {
+    const data = await api<DocSummary[]>('/docs', {
+      query: { projectId, q: value }
+    })
+    if (mine !== ticket) return
+    searchResults.value = data
+    searched.value = true
+  } catch {
+    if (mine === ticket) {
+      searchResults.value = []
+      searched.value = true
+    }
+  } finally {
+    if (mine === ticket) searching.value = false
+  }
+}
+
+watch(term, (value) => {
+  if (searchTimer) clearTimeout(searchTimer)
+  const projectId = currentProjectId.value
+  if (!value || !projectId) {
+    ticket++
+    searchResults.value = []
+    searching.value = false
+    searched.value = false
+    return
+  }
+  searching.value = true
+  searchTimer = setTimeout(() => void runDocSearch(value, projectId), 250)
 })
-const filteredTree = computed(() =>
-  search.value.trim() ? null : tree.value
-)
+
+// Switching project must not leave another project's results on screen.
+watch(currentProjectId, () => {
+  search.value = ''
+})
+
+onBeforeUnmount(() => {
+  if (searchTimer) clearTimeout(searchTimer)
+})
 
 async function loadDocs() {
   if (!currentProjectId.value) {
@@ -263,6 +309,7 @@ async function onDocRemoved() {
               placeholder="Search docs…"
               size="sm"
               class="w-full"
+              :loading="searching"
             />
           </div>
           <div class="flex-1 overflow-y-auto p-2">
@@ -280,8 +327,14 @@ async function onDocRemoved() {
               />
             </template>
             <template v-else>
+              <p
+                v-if="searched && !searching && !searchResults.length"
+                class="text-sm text-muted/60 italic p-2"
+              >
+                No docs match "{{ term }}".
+              </p>
               <button
-                v-for="d in filteredDocs"
+                v-for="d in searchResults"
                 :key="d.id"
                 type="button"
                 class="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-sm text-left hover:bg-elevated/50"

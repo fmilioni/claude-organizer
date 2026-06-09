@@ -27,7 +27,11 @@ const listDocsQuery = z.object({
 export function registerDocRoutes(app: FastifyInstance, db: Database) {
   app.get('/docs', async (req) => {
     const query = listDocsQuery.parse(req.query)
-    if (query.q) return searchDocs(db, query.projectId, query.q)
+    if (query.q) {
+      return searchDocs(db, query.projectId, query.q, {
+        includeArchived: query.includeArchived
+      })
+    }
     return listDocs(db, query.projectId, query.kind, {
       includeArchived: query.includeArchived,
       archivedOnly: query.archivedOnly
