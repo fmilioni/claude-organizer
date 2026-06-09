@@ -147,6 +147,7 @@ const plannedCompleted = computed(() => planned.value.filter(i => i.completed))
     <template #header>
       <UDashboardNavbar title="Inbox">
         <template #leading>
+          <UDashboardSidebarCollapse />
           <UIcon name="i-lucide-inbox" class="text-primary" />
         </template>
         <template #right>

@@ -216,6 +216,7 @@ async function restoreCard(cardId: string) {
         :ui="{ left: 'flex-1 min-w-0', title: 'flex-1 min-w-0' }"
       >
         <template #leading>
+          <UDashboardSidebarCollapse />
           <UButton
             icon="i-lucide-arrow-left"
             color="neutral"

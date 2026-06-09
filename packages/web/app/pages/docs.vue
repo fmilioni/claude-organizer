@@ -265,6 +265,7 @@ async function onDocRemoved() {
     <template #header>
       <UDashboardNavbar title="Docs">
         <template #leading>
+          <UDashboardSidebarCollapse />
           <UIcon name="i-lucide-book" class="text-primary" />
         </template>
         <template #right>

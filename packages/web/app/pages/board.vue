@@ -141,6 +141,7 @@ async function onMoveToBacklog(cardId: string) {
     <template #header>
       <UDashboardNavbar title="Board" :ui="{ left: 'flex-1 min-w-0' }">
         <template #leading>
+          <UDashboardSidebarCollapse />
           <UIcon name="i-lucide-kanban" class="text-primary" />
         </template>
         <template #right>

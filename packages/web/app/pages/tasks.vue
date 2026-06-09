@@ -167,6 +167,7 @@ const isEmpty = computed(
     <template #header>
       <UDashboardNavbar title="Tasks">
         <template #leading>
+          <UDashboardSidebarCollapse />
           <UIcon name="i-lucide-list-todo" class="text-primary" />
         </template>
         <template #right>

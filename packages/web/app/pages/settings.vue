@@ -109,6 +109,7 @@ function openProject(slug: string) {
     <template #header>
       <UDashboardNavbar title="Settings">
         <template #leading>
+          <UDashboardSidebarCollapse />
           <UIcon name="i-lucide-settings" class="text-primary" />
         </template>
       </UDashboardNavbar>
