@@ -63,7 +63,7 @@ export function registerDocTools(server: McpServer, db: Database) {
     'search_docs',
     {
       description:
-        'Full-text search docs of a project (title/summary/body), ranked by relevance via Postgres tsvector. Supports web-style queries (quoted phrases, OR, -exclude). Archived docs (and their subtree) are excluded by default — set includeArchived to search them too. Returns metadata WITHOUT bodyMd; use read_doc for full content. Pages with limit/offset; response is { docs, hasMore, offset }.',
+        'Hybrid semantic search over a project\'s docs (title/summary/body): lexical full-text (Postgres tsvector) fused with embedding similarity by RRF, so it ranks by MEANING — a conceptual / natural-language query matches the right doc even when the wording differs, and synonyms/typos still hit (falls back to lexical-only when embeddings are unavailable). Web-style queries (quoted phrases, OR, -exclude) and substring/trigram matching still work. Archived docs (and their subtree) are excluded by default — set includeArchived to search them too. Returns metadata WITHOUT bodyMd; use read_doc for full content. Pages with limit/offset; response is { docs, hasMore, offset }.',
       inputSchema: {
         projectId: z.string(),
         query: z.string().min(1),

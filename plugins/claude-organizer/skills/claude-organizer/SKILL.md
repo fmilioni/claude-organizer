@@ -45,7 +45,7 @@ The board grows; an unfiltered read burns context (a bare `list_cards` on a matu
 
 - **Filter, don't dump.** Prefer a filtered `list_cards` (the focused filters above) over the broad listing — reach for the unfiltered panorama only when you genuinely need it.
 - **Have a key? Go straight to it.** With a `CO-N` in hand, `get_card_by_key` (or `get_card` by id) instead of listing to find it; for a handful of known keys, `get_cards` fetches them in one call.
-- **Searching the past?** On a large board, `search_cards` matches title/summary/description **and comments** (ranked, with a snippet) — far better than scanning sprint by sprint.
+- **Searching the past?** `search_cards` (cards + comments) and `search_docs` are **hybrid semantic search** — lexical full-text **fused with embedding similarity** (RRF), so they match by **meaning**, not just the exact words. A **conceptual / natural-language query** ("how auth tokens get refreshed") finds the right card/doc even when its wording differs, and synonyms/typos still hit (it degrades to plain lexical search when embeddings aren't available) — so describe what you're after, don't burn turns guessing the one exact keyword. Ranked, with a snippet; far better than scanning sprint by sprint.
 - **Order of discovery — which tool answers which question:** architecture/decisions → `search_docs`; a prior card or its comments → `search_cards`; unread user feedback → `list_unread_comments` (session start). Pick the tool before you start listing.
 - **Don't over-read.** `get_card` / `list_comments` only for the cards you'll actually touch — don't walk the whole board "just to be safe".
 
