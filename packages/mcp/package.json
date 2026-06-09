@@ -23,6 +23,7 @@
     "@claude-organizer/core": "workspace:*",
     "@claude-organizer/db": "workspace:*",
     "@claude-organizer/shared": "workspace:*",
+    "@huggingface/transformers": "4.2.0",
     "@modelcontextprotocol/sdk": "1.29.0",
     "better-auth": "1.6.11",
     "zod": "4.4.3"
