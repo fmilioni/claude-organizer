@@ -21,6 +21,7 @@ import {
 } from '@claude-organizer/core'
 import type { Database } from '@claude-organizer/db'
 import type { AuthCapabilities, SessionUser } from '@claude-organizer/shared'
+import { resolveEmbeddingConfig } from '@claude-organizer/shared'
 
 // Bridge Fastify ↔ web Request/Response (instead of toNodeHandler + hijack) so
 // the @fastify/cors hook still applies to better-auth's responses — a hijacked
@@ -93,12 +94,18 @@ export function registerAuthRoutes(
 
   app.get('/auth/capabilities', async (): Promise<AuthCapabilities> => {
     const settings = await getSystemSettings(db)
+    const embedding = resolveEmbeddingConfig(undefined, settings.embeddingModel)
     return {
       emailPassword: isEmailPasswordEnabled(),
       github: isGithubConfigured(),
       hasUsers: await hasAnyUser(db),
       authEnabled: settings.authEnabled,
-      keepDiffsOnArchive: settings.keepDiffsOnArchive
+      keepDiffsOnArchive: settings.keepDiffsOnArchive,
+      embedding: {
+        model: embedding.model,
+        dim: embedding.dim,
+        enabled: embedding.model !== null
+      }
     }
   })
 

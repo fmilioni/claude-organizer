@@ -3,6 +3,7 @@ import websocket from '@fastify/websocket'
 import Fastify from 'fastify'
 
 import { createAuth, getTrustedOrigins } from '@claude-organizer/auth'
+import { primeEmbeddingRuntime } from '@claude-organizer/core'
 import { createDb } from '@claude-organizer/db'
 
 import { registerAuthEnforcement } from './plugins/auth-enforcement'
@@ -35,6 +36,12 @@ const { db, close } = createDb({ url: databaseUrl })
 const auth = createAuth(db)
 
 const app = Fastify({ logger: true })
+
+// Push the persisted embedding choice into the process runtime (persisted > env).
+// Resilient: a failure here (e.g. DB not migrated yet) just leaves env/default.
+await primeEmbeddingRuntime(db).catch((err) => {
+  app.log.warn({ err }, 'embedding runtime prime failed; using env/default')
+})
 
 // Without a secret better-auth signs sessions with a predictable derived key —
 // forgeable tokens. Refuse to boot in production; warn loudly otherwise.

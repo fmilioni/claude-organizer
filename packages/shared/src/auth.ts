@@ -22,6 +22,13 @@ export interface AuthCapabilities {
   authEnabled: boolean
   // true = preserve attached diffs when archiving a card/sprint.
   keepDiffsOnArchive: boolean
+  // Effective embedding config (persisted choice > env > default). `model: null`
+  // ⇒ semantic search off (lexical-only); `dim` is always set.
+  embedding: {
+    model: string | null
+    dim: number
+    enabled: boolean
+  }
 }
 
 // A user as listed on the admin management page — every account with its

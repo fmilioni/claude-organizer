@@ -155,6 +155,7 @@ export interface SystemSettingsRow {
   id: string
   authEnabled: boolean
   keepDiffsOnArchive: boolean
+  embeddingModel: string | null
   createdAt: string
   updatedAt: string
 }

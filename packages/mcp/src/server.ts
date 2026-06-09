@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { primeEmbeddingRuntime } from '@claude-organizer/core'
 import { createDb } from '@claude-organizer/db'
 
 import { startHttpServer } from './http'
@@ -22,6 +23,11 @@ if (!Number.isInteger(port) || port <= 0 || port > 65535) {
 }
 
 const { db, close } = createDb({ url: databaseUrl, max: 4 })
+
+// Push the persisted embedding choice into this process runtime (persisted > env).
+await primeEmbeddingRuntime(db).catch((err: unknown) => {
+  console.warn('[claude-organizer-mcp] embedding runtime prime failed; using env/default', err)
+})
 
 const httpServer = startHttpServer({ db, port })
 

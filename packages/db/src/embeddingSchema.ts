@@ -1,8 +1,9 @@
-import { sql } from 'drizzle-orm'
+import { eq, sql } from 'drizzle-orm'
 
 import { resolveEmbeddingConfig } from '@claude-organizer/shared'
 
 import type { Database } from './client'
+import { SYSTEM_SETTINGS_ID, systemSettings } from './schema/systemSettings'
 
 const EMBEDDING_TABLES = ['docs', 'cards', 'comments'] as const
 
@@ -18,7 +19,14 @@ const EMBEDDING_TABLES = ['docs', 'cards', 'comments'] as const
  * pgvector stores the dimension in `atttypmod` directly (-1 when unspecified).
  */
 export async function reconcileEmbeddingDim(db: Database): Promise<void> {
-  const { dim } = resolveEmbeddingConfig()
+  // Honor the persisted choice (read straight from the table to avoid a core
+  // dependency); falls back to env/default when unset or the row doesn't exist.
+  const [settings] = await db
+    .select({ embeddingModel: systemSettings.embeddingModel })
+    .from(systemSettings)
+    .where(eq(systemSettings.id, SYSTEM_SETTINGS_ID))
+    .limit(1)
+  const { dim } = resolveEmbeddingConfig(undefined, settings?.embeddingModel)
   for (const table of EMBEDDING_TABLES) {
     const rows = (await db.execute(sql`
       select a.atttypmod as typmod

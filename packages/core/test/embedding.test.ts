@@ -1,6 +1,8 @@
 import { sql } from 'drizzle-orm'
 import { describe, expect, it } from 'vitest'
 
+import { resolveEmbeddingConfig } from '@claude-organizer/shared'
+
 import { reciprocalRankFusion } from '../src/index'
 import { useTestDb } from './helpers'
 
@@ -40,6 +42,36 @@ describe('pgvector foundation', () => {
       'comments_embedding_idx',
       'docs_embedding_idx'
     ])
+  })
+})
+
+describe('resolveEmbeddingConfig precedence', () => {
+  it('a persisted override wins over EMBEDDING_MODEL', () => {
+    const cfg = resolveEmbeddingConfig(
+      { EMBEDDING_MODEL: 'intfloat/multilingual-e5-small' },
+      'intfloat/multilingual-e5-large'
+    )
+    expect(cfg).toMatchObject({ model: 'intfloat/multilingual-e5-large', dim: 1024 })
+  })
+
+  it('falls back to env when the override is null/empty', () => {
+    expect(resolveEmbeddingConfig({ EMBEDDING_MODEL: 'intfloat/multilingual-e5-base' }, null))
+      .toMatchObject({ model: 'intfloat/multilingual-e5-base', dim: 768 })
+    expect(resolveEmbeddingConfig({ EMBEDDING_MODEL: 'intfloat/multilingual-e5-base' }, '  '))
+      .toMatchObject({ model: 'intfloat/multilingual-e5-base', dim: 768 })
+  })
+
+  it('a persisted "none" disables embeddings even when env sets a model', () => {
+    const cfg = resolveEmbeddingConfig({ EMBEDDING_MODEL: 'intfloat/multilingual-e5-base' }, 'none')
+    expect(cfg.model).toBeNull()
+    expect(cfg.dim).toBe(384)
+  })
+
+  it('falls back to the default model when neither override nor env is set', () => {
+    expect(resolveEmbeddingConfig({})).toMatchObject({
+      model: 'intfloat/multilingual-e5-small',
+      dim: 384
+    })
   })
 })
 

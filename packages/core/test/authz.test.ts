@@ -15,11 +15,14 @@ import {
   deleteUser,
   getSystemSettings,
   getUserAuthz,
+  InputError,
   listAccessibleProjectIds,
   listAllUsers,
   resolveCommentsProjectIds,
+  resolveEffectiveEmbeddingConfig,
   resolveEntityProjectId,
   setAuthEnabled,
+  setEmbeddingModel,
   setKeepDiffsOnArchive,
   setUserAuthz
 } from '../src/index'
@@ -236,5 +239,38 @@ describe('system settings', () => {
     expect(await setKeepDiffsOnArchive(ctx.db, false)).toEqual({
       keepDiffsOnArchive: false
     })
+  })
+
+  it('persists embeddingModel and resolves the effective config above env', async () => {
+    expect(await getSystemSettings(ctx.db)).toMatchObject({ embeddingModel: null })
+
+    const prevEnv = process.env.EMBEDDING_MODEL
+    process.env.EMBEDDING_MODEL = 'intfloat/multilingual-e5-base'
+    try {
+      await setEmbeddingModel(ctx.db, 'intfloat/multilingual-e5-large')
+      expect(await getSystemSettings(ctx.db)).toMatchObject({
+        embeddingModel: 'intfloat/multilingual-e5-large'
+      })
+      // Persisted choice wins over EMBEDDING_MODEL=base.
+      expect(await resolveEffectiveEmbeddingConfig(ctx.db)).toMatchObject({
+        model: 'intfloat/multilingual-e5-large',
+        dim: 1024
+      })
+
+      await setEmbeddingModel(ctx.db, 'none')
+      expect(await resolveEffectiveEmbeddingConfig(ctx.db)).toMatchObject({ model: null })
+
+      // Unset ⇒ fall back to env (base here).
+      await setEmbeddingModel(ctx.db, null)
+      expect(await resolveEffectiveEmbeddingConfig(ctx.db)).toMatchObject({
+        model: 'intfloat/multilingual-e5-base'
+      })
+
+      // A non-registry id is rejected at the write boundary (can't carry a dim).
+      await expect(setEmbeddingModel(ctx.db, 'acme/whatever')).rejects.toThrow(InputError)
+    } finally {
+      if (prevEnv === undefined) delete process.env.EMBEDDING_MODEL
+      else process.env.EMBEDDING_MODEL = prevEnv
+    }
   })
 })

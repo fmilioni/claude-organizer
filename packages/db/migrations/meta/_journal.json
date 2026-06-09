@@ -162,6 +162,13 @@
       "when": 1781030459184,
       "tag": "0022_loud_black_knight",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1781044127051,
+      "tag": "0023_keen_quentin_quire",
+      "breakpoints": true
     }
   ]
 }

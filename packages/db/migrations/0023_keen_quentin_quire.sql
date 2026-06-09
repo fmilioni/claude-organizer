@@ -1,0 +1,1 @@
+ALTER TABLE "system_settings" ADD COLUMN "embedding_model" text;

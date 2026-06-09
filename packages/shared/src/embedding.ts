@@ -47,12 +47,18 @@ function readProcessEnv(): Env {
 }
 
 /**
- * Resolve the active embedding config from the environment. Throws on a bad
- * config (unknown model with no `EMBEDDING_DIM`, or an out-of-range dim) so a
- * typo fails fast and visibly instead of silently embedding into the wrong space.
+ * Resolve the active embedding config. Precedence: a persisted `overrideModel`
+ * (the UI choice in `systemSettings`) wins over `EMBEDDING_MODEL`, which wins over
+ * the default. `overrideModel` carries only the model id (`'none'`, a registry id,
+ * or a custom id); the dim of a custom override still comes from `EMBEDDING_DIM`.
+ * Throws on a bad config (unknown model with no `EMBEDDING_DIM`, or an out-of-range
+ * dim) so a typo fails fast instead of silently embedding into the wrong space.
  */
-export function resolveEmbeddingConfig(env: Env = readProcessEnv()): EmbeddingConfig {
-  const raw = env.EMBEDDING_MODEL?.trim()
+export function resolveEmbeddingConfig(
+  env: Env = readProcessEnv(),
+  overrideModel?: string | null
+): EmbeddingConfig {
+  const raw = overrideModel?.trim() || env.EMBEDDING_MODEL?.trim()
   if (raw === 'none') {
     return { model: null, dim: DEFAULT_EMBEDDING_DIM, e5Prefix: false }
   }

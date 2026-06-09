@@ -1,3 +1,4 @@
+import type { EmbeddingConfig } from '@claude-organizer/shared'
 import { resolveEmbeddingConfig } from '@claude-organizer/shared'
 
 export type EmbeddingKind = 'query' | 'passage'
@@ -9,6 +10,29 @@ interface Embedder {
 
 let cached: Embedder | null = null
 let loading: Promise<Embedder | null> | null = null
+// Bumped on every config swap; an in-flight load tagged with a stale generation
+// must not populate `cached` after a reset (would resurrect the old model).
+let generation = 0
+
+// Effective config primed from the DB (persisted choice > env), set at process
+// boot and on a runtime model swap. `null` ⇒ resolve from env/default.
+let configOverride: EmbeddingConfig | null = null
+
+/**
+ * Swap the active embedding config (the persisted DB choice) and drop the loaded
+ * pipeline so the next embed reloads with the new model. Pass `null` to revert to
+ * env/default resolution.
+ */
+export function setEmbeddingConfig(cfg: EmbeddingConfig | null): void {
+  configOverride = cfg
+  cached = null
+  loading = null
+  generation++
+}
+
+function activeConfig(): EmbeddingConfig {
+  return configOverride ?? resolveEmbeddingConfig()
+}
 
 /**
  * Load the feature-extraction pipeline once per process. The transformers lib
@@ -18,7 +42,7 @@ let loading: Promise<Embedder | null> | null = null
  * transient failure can recover on a later call.
  */
 async function loadEmbedder(): Promise<Embedder | null> {
-  const cfg = resolveEmbeddingConfig()
+  const cfg = activeConfig()
   if (!cfg.model) return null
   const { pipeline } = await import('@huggingface/transformers')
   // fp32 is the variant present in the default model's repo; override with a
@@ -39,14 +63,17 @@ async function loadEmbedder(): Promise<Embedder | null> {
 function getEmbedder(): Promise<Embedder | null> {
   if (cached) return Promise.resolve(cached)
   if (!loading) {
+    const gen = generation
     loading = loadEmbedder()
       .then((e) => {
-        cached = e
-        loading = null
+        if (gen === generation) {
+          cached = e
+          loading = null
+        }
         return e
       })
       .catch((err) => {
-        loading = null
+        if (gen === generation) loading = null
         console.error('[embedding] model load failed; semantic search off this process', err)
         return null
       })

@@ -7,8 +7,9 @@ import type {
   UserRole,
   UserStatus
 } from '@claude-organizer/shared'
+import { EMBEDDING_MODELS } from '@claude-organizer/shared'
 
-import { ConflictError } from './errors'
+import { ConflictError, InputError } from './errors'
 
 export async function getUserAuthz(db: Database, userId: string) {
   const [row] = await db
@@ -196,16 +197,18 @@ export async function listAllUsers(db: Database) {
 
 const DEFAULT_SYSTEM_SETTINGS = {
   authEnabled: true,
-  keepDiffsOnArchive: false
+  keepDiffsOnArchive: false,
+  embeddingModel: null
 } as const
 
 export async function getSystemSettings(
   db: Database
-): Promise<Pick<SystemSettingsRow, 'authEnabled' | 'keepDiffsOnArchive'>> {
+): Promise<Pick<SystemSettingsRow, 'authEnabled' | 'keepDiffsOnArchive' | 'embeddingModel'>> {
   const [row] = await db
     .select({
       authEnabled: schema.systemSettings.authEnabled,
-      keepDiffsOnArchive: schema.systemSettings.keepDiffsOnArchive
+      keepDiffsOnArchive: schema.systemSettings.keepDiffsOnArchive,
+      embeddingModel: schema.systemSettings.embeddingModel
     })
     .from(schema.systemSettings)
     .where(eq(schema.systemSettings.id, SYSTEM_SETTINGS_ID))
@@ -239,6 +242,31 @@ export async function setKeepDiffsOnArchive(
     .returning({
       keepDiffsOnArchive: schema.systemSettings.keepDiffsOnArchive
     })
+  return row!
+}
+
+// The persisted column only ever holds a registry id, 'none', or null (unset) —
+// custom models stay env-only (they need EMBEDDING_DIM, which this column can't
+// carry). Validate at the write boundary so a bad value can't later abort the
+// migrate-time reconcile or the boot-prime.
+export async function setEmbeddingModel(db: Database, embeddingModel: string | null) {
+  if (
+    embeddingModel !== null
+    && embeddingModel !== 'none'
+    && !EMBEDDING_MODELS[embeddingModel]
+  ) {
+    throw new InputError(
+      `Unknown embedding model "${embeddingModel}". Use one of: ${Object.keys(EMBEDDING_MODELS).join(', ')}, 'none', or null to unset.`
+    )
+  }
+  const [row] = await db
+    .insert(schema.systemSettings)
+    .values({ id: SYSTEM_SETTINGS_ID, embeddingModel })
+    .onConflictDoUpdate({
+      target: schema.systemSettings.id,
+      set: { embeddingModel, updatedAt: sql`now()` }
+    })
+    .returning({ embeddingModel: schema.systemSettings.embeddingModel })
   return row!
 }
 
