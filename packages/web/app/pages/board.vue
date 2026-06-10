@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useProjectStore } from '~/stores/project'
-import type { Card, CardStatus } from '~/types/card'
+import type { CardStatus } from '~/types/card'
 
 type SprintFilter = 'all' | 'sprint' | 'loose'
 
@@ -21,10 +21,7 @@ const { editing, saving, justSaved } = useSprintInlineEdit(
   }
 )
 
-// Every card the board cares about: the active sprint's cards plus all
-// sprint-less cards (any status, including `backlog`). The columns and the
-// backlog peek are both derived from this single list.
-const cards = ref<Card[]>([])
+const { cards, load: loadCards } = useBoardCards(currentProjectId, activeSprint)
 const selectedTagIds = ref<string[]>([])
 const sprintFilter = ref<SprintFilter>('all')
 
@@ -33,23 +30,6 @@ const sprintFilterOptions: { value: SprintFilter, label: string }[] = [
   { value: 'sprint', label: 'Sprint cards' },
   { value: 'loose', label: 'Loose cards' }
 ]
-
-async function loadCards() {
-  if (!currentProjectId.value) {
-    cards.value = []
-    return
-  }
-  const projectId = currentProjectId.value
-  const [sprintList, looseList] = await Promise.all([
-    activeSprint.value
-      ? api<Card[]>('/cards', {
-          query: { projectId, sprintId: activeSprint.value.id }
-        })
-      : Promise.resolve<Card[]>([]),
-    api<Card[]>('/cards', { query: { projectId, backlogOnly: 'true' } })
-  ])
-  cards.value = [...sprintList, ...looseList]
-}
 
 useProjectData(currentProjectId, loadCards, {
   watch: [currentProjectId, activeSprint],

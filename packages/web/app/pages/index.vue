@@ -14,30 +14,19 @@ const { data: activeSprint, refresh: refreshSprint } = useActiveSprint(
   () => currentProjectId.value
 )
 
+const { sprintCards, looseCards, cards: boardCards, load: loadCards }
+  = useBoardCards(currentProjectId, activeSprint)
 const sprints = ref<Sprint[]>([])
-const sprintCards = ref<Card[]>([])
-const looseCards = ref<Card[]>([])
 
 async function loadDashboard() {
   const projectId = currentProjectId.value
-  if (!projectId) {
-    sprints.value = []
-    sprintCards.value = []
-    looseCards.value = []
-    return
-  }
-  const [sprintList, cardList, looseList] = await Promise.all([
-    api<Sprint[]>('/sprints', { query: { projectId } }),
-    activeSprint.value
-      ? api<Card[]>('/cards', {
-          query: { projectId, sprintId: activeSprint.value.id }
-        })
-      : Promise.resolve<Card[]>([]),
-    api<Card[]>('/cards', { query: { projectId, backlogOnly: 'true' } })
+  const [sprintList] = await Promise.all([
+    projectId
+      ? api<Sprint[]>('/sprints', { query: { projectId } })
+      : Promise.resolve<Sprint[]>([]),
+    loadCards()
   ])
   sprints.value = sprintList
-  sprintCards.value = cardList
-  looseCards.value = looseList
 }
 
 useProjectData(currentProjectId, loadDashboard, {
@@ -108,11 +97,8 @@ const stats = computed<{ label: string, value: string | number, icon: string }[]
 
 const HOME_LIST_LIMIT = 5
 
-// The two board-status lists mirror the board (active sprint cards + sprint-less
-// cards in that status); the backlog list mirrors the Tasks screen (sprint-less
-// cards in `backlog`).
-const boardCards = computed(() => [...sprintCards.value, ...looseCards.value])
-
+// review/to-do read the full board scope (`boardCards`); backlog reads only the
+// sprint-less cards — matching where each list's "View more" leads (board vs Tasks).
 const cardLists = computed(() => {
   const byStatus = (cards: Card[], status: CardStatus) =>
     cards.filter(c => c.status === status)
