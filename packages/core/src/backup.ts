@@ -20,6 +20,7 @@ import {
   type TagRow
 } from '@claude-organizer/shared'
 
+import { rewriteAttachmentIds } from './attachments'
 import { getSystemSettings } from './authz'
 import { InputError } from './errors'
 
@@ -334,6 +335,7 @@ async function restoreAsNew(db: Database, data: BackupData): Promise<string[]> {
     const D: Record<string, string> = {}
     const CM: Record<string, string> = {}
     const IT: Record<string, string> = {}
+    const A: Record<string, string> = {}
 
     // A slug is unique by constraint; keyPrefix we keep distinct too so future
     // keys stay unambiguous. Each field is suffixed independently — only the one
@@ -575,8 +577,10 @@ async function restoreAsNew(db: Database, data: BackupData): Promise<string[]> {
     )) {
       const mappedOwner
         = a.ownerType && a.ownerId ? ownerMaps[a.ownerType][a.ownerId] : undefined
+      const newId = createId('att')
+      A[a.id] = newId
       await tx.insert(schema.attachments).values({
-        id: createId('att'),
+        id: newId,
         projectId: P[a.projectId]!,
         ownerType: mappedOwner ? a.ownerType : null,
         ownerId: mappedOwner ?? null,
@@ -589,6 +593,44 @@ async function restoreAsNew(db: Database, data: BackupData): Promise<string[]> {
         data: typeof a.data === 'string' ? Buffer.from(a.data, 'base64') : null,
         createdAt: new Date(a.createdAt)
       })
+    }
+
+    // Bodies were inserted with the old `att_` ids still embedded; now that the
+    // attachment id-map exists, rewrite the references so imported images keep
+    // resolving. Keyed by id token, not by URL shape.
+    if (Object.keys(A).length) {
+      for (const c of cards) {
+        const next = rewriteAttachmentIds(c.descriptionMd, A)
+        if (next !== c.descriptionMd) {
+          await tx.update(schema.cards)
+            .set({ descriptionMd: next })
+            .where(eq(schema.cards.id, C[c.id]!))
+        }
+      }
+      for (const d of docs) {
+        const next = rewriteAttachmentIds(d.bodyMd, A)
+        if (next !== d.bodyMd) {
+          await tx.update(schema.docs)
+            .set({ bodyMd: next })
+            .where(eq(schema.docs.id, D[d.id]!))
+        }
+      }
+      for (const cm of rows<CommentRow>('comments')) {
+        const next = rewriteAttachmentIds(cm.bodyMd, A)
+        if (next != null && next !== cm.bodyMd) {
+          await tx.update(schema.comments)
+            .set({ bodyMd: next })
+            .where(eq(schema.comments.id, CM[cm.id]!))
+        }
+      }
+      for (const it of rows<IntakeItemRow>('intake_items')) {
+        const next = rewriteAttachmentIds(it.bodyMd, A)
+        if (next != null && next !== it.bodyMd) {
+          await tx.update(schema.intakeItems)
+            .set({ bodyMd: next })
+            .where(eq(schema.intakeItems.id, IT[it.id]!))
+        }
+      }
     }
 
     return projectIds

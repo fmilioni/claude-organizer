@@ -124,6 +124,20 @@ export async function listAttachmentsByOwners(
     .orderBy(desc(schema.attachments.createdAt))
 }
 
+// Attachment ids embedded in entity bodies as `![alt](…att_X…)`. The id token
+// is the rewrite key, not the URL wrapper — so it's format-independent.
+const attachmentIdToken = /att_[0-9a-z]{12}/g
+
+// Single-pass swap of `att_` tokens via the id-map: an unmapped token is left
+// intact, and a freshly-mapped id can't be re-matched by a later replacement.
+export function rewriteAttachmentIds(
+  body: string | null | undefined,
+  idMap: Record<string, string>
+): string | null {
+  if (!body) return body ?? null
+  return body.replace(attachmentIdToken, token => idMap[token] ?? token)
+}
+
 export async function deleteAttachment(db: Database, id: string) {
   const [row] = await db
     .delete(schema.attachments)

@@ -8,6 +8,8 @@ import {
   addTagToCard,
   createAttachment,
   createCard,
+  createDoc,
+  createIntakeItem,
   createProject,
   createSprint,
   createTag,
@@ -203,6 +205,90 @@ describe('importBackup — restore as new', () => {
     const [newCard] = await cardsOf(newId)
     expect(restored.ownerType).toBe('card')
     expect(restored.ownerId).toBe(newCard!.id)
+  })
+
+  it('rewrites att_ refs in card/doc/comment/inbox bodies to the new ids', async () => {
+    const project = await freshProject(ctx.db)
+    const att = await createAttachment(ctx.db, {
+      projectId: project.id,
+      mime: 'image/png',
+      data: Buffer.from('img', 'utf8'),
+      width: 1,
+      height: 1
+    })
+    const stranger = 'att_zzzzzzzzzzzz'
+    const ref = (id: string) => `before ![pic](/attachments/${id}) after`
+
+    const card = await createCard(ctx.db, {
+      projectId: project.id,
+      title: 'Card A',
+      descriptionMd: `${ref(att.id)} and ${ref(stranger)}`
+    })
+    await addComment(ctx.db, {
+      cardId: card.id,
+      author: 'user',
+      bodyMd: ref(att.id)
+    })
+    await createDoc(ctx.db, {
+      projectId: project.id,
+      title: 'Doc A',
+      bodyMd: ref(att.id)
+    })
+    await createIntakeItem(ctx.db, { projectId: project.id, bodyMd: ref(att.id) })
+
+    const env = await exportProject(ctx.db, project.id)
+    const { projectIds } = await importBackup(ctx.db, serializeBackup(env))
+    const newId = projectIds[0]!
+
+    const [newAtt] = await listAttachments(ctx.db, { projectId: newId })
+    expect(newAtt!.id).not.toBe(att.id)
+
+    const [newCard] = await ctx.db
+      .select()
+      .from(schema.cards)
+      .where(eq(schema.cards.projectId, newId))
+    const [newComment] = await ctx.db
+      .select()
+      .from(schema.comments)
+      .where(eq(schema.comments.cardId, newCard!.id))
+    const [newDoc] = await ctx.db
+      .select()
+      .from(schema.docs)
+      .where(eq(schema.docs.projectId, newId))
+    const [newIntake] = await ctx.db
+      .select()
+      .from(schema.intakeItems)
+      .where(eq(schema.intakeItems.projectId, newId))
+
+    for (const body of [
+      newCard!.descriptionMd!,
+      newComment!.bodyMd,
+      newDoc!.bodyMd!,
+      newIntake!.bodyMd
+    ]) {
+      expect(body).toContain(newAtt!.id)
+      expect(body).not.toContain(att.id)
+    }
+    expect(newCard!.descriptionMd).toContain(stranger)
+  })
+
+  it('leaves bodies untouched when the backup has no attachments', async () => {
+    const project = await freshProject(ctx.db)
+    const body = 'a stray att_abcdef012345 token, no real attachment'
+    await createCard(ctx.db, {
+      projectId: project.id,
+      title: 'Card A',
+      descriptionMd: body
+    })
+
+    const env = await exportProject(ctx.db, project.id)
+    const { projectIds } = await importBackup(ctx.db, serializeBackup(env))
+
+    const [newCard] = await ctx.db
+      .select()
+      .from(schema.cards)
+      .where(eq(schema.cards.projectId, projectIds[0]!))
+    expect(newCard!.descriptionMd).toBe(body)
   })
 
   it('omits bytes when the backup toggle is OFF (metadata-only attachment)', async () => {
