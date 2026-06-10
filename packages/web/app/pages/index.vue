@@ -1,6 +1,4 @@
 <script setup lang="ts">
-import type { Project } from '@claude-organizer/shared'
-
 import { useProjectStore } from '~/stores/project'
 import type { Card, CardStatus } from '~/types/card'
 import { cardStatusMeta, cardStatusOrder } from '~/types/card'
@@ -52,69 +50,19 @@ useProjectData(currentProjectId, loadDashboard, {
       event.type === 'project.changed'
       || event.type === 'project.deleted'
     ) {
-      // a project was renamed, archived or destroyed — refresh both lists (the
-      // store falls back to another project if the current one is gone).
-      refreshProjectLists()
+      // a project was renamed, archived or destroyed — reload the list (the store
+      // falls back to another project if the current one is gone) and the stats.
+      repointProjects()
       loadDashboard()
     }
   }
 })
 
-// --- Project management (archive / restore / destroy) ---
-
-const archivedProjects = ref<Project[]>([])
-
-async function loadArchivedProjects() {
-  archivedProjects.value = await api<Project[]>('/projects', {
-    query: { archivedOnly: 'true' }
-  })
-}
-
-async function refreshProjectLists() {
-  await Promise.all([store.loadProjects(), loadArchivedProjects()])
-  // If the current project was archived/destroyed, repoint to another one.
+async function repointProjects() {
+  await store.loadProjects()
   if (!currentProject.value && projects.value[0]) {
     store.setCurrent(projects.value[0].slug)
   }
-}
-
-onMounted(loadArchivedProjects)
-
-async function archiveProject(id: string) {
-  await api(`/projects/${id}/archive`, { method: 'POST' })
-  await refreshProjectLists()
-}
-
-async function restoreProject(id: string) {
-  await api(`/projects/${id}/restore`, { method: 'POST' })
-  await refreshProjectLists()
-}
-
-const destroyOpen = ref(false)
-const destroyTarget = ref<Project | null>(null)
-const destroyConfirm = ref('')
-
-const destroyArmed = computed(
-  () => !!destroyTarget.value && destroyConfirm.value === destroyTarget.value.slug
-)
-
-function openDestroy(project: Project) {
-  destroyTarget.value = project
-  destroyConfirm.value = ''
-  destroyOpen.value = true
-}
-
-async function confirmDestroy() {
-  const target = destroyTarget.value
-  if (!target || !destroyArmed.value) return
-  await api(`/projects/${target.id}`, {
-    method: 'DELETE',
-    body: { confirmSlug: destroyConfirm.value }
-  })
-  destroyOpen.value = false
-  destroyTarget.value = null
-  destroyConfirm.value = ''
-  await refreshProjectLists()
 }
 
 const statusCounts = computed<Record<CardStatus, number>>(() => {
@@ -284,129 +232,7 @@ const stats = computed<{ label: string, value: string | number, icon: string }[]
             </UCard>
           </div>
         </template>
-
-        <!-- Projects management -->
-        <UCard>
-          <template #header>
-            <div class="flex items-center gap-2">
-              <UIcon name="i-lucide-folders" class="text-primary" />
-              <span class="font-medium">Projects</span>
-            </div>
-          </template>
-
-          <div class="space-y-2">
-            <div
-              v-for="p in projects"
-              :key="p.id"
-              class="border border-default rounded-md px-3 py-2 flex items-center gap-3"
-            >
-              <div class="flex-1 min-w-0">
-                <div class="flex items-center gap-2">
-                  <span class="font-medium text-sm truncate">{{ p.name }}</span>
-                  <UBadge
-                    v-if="p.id === currentProjectId"
-                    size="xs"
-                    variant="subtle"
-                    color="primary"
-                  >
-                    current
-                  </UBadge>
-                </div>
-                <p class="text-xs text-muted font-mono truncate">
-                  {{ p.slug }}
-                </p>
-              </div>
-              <UButton
-                icon="i-lucide-archive"
-                size="xs"
-                color="neutral"
-                variant="ghost"
-                label="Archive"
-                @click="archiveProject(p.id)"
-              />
-              <UButton
-                icon="i-lucide-trash-2"
-                size="xs"
-                color="error"
-                variant="ghost"
-                label="Destroy"
-                @click="openDestroy(p)"
-              />
-            </div>
-          </div>
-
-          <ArchivedDisclosure
-            v-if="archivedProjects.length"
-            :count="archivedProjects.length"
-            label="Archived projects"
-            class="mt-3"
-          >
-            <div class="space-y-2">
-              <div
-                v-for="p in archivedProjects"
-                :key="p.id"
-                class="border border-dashed border-default rounded-md px-3 py-2 flex items-center gap-3"
-              >
-                <div class="flex-1 min-w-0">
-                  <span class="font-medium text-sm text-muted">{{ p.name }}</span>
-                  <span class="text-xs text-muted font-mono ml-2">{{ p.slug }}</span>
-                </div>
-                <UButton
-                  icon="i-lucide-archive-restore"
-                  size="xs"
-                  color="neutral"
-                  variant="soft"
-                  label="Restore"
-                  @click="restoreProject(p.id)"
-                />
-                <UButton
-                  icon="i-lucide-trash-2"
-                  size="xs"
-                  color="error"
-                  variant="ghost"
-                  label="Destroy"
-                  @click="openDestroy(p)"
-                />
-              </div>
-            </div>
-          </ArchivedDisclosure>
-        </UCard>
       </div>
     </template>
   </UDashboardPanel>
-
-  <UModal
-    v-model:open="destroyOpen"
-    :title="`Destroy ${destroyTarget?.name ?? 'project'}`"
-  >
-    <template #body>
-      <div class="space-y-3">
-        <p class="text-sm">
-          This permanently deletes
-          <strong>{{ destroyTarget?.name }}</strong> and everything in it —
-          sprints, cards, docs, tags and comments. This cannot be undone.
-        </p>
-        <UFormField
-          :label="`Type the slug to confirm: ${destroyTarget?.slug ?? ''}`"
-        >
-          <UInput
-            v-model="destroyConfirm"
-            :placeholder="destroyTarget?.slug"
-            autocomplete="off"
-          />
-        </UFormField>
-      </div>
-    </template>
-    <template #footer>
-      <div class="flex justify-end gap-2 w-full">
-        <UButton variant="ghost" label="Cancel" @click="destroyOpen = false" />
-        <UButton
-          color="error"
-          label="Destroy"
-          :disabled="!destroyArmed"
-          @click="confirmDestroy"
-        />
-      </div>
-    </template>
-  </UModal>
 </template>

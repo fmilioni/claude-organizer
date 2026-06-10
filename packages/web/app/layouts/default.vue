@@ -62,6 +62,7 @@ const projectLinks = computed<NavigationMenuItem[]>(() => [
 ])
 
 const systemLinks = computed<NavigationMenuItem[]>(() => [
+  { label: 'Projects', icon: 'i-lucide-folders', to: '/projects' },
   ...(isAdmin.value
     ? [{ label: 'Users', icon: 'i-lucide-users', to: '/admin/users' }]
     : []),
