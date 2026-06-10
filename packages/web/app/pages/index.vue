@@ -126,22 +126,26 @@ const stats = computed<{ label: string, value: string | number, icon: string }[]
         </div>
         <template v-else>
           <!-- Stat cards -->
-          <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <UCard v-for="stat in stats" :key="stat.label">
-              <div class="flex items-center gap-3">
-                <div class="rounded-lg bg-elevated p-2.5">
-                  <UIcon :name="stat.icon" class="text-xl text-primary" />
-                </div>
-                <div class="min-w-0">
-                  <p class="text-2xl font-semibold tabular-nums">
-                    {{ stat.value }}
-                  </p>
-                  <p class="text-sm text-muted truncate">
+          <div class="rounded-lg border border-default bg-elevated/40 overflow-hidden">
+            <div
+              class="grid grid-cols-2 lg:grid-cols-4 divide-x divide-y lg:divide-y-0 divide-default"
+            >
+              <div
+                v-for="stat in stats"
+                :key="stat.label"
+                class="flex flex-col gap-2 p-4 sm:p-5"
+              >
+                <div class="flex items-center gap-2 text-muted">
+                  <UIcon :name="stat.icon" class="size-4 shrink-0" />
+                  <span class="text-xs font-medium uppercase tracking-wide truncate">
                     {{ stat.label }}
-                  </p>
+                  </span>
                 </div>
+                <p class="text-2xl font-semibold tabular-nums text-highlighted">
+                  {{ stat.value }}
+                </p>
               </div>
-            </UCard>
+            </div>
           </div>
 
           <div class="grid gap-4 sm:gap-6 lg:grid-cols-3">
