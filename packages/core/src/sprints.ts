@@ -4,6 +4,7 @@ import { z } from 'zod'
 import { createId, type Database, schema } from '@claude-organizer/db'
 
 import { archivedCondition, type ArchiveFilter } from './archive'
+import { gcAttachmentsOnArchive } from './attachmentGc'
 import { getSystemSettings } from './authz'
 import { notify } from './events'
 import { syncIntakeForSprint } from './intake'
@@ -141,21 +142,24 @@ export async function archiveSprint(db: Database, id: string) {
     // Default: drop the diffs of every commit on this sprint's cards (the cards
     // stay active; only the heavy blobs go) — re-run attach-commit to restore.
     // With keepDiffsOnArchive on, the blobs are preserved.
+    const sprintCardIds = (
+      await db
+        .select({ id: schema.cards.id })
+        .from(schema.cards)
+        .where(eq(schema.cards.sprintId, id))
+    ).map(c => c.id)
+
     const { keepDiffsOnArchive } = await getSystemSettings(db)
-    if (!keepDiffsOnArchive) {
+    if (!keepDiffsOnArchive && sprintCardIds.length) {
       await db
         .update(schema.cardCommits)
         .set({ diff: null })
-        .where(
-          inArray(
-            schema.cardCommits.cardId,
-            db
-              .select({ id: schema.cards.id })
-              .from(schema.cards)
-              .where(eq(schema.cards.sprintId, id))
-          )
-        )
+        .where(inArray(schema.cardCommits.cardId, sprintCardIds))
     }
+    await gcAttachmentsOnArchive(db, {
+      projectId: row.projectId,
+      cardIds: sprintCardIds
+    })
     await syncIntakeForSprint(db, row.projectId, row.id)
     await notify(db, {
       type: 'sprint.changed',

@@ -8,6 +8,7 @@ import {
   type IntakeStatus
 } from '@claude-organizer/shared'
 
+import { gcAttachmentsOnArchive } from './attachmentGc'
 import { notify } from './events'
 import { paginate } from './pagination'
 
@@ -174,7 +175,10 @@ export async function archiveIntakeItem(db: Database, id: string) {
     .set({ status: 'archived', archivedAt: sql`now()`, updatedAt: sql`now()` })
     .where(eq(schema.intakeItems.id, id))
     .returning(intakeColumns)
-  if (row) await notifyChanged(db, row)
+  if (row) {
+    await gcAttachmentsOnArchive(db, { projectId: row.projectId, intakeIds: [id] })
+    await notifyChanged(db, row)
+  }
   return row ?? null
 }
 

@@ -199,7 +199,8 @@ const DEFAULT_SYSTEM_SETTINGS = {
   authEnabled: true,
   keepDiffsOnArchive: false,
   embeddingModel: null,
-  includeAttachmentsInBackup: true
+  includeAttachmentsInBackup: true,
+  keepAttachmentsOnArchive: false
 } as const
 
 export async function getSystemSettings(
@@ -211,6 +212,7 @@ export async function getSystemSettings(
     | 'keepDiffsOnArchive'
     | 'embeddingModel'
     | 'includeAttachmentsInBackup'
+    | 'keepAttachmentsOnArchive'
   >
 > {
   const [row] = await db
@@ -218,7 +220,8 @@ export async function getSystemSettings(
       authEnabled: schema.systemSettings.authEnabled,
       keepDiffsOnArchive: schema.systemSettings.keepDiffsOnArchive,
       embeddingModel: schema.systemSettings.embeddingModel,
-      includeAttachmentsInBackup: schema.systemSettings.includeAttachmentsInBackup
+      includeAttachmentsInBackup: schema.systemSettings.includeAttachmentsInBackup,
+      keepAttachmentsOnArchive: schema.systemSettings.keepAttachmentsOnArchive
     })
     .from(schema.systemSettings)
     .where(eq(schema.systemSettings.id, SYSTEM_SETTINGS_ID))
@@ -269,6 +272,23 @@ export async function setIncludeAttachmentsInBackup(
     .returning({
       includeAttachmentsInBackup:
         schema.systemSettings.includeAttachmentsInBackup
+    })
+  return row!
+}
+
+export async function setKeepAttachmentsOnArchive(
+  db: Database,
+  keepAttachmentsOnArchive: boolean
+) {
+  const [row] = await db
+    .insert(schema.systemSettings)
+    .values({ id: SYSTEM_SETTINGS_ID, keepAttachmentsOnArchive })
+    .onConflictDoUpdate({
+      target: schema.systemSettings.id,
+      set: { keepAttachmentsOnArchive, updatedAt: sql`now()` }
+    })
+    .returning({
+      keepAttachmentsOnArchive: schema.systemSettings.keepAttachmentsOnArchive
     })
   return row!
 }

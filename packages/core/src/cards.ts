@@ -16,6 +16,7 @@ import { z } from 'zod'
 import { createId, type Database, schema } from '@claude-organizer/db'
 
 import { archivedCondition, type ArchiveFilter } from './archive'
+import { gcAttachmentsOnArchive } from './attachmentGc'
 import { getSystemSettings } from './authz'
 import { listBlockedBy, listBlocking, pendingBlockerCounts } from './blockers'
 import { claimsByCardIds, getClaim, releaseClaimOnDone } from './cardClaims'
@@ -678,6 +679,7 @@ export async function archiveCard(db: Database, id: string) {
         .set({ diff: null })
         .where(eq(schema.cardCommits.cardId, id))
     }
+    await gcAttachmentsOnArchive(db, { projectId: row.projectId, cardIds: [id] })
     await syncIntakeForCard(db, row.projectId, row.key)
     await notify(db, {
       type: 'card.changed',

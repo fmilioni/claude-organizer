@@ -178,6 +178,7 @@ export interface SystemSettingsRow {
   keepDiffsOnArchive: boolean
   embeddingModel: string | null
   includeAttachmentsInBackup: boolean
+  keepAttachmentsOnArchive: boolean
   createdAt: string
   updatedAt: string
 }

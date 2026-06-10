@@ -1,0 +1,1 @@
+ALTER TABLE "system_settings" ADD COLUMN "keep_attachments_on_archive" boolean DEFAULT false NOT NULL;

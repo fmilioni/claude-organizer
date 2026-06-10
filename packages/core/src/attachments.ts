@@ -138,6 +138,11 @@ export function rewriteAttachmentIds(
   return body.replace(attachmentIdToken, token => idMap[token] ?? token)
 }
 
+export function attachmentIdsInBody(body: string | null | undefined): string[] {
+  if (!body) return []
+  return [...new Set(body.match(attachmentIdToken) ?? [])]
+}
+
 export async function deleteAttachment(db: Database, id: string) {
   const [row] = await db
     .delete(schema.attachments)
