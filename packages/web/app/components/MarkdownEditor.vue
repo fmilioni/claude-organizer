@@ -127,21 +127,34 @@ const editorProps = {
   }
 }
 
-const toolbarItems: EditorToolbarItem[] = [
-  { kind: 'mark', mark: 'bold', icon: 'i-lucide-bold' },
-  { kind: 'mark', mark: 'italic', icon: 'i-lucide-italic' },
-  { kind: 'mark', mark: 'strike', icon: 'i-lucide-strikethrough' },
-  { kind: 'mark', mark: 'code', icon: 'i-lucide-code' },
-  { kind: 'heading', level: 2, icon: 'i-lucide-heading-2' },
-  { kind: 'heading', level: 3, icon: 'i-lucide-heading-3' },
-  { kind: 'bulletList', icon: 'i-lucide-list' },
-  { kind: 'orderedList', icon: 'i-lucide-list-ordered' },
-  { kind: 'blockquote', icon: 'i-lucide-quote' },
-  { kind: 'codeBlock', icon: 'i-lucide-code-2' },
-  { kind: 'link', icon: 'i-lucide-link' },
-  { kind: 'horizontalRule', icon: 'i-lucide-minus' },
-  { kind: 'undo', icon: 'i-lucide-undo' },
-  { kind: 'redo', icon: 'i-lucide-redo' }
+// Array-of-arrays: UEditorToolbar draws a separator between each group.
+const toolbarItems: EditorToolbarItem[][] = [
+  [
+    { kind: 'undo', icon: 'i-lucide-undo' },
+    { kind: 'redo', icon: 'i-lucide-redo' }
+  ],
+  [
+    { kind: 'heading', level: 2, icon: 'i-lucide-heading-2' },
+    { kind: 'heading', level: 3, icon: 'i-lucide-heading-3' }
+  ],
+  [
+    { kind: 'mark', mark: 'bold', icon: 'i-lucide-bold' },
+    { kind: 'mark', mark: 'italic', icon: 'i-lucide-italic' },
+    { kind: 'mark', mark: 'strike', icon: 'i-lucide-strikethrough' },
+    { kind: 'mark', mark: 'code', icon: 'i-lucide-code' }
+  ],
+  [
+    { kind: 'bulletList', icon: 'i-lucide-list' },
+    { kind: 'orderedList', icon: 'i-lucide-list-ordered' }
+  ],
+  [
+    { kind: 'blockquote', icon: 'i-lucide-quote' },
+    { kind: 'codeBlock', icon: 'i-lucide-code-2' }
+  ],
+  [
+    { kind: 'link', icon: 'i-lucide-link' },
+    { kind: 'horizontalRule', icon: 'i-lucide-minus' }
+  ]
 ]
 </script>
 
