@@ -52,18 +52,11 @@ useProjectData(currentProjectId, loadDashboard, {
     ) {
       // a project was renamed, archived or destroyed — reload the list (the store
       // falls back to another project if the current one is gone) and the stats.
-      repointProjects()
+      store.loadAndRepoint()
       loadDashboard()
     }
   }
 })
-
-async function repointProjects() {
-  await store.loadProjects()
-  if (!currentProject.value && projects.value[0]) {
-    store.setCurrent(projects.value[0].slug)
-  }
-}
 
 const statusCounts = computed<Record<CardStatus, number>>(() => {
   const counts: Record<CardStatus, number> = {

@@ -41,6 +41,15 @@ export const useProjectStore = defineStore('project', () => {
     }
   }
 
+  // Reload the list and, if the current project vanished (archived/destroyed),
+  // repoint to the first remaining one.
+  async function loadAndRepoint() {
+    await loadProjects()
+    if (!currentProject.value && projects.value[0]) {
+      setCurrent(projects.value[0].slug)
+    }
+  }
+
   async function ensureLoaded() {
     if (projects.value.length === 0) {
       await loadProjects()
@@ -55,6 +64,7 @@ export const useProjectStore = defineStore('project', () => {
     currentSlug,
     loadProjects,
     setCurrent,
+    loadAndRepoint,
     ensureLoaded
   }
 })

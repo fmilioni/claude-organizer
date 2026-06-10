@@ -7,10 +7,10 @@ definePageMeta({ middleware: 'admin-or-open' })
 useHead({ title: 'Projects' })
 
 const store = useProjectStore()
-const { projects, currentProject, currentProjectId } = storeToRefs(store)
+const { projects, currentProjectId } = storeToRefs(store)
 const api = useApi()
 const toast = useToast()
-const apiUrl = (useRuntimeConfig().public.apiUrl as string).replace(/\/$/, '')
+const download = useApiDownload()
 
 const archivedProjects = ref<Project[]>([])
 
@@ -21,10 +21,7 @@ async function loadArchivedProjects() {
 }
 
 async function refreshProjectLists() {
-  await Promise.all([store.loadProjects(), loadArchivedProjects()])
-  if (!currentProject.value && projects.value[0]) {
-    store.setCurrent(projects.value[0].slug)
-  }
+  await Promise.all([store.loadAndRepoint(), loadArchivedProjects()])
 }
 
 useProjectData(currentProjectId, refreshProjectLists, {
@@ -100,14 +97,6 @@ async function confirmDestroy() {
       color: 'error'
     })
   }
-}
-
-function download(path: string) {
-  const a = document.createElement('a')
-  a.href = `${apiUrl}${path}`
-  document.body.appendChild(a)
-  a.click()
-  a.remove()
 }
 
 const importing = ref(false)
