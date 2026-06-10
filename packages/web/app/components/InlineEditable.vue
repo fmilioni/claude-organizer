@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import type { AttachmentOwner } from '~/composables/useAttachments'
+
 // Shared preview↔edit field used by the card detail and the docs editor.
 // Renders the value (auto-linked plain text or markdown) and, on click, swaps to
 // an editor; the consumer owns the value + auto-save (this only toggles/edits).
@@ -13,6 +15,7 @@ const props = withDefaults(
     bordered?: boolean // preview box gets a border (summary/markdown)
     inputClass?: string // typography for the input/textarea
     previewClass?: string // typography for the rendered preview
+    owner?: AttachmentOwner | null // binds pasted/dropped images (markdown)
   }>(),
   {
     type: 'markdown',
@@ -70,6 +73,7 @@ onBeforeUnmount(() => document.removeEventListener('mousedown', onOutside))
         autofocus
         :min-height="minHeight"
         :placeholder="editorPlaceholder"
+        :owner="owner"
       />
       <div
         v-else

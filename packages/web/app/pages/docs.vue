@@ -459,6 +459,7 @@ async function onDocRemoved() {
               min-height="400px"
               placeholder="Write documentation… (markdown supported)"
               editor-placeholder="Write documentation… (markdown supported)"
+              :owner="{ type: 'doc', id: current.id }"
             />
           </div>
         </div>

@@ -545,6 +545,7 @@ const providerIcon = computed(() =>
               min-height="200px"
               placeholder="No description. Click to edit."
               editor-placeholder="Write a description… (markdown supported)"
+              :owner="{ type: 'card', id: card.id }"
             />
           </section>
 
