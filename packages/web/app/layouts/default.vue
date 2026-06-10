@@ -18,8 +18,8 @@ const version = useRuntimeConfig().public.appVersion
 // @nuxt/ui ships @nuxtjs/color-mode, so the value/preference persist on their own.
 const colorMode = useColorMode()
 const isDark = computed(() => colorMode.value === 'dark')
-const themeLabel = computed(() => (isDark.value ? 'Dark mode' : 'Light mode'))
-const themeIcon = computed(() => (isDark.value ? 'i-lucide-moon' : 'i-lucide-sun'))
+const themeLabel = computed(() => (isDark.value ? 'Light mode' : 'Dark mode'))
+const themeIcon = computed(() => (isDark.value ? 'i-lucide-sun' : 'i-lucide-moon'))
 function toggleTheme() {
   colorMode.preference = isDark.value ? 'light' : 'dark'
 }
