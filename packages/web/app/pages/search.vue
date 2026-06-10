@@ -17,7 +17,7 @@ const searched = ref(false)
 
 const term = computed(() => query.value.trim())
 
-// A monotonic ticket discards out-of-order responses (same guard as AppCardSearch).
+// A monotonic ticket discards out-of-order responses (same guard as the search modal).
 let ticket = 0
 let timer: ReturnType<typeof setTimeout> | undefined
 

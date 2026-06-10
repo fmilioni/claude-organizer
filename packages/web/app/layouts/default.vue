@@ -107,7 +107,11 @@ async function onLogout() {
       </template>
 
       <template #default="{ collapsed }">
-        <AppCardSearch v-if="!collapsed" class="mb-2" />
+        <UDashboardSearchButton
+          :collapsed="collapsed"
+          label="Search cards…"
+          class="bg-transparent ring-default"
+        />
         <UNavigationMenu
           :items="projectLinks"
           orientation="vertical"
@@ -147,6 +151,8 @@ async function onLogout() {
         <span v-if="!collapsed" class="block w-full text-center text-xs text-muted">v{{ version }}</span>
       </template>
     </UDashboardSidebar>
+
+    <AppSearchModal />
 
     <div
       v-if="noProjectsForUser"
