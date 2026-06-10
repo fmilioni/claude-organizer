@@ -99,7 +99,8 @@ async function onLogout() {
     <UDashboardSidebar
       collapsible
       resizable
-      :ui="{ footer: 'flex-col items-stretch gap-2' }"
+      class="bg-elevated/25"
+      :ui="{ footer: 'flex-col items-stretch gap-2 lg:border-t lg:border-default' }"
     >
       <template #header="{ collapsed }">
         <AppProjectSwitcher :collapsed="collapsed" />
