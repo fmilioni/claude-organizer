@@ -346,6 +346,7 @@ export type ProjectScopedEntity
     | 'tag'
     | 'intakeItem'
     | 'comment'
+    | 'attachment'
 
 export async function resolveEntityProjectId(
   db: Database,
@@ -411,6 +412,14 @@ export async function resolveEntityProjectId(
         .from(schema.comments)
         .innerJoin(schema.cards, eq(schema.comments.cardId, schema.cards.id))
         .where(eq(schema.comments.id, id))
+        .limit(1)
+      return row?.projectId ?? null
+    }
+    case 'attachment': {
+      const [row] = await db
+        .select({ projectId: schema.attachments.projectId })
+        .from(schema.attachments)
+        .where(eq(schema.attachments.id, id))
         .limit(1)
       return row?.projectId ?? null
     }

@@ -1,4 +1,5 @@
 import cors from '@fastify/cors'
+import multipart from '@fastify/multipart'
 import websocket from '@fastify/websocket'
 import Fastify from 'fastify'
 
@@ -10,6 +11,7 @@ import { registerAuthEnforcement } from './plugins/auth-enforcement'
 import errorHandlerPlugin from './plugins/error-handler'
 import eventsPlugin from './plugins/events'
 import { registerAdminRoutes } from './routes/admin'
+import { MAX_UPLOAD_BYTES, registerAttachmentRoutes } from './routes/attachments'
 import { registerAuthRoutes } from './routes/auth'
 import { registerBackupRoutes } from './routes/backup'
 import { registerBlockerRoutes } from './routes/blockers'
@@ -73,6 +75,7 @@ await app.register(cors, {
   methods: ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE']
 })
 await app.register(websocket)
+await app.register(multipart, { limits: { fileSize: MAX_UPLOAD_BYTES, files: 1 } })
 await app.register(errorHandlerPlugin)
 await app.register(eventsPlugin)
 
@@ -82,6 +85,7 @@ app.decorate('db', db)
 registerAuthRoutes(app, auth, db)
 registerAuthEnforcement(app, auth, db)
 registerAdminRoutes(app, db)
+registerAttachmentRoutes(app, db)
 registerProjectRoutes(app, db)
 registerSprintRoutes(app, db)
 registerCardRoutes(app, db)

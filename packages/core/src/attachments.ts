@@ -68,6 +68,17 @@ export async function getAttachment(db: Database, id: string) {
   return row ?? null
 }
 
+// Metadata only — no bytes. The serve path needs `getAttachment` (with `data`);
+// an existence check (e.g. before minting a serve URL) takes this lean read.
+export async function getAttachmentMeta(db: Database, id: string) {
+  const [row] = await db
+    .select(attachmentColumns)
+    .from(schema.attachments)
+    .where(eq(schema.attachments.id, id))
+    .limit(1)
+  return row ?? null
+}
+
 export async function listAttachments(
   db: Database,
   options: {

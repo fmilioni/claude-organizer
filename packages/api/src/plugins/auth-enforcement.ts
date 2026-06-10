@@ -11,6 +11,7 @@ import {
   resolveCommentsProjectIds,
   resolveCommitTokenSecret,
   resolveEntityProjectId,
+  verifyAttachmentToken,
   verifyCommitToken
 } from '@claude-organizer/core'
 import type { Database } from '@claude-organizer/db'
@@ -62,6 +63,20 @@ function acceptsCommitToken(req: FastifyRequest): boolean {
   if (typeof token !== 'string' || !key) return false
   const secret = resolveCommitTokenSecret()
   return secret ? verifyCommitToken(token, key, secret) : false
+}
+
+// `<img>` can't send a session cookie cross-site, so the serve route accepts a
+// short-lived signed value in the `?sig=` query, pinned to the attachment id.
+// Mirrors the commit token, but scoped to GET /attachments/:id only.
+function acceptsAttachmentToken(req: FastifyRequest): boolean {
+  if (req.routeOptions?.url !== '/attachments/:id' || req.method !== 'GET') {
+    return false
+  }
+  const sig = (req.query as Record<string, string | undefined>).sig
+  const id = (req.params as Record<string, string>).id
+  if (typeof sig !== 'string' || !id) return false
+  const secret = resolveCommitTokenSecret()
+  return secret ? verifyAttachmentToken(sig, id, secret) : false
 }
 
 function isPublic(url: string | undefined): boolean {
@@ -119,6 +134,13 @@ async function resolveProjectIds(
         : one(query.projectId ?? null)
     case '/comments/unread':
       return one(query.projectId ?? null)
+    case '/attachments':
+      // Upload carries the file in the multipart body (unparsed at this hook),
+      // so the project scope rides in the query.
+      return one(query.projectId ?? null)
+    case '/attachments/:id':
+    case '/attachments/:id/url':
+      return entity('attachment', params.id!)
     case '/projects/:projectId/intake':
     case '/ws/projects/:projectId':
       return one(params.projectId ?? null)
@@ -198,6 +220,8 @@ export function registerAuthEnforcement(
       // Programmatic diff clients (attach-commit / attach-worktree-diff) have no
       // browser session; a valid card-scoped token authorizes just their routes.
       if (acceptsCommitToken(req)) return
+      // A signed `<img>` serve URL stands in for a session on the serve route.
+      if (acceptsAttachmentToken(req)) return
       return reply.code(401).send({ error: 'unauthorized' })
     }
 
