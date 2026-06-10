@@ -151,6 +151,13 @@ Rules of thumb:
 - **No doc spam** — the same signal-vs-noise discipline as comments. Durable and non-deducible → record. Ephemeral, obvious, or deducible from the code/board → leave it out. If it would rot on the next refactor or just restate the obvious, it's not a doc.
 - **Retire a `note` when its issue is resolved — don't mark it "resolved".** A `note` capturing a pending item / gap is **transient**: once the work lands, move whatever durable knowledge it holds into the right `module`/`adr` (the permanent home) and then **delete or archive the note**. Leaving a note that says "resolved" is doc spam — a future reader has to open it to learn it no longer matters. If nothing durable survives, just delete it.
 
+## Image attachments — describe for search, open on demand
+
+Images pasted or dropped into a card, comment, doc or inbox item are stored as **attachments** and surfaced two ways: the read payloads (`get_card`, `list_comments`, `read_doc`, `list_inbox`) carry an **`attachments` array** (`{ id, uri, mime, width, height, description }`), and each image is an **MCP resource** at `attachment://<id>`.
+
+- **Open the image whenever it carries meaning you need.** The agent isn't a browser — a markdown `![](…)` link is not "seen". To understand or implement anything an image conveys, read it via its resource (`ReadMcpResource attachment://<id>`); the `uri` is right there in the payload's `attachments` array.
+- **Give every image a short textual description** — in the markdown `alt` (`![a screenshot of the misaligned toggle button](…)`) and/or the surrounding prose — so lexical/semantic **search finds the card from words alone**. The description **aids discovery; it doesn't replace looking** — reopen the resource whenever you actually need the pixels.
+
 ## Conventions
 
 - The board only reflects reality if you keep statuses honest as you go.

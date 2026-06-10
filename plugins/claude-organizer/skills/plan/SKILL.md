@@ -84,6 +84,8 @@ Write each task so a developer — or a fresh agent with **zero chat context** �
 - **Decisions** — what was settled during clarification.
 - _(as needed)_ constraints, out-of-scope, references, links.
 
+**An image in the source is described, not just linked.** When the demand arrives with an image — an inbox item with a screenshot, a pasted mockup — open it (`ReadMcpResource attachment://<id>`, the `uri` is in the payload's `attachments` array) and fold a **short textual description** into the card (e.g. _"the user attached an image showing the misaligned toggle button"_), so the card is searchable and a fresh executor knows what it depicts without the pixels.
+
 Describe **behavior and intent, not code**. Do **not** write the implementation or hard-prescribe _how_ to build it — the executor decides that — **unless** it's a real constraint or an already-diagnosed bug (then being specific is correct). Naming a real endpoint/table/file is fine; writing function bodies is not.
 
 The test: _could a fresh session execute this task using only its contents?_ If not, it's underspecified — keep refining (go back to the user if needed).

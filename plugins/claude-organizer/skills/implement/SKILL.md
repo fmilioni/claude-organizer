@@ -68,6 +68,8 @@ Scan the docs tree (`list_docs` / `search_docs`) and read what's pertinent to th
 
 Build the card, following the repo's `CLAUDE.md` and the agreed git flow (see _Git flow_). Stay within the card's scope; if scope shifts, that's a comment (step 5) — and possibly a new card via `plan`. **The moment you hit an ambiguity or a decision the card doesn't settle, stop and ask** — don't assume your way forward; fold the answer back in and record it as a comment.
 
+**If the card or its comments carry an image, open it before you build.** The read payloads (`get_card`, `list_comments`) expose an `attachments` array with `attachment://<id>` URIs — read the resource (`ReadMcpResource`) and actually look at the image. A markdown link isn't "seen", and the textual description only points you to it; build against the pixels, not a guess.
+
 **Write code without needless comments from the start** — don't leave for the review what shouldn't be written in the first place:
 
 - **Don't comment _what_ the code does** — the identifiers already say it (`const total = sum(items)` needs no `// sum the items`).
