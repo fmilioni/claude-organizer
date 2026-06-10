@@ -81,6 +81,12 @@ function getEmbedder(): Promise<Embedder | null> {
   return loading
 }
 
+/** Boot warm-up: prime the model load up front. Safe to fire-and-forget —
+ *  `getEmbedder` swallows load failure and a disabled config is a no-op. */
+export async function warmupEmbedder(): Promise<void> {
+  await getEmbedder()
+}
+
 function applyPrefix(text: string, kind: EmbeddingKind, e5Prefix: boolean): string {
   // e5 models are trained with `query:`/`passage:` prefixes; other families take
   // the raw text.

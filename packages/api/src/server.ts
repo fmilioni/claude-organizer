@@ -4,7 +4,7 @@ import websocket from '@fastify/websocket'
 import Fastify from 'fastify'
 
 import { createAuth, getTrustedOrigins } from '@claude-organizer/auth'
-import { primeEmbeddingRuntime } from '@claude-organizer/core'
+import { primeEmbeddingRuntime, warmupEmbedder } from '@claude-organizer/core'
 import { createDb } from '@claude-organizer/db'
 
 import { registerAuthEnforcement } from './plugins/auth-enforcement'
@@ -110,6 +110,11 @@ process.on('SIGTERM', shutdown)
 try {
   await app.listen({ port, host })
   app.log.info(`API ready on http://${host}:${port}`)
+  // Fire-and-forget after listen: warm the embedding model in the background so
+  // the first search doesn't pay the cold-start load, without delaying readiness.
+  void warmupEmbedder().catch((err) => {
+    app.log.warn({ err }, 'embedding warm-up failed; first search will load lazily')
+  })
 } catch (err) {
   app.log.error(err)
   process.exit(1)

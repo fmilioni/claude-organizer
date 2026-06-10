@@ -2,7 +2,8 @@
 import {
   clearRuntimeEmbeddingConfig,
   primeEmbeddingRuntime,
-  recordRuntimeEmbeddingConfig
+  recordRuntimeEmbeddingConfig,
+  warmupEmbedder
 } from '@claude-organizer/core'
 import { createDb } from '@claude-organizer/db'
 import { MCP_RUNTIME_SERVICE } from '@claude-organizer/shared'
@@ -44,6 +45,12 @@ try {
 }
 
 const httpServer = startHttpServer({ db, port })
+
+// Fire-and-forget after the server is listening: warm the embedding model in the
+// background so the first search doesn't pay the cold-start load.
+void warmupEmbedder().catch((err: unknown) => {
+  console.warn('[claude-organizer-mcp] embedding warm-up failed; first search will load lazily', err)
+})
 
 const shutdown = async () => {
   httpServer.close()
