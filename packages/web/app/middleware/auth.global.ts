@@ -5,7 +5,10 @@ export default defineNuxtRouteMiddleware(async (to) => {
   const caps = await ensureCapabilities()
 
   // Sem-auth mode: no sessions, no gating — the board runs as it did pre-auth.
-  if (!caps.authEnabled) return
+  // Public-only routes (login / no-access) have no purpose without auth → home.
+  if (!caps.authEnabled) {
+    return PUBLIC_PATHS.includes(to.path) ? navigateTo('/') : undefined
+  }
 
   await ensureSession()
 
