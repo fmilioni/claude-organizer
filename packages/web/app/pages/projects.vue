@@ -10,6 +10,7 @@ const store = useProjectStore()
 const { projects, currentProject, currentProjectId } = storeToRefs(store)
 const api = useApi()
 const toast = useToast()
+const apiUrl = (useRuntimeConfig().public.apiUrl as string).replace(/\/$/, '')
 
 const archivedProjects = ref<Project[]>([])
 
@@ -100,6 +101,48 @@ async function confirmDestroy() {
     })
   }
 }
+
+function download(path: string) {
+  const a = document.createElement('a')
+  a.href = `${apiUrl}${path}`
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+}
+
+const importing = ref(false)
+const importError = ref<string | null>(null)
+const imported = ref<Project[]>([])
+const fileInput = ref<HTMLInputElement | null>(null)
+
+async function onImportFile(e: Event) {
+  const file = (e.target as HTMLInputElement).files?.[0]
+  if (!file) return
+  importing.value = true
+  importError.value = null
+  imported.value = []
+  try {
+    const buf = await file.arrayBuffer()
+    const { projectIds } = await api<{ projectIds: string[] }>('/import', {
+      method: 'POST',
+      body: buf,
+      headers: { 'Content-Type': 'application/gzip' }
+    })
+    await refreshProjectLists()
+    const byId = new Map(store.projects.map(p => [p.id, p]))
+    imported.value = projectIds.map(id => byId.get(id)).filter(Boolean) as Project[]
+  } catch (err) {
+    importError.value = resolveError(err)
+  } finally {
+    importing.value = false
+    if (fileInput.value) fileInput.value.value = ''
+  }
+}
+
+function openProject(slug: string) {
+  store.setCurrent(slug)
+  navigateTo('/board')
+}
 </script>
 
 <template>
@@ -112,6 +155,29 @@ async function confirmDestroy() {
         </template>
         <template #right>
           <UButton
+            icon="i-lucide-download"
+            label="Export all"
+            color="neutral"
+            variant="ghost"
+            @click="download('/export')"
+          />
+          <UButton
+            icon="i-lucide-upload"
+            label="Import"
+            color="neutral"
+            variant="ghost"
+            :loading="importing"
+            @click="fileInput?.click()"
+          />
+          <input
+            ref="fileInput"
+            type="file"
+            accept=".gz,application/gzip"
+            aria-label="Import a backup file"
+            class="hidden"
+            @change="onImportFile"
+          >
+          <UButton
             icon="i-lucide-plus"
             label="New project"
             color="primary"
@@ -123,6 +189,38 @@ async function confirmDestroy() {
 
     <template #body>
       <div class="max-w-2xl mx-auto w-full space-y-4">
+        <div
+          v-if="imported.length"
+          class="space-y-1.5 border border-default rounded-lg p-3"
+        >
+          <div class="flex items-center gap-2 text-sm text-success">
+            <UIcon name="i-lucide-check-circle" />
+            <span>Imported {{ imported.length }} project{{ imported.length === 1 ? "" : "s" }} as new.</span>
+          </div>
+          <div
+            v-for="p in imported"
+            :key="p.id"
+            class="flex items-center gap-2 text-sm pl-6"
+          >
+            <span class="flex-1 truncate text-muted">{{ p.name }} ({{ p.slug }})</span>
+            <UButton
+              size="xs"
+              color="primary"
+              variant="subtle"
+              label="Open"
+              @click="openProject(p.slug)"
+            />
+          </div>
+        </div>
+
+        <UAlert
+          v-if="importError"
+          color="error"
+          variant="soft"
+          icon="i-lucide-alert-triangle"
+          :title="importError"
+        />
+
         <div
           v-if="projects.length === 0"
           class="text-sm text-muted border border-default rounded-lg p-8 text-center"
@@ -151,6 +249,14 @@ async function confirmDestroy() {
                 {{ p.slug }}
               </p>
             </div>
+            <UButton
+              icon="i-lucide-download"
+              size="xs"
+              color="neutral"
+              variant="ghost"
+              label="Export"
+              @click="download(`/projects/${p.id}/export`)"
+            />
             <UButton
               icon="i-lucide-archive"
               size="xs"
