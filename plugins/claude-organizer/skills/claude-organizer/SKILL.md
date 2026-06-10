@@ -102,6 +102,8 @@ Learn the _criterion_ (signal vs. noise; deducible vs. new) — don't follow a f
 
 User comments arrive flagged unread. **Reading is read-only — it never marks anything.** Both `list_unread_comments` and `list_comments(cardId)` list comments **without** touching the unread flags, so scanning history to find a past decision never silently clears the user's unread. Marking read is a **separate, explicit** step: `mark_comments_read([...commentIds])`, done only when you've actually addressed the comments while working the card. Check unread comments at session start. **When you pick a card up to develop, `list_comments(cardId)` is mandatory before implementing** — the `implement` skill enforces this (every card, every time, even if read before, because new context may have landed). Reading the history's comments does **not** cover its children.
 
+**Author each paragraph or bullet as one continuous line — never hard-wrap (manual line breaks) mid-paragraph.** Soft-wrapping is the renderer's job, not the author's, and this holds for **every authored body alike — card/task descriptions, comments and docs**. Legitimate markdown structure is not hard-wrap and stays: headings, one list item per line, table rows, fenced code blocks, and blank-line-separated paragraphs — the rule forbids only the artificial break *inside* a single paragraph or bullet.
+
 ## Cards — field reference
 
 **To create cards, use the `plan` skill — not `create_card` from here.** This section is **only** a field reference (so you understand the shape of a card and can keep existing ones honest with `update_card`, status moves, tags, blockers); it is **not** a licence to mint new cards directly.
