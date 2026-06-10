@@ -33,6 +33,13 @@ export const intakeStatusEnum = pgEnum('intake_status', [
   'archived'
 ])
 
+export const attachmentOwnerTypeEnum = pgEnum('attachment_owner_type', [
+  'card',
+  'comment',
+  'doc',
+  'inbox'
+])
+
 export const userRoleEnum = pgEnum('user_role', ['admin', 'user'])
 
 export const userStatusEnum = pgEnum('user_status', ['pending', 'approved'])

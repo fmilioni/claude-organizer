@@ -198,17 +198,27 @@ export async function listAllUsers(db: Database) {
 const DEFAULT_SYSTEM_SETTINGS = {
   authEnabled: true,
   keepDiffsOnArchive: false,
-  embeddingModel: null
+  embeddingModel: null,
+  includeAttachmentsInBackup: true
 } as const
 
 export async function getSystemSettings(
   db: Database
-): Promise<Pick<SystemSettingsRow, 'authEnabled' | 'keepDiffsOnArchive' | 'embeddingModel'>> {
+): Promise<
+  Pick<
+    SystemSettingsRow,
+    | 'authEnabled'
+    | 'keepDiffsOnArchive'
+    | 'embeddingModel'
+    | 'includeAttachmentsInBackup'
+  >
+> {
   const [row] = await db
     .select({
       authEnabled: schema.systemSettings.authEnabled,
       keepDiffsOnArchive: schema.systemSettings.keepDiffsOnArchive,
-      embeddingModel: schema.systemSettings.embeddingModel
+      embeddingModel: schema.systemSettings.embeddingModel,
+      includeAttachmentsInBackup: schema.systemSettings.includeAttachmentsInBackup
     })
     .from(schema.systemSettings)
     .where(eq(schema.systemSettings.id, SYSTEM_SETTINGS_ID))
@@ -241,6 +251,24 @@ export async function setKeepDiffsOnArchive(
     })
     .returning({
       keepDiffsOnArchive: schema.systemSettings.keepDiffsOnArchive
+    })
+  return row!
+}
+
+export async function setIncludeAttachmentsInBackup(
+  db: Database,
+  includeAttachmentsInBackup: boolean
+) {
+  const [row] = await db
+    .insert(schema.systemSettings)
+    .values({ id: SYSTEM_SETTINGS_ID, includeAttachmentsInBackup })
+    .onConflictDoUpdate({
+      target: schema.systemSettings.id,
+      set: { includeAttachmentsInBackup, updatedAt: sql`now()` }
+    })
+    .returning({
+      includeAttachmentsInBackup:
+        schema.systemSettings.includeAttachmentsInBackup
     })
   return row!
 }

@@ -5,6 +5,7 @@ import { z } from 'zod'
 
 import { createId, type Database, schema } from '@claude-organizer/db'
 import {
+  type AttachmentRow,
   BACKUP_FORMAT_VERSION,
   type BackupEnvelope,
   type BackupScope,
@@ -19,6 +20,7 @@ import {
   type TagRow
 } from '@claude-organizer/shared'
 
+import { getSystemSettings } from './authz'
 import { InputError } from './errors'
 
 // Project-domain tables, parents before children (FK-safe order for the
@@ -36,7 +38,8 @@ export const BACKUP_TABLE_NAMES = [
   'card_tags',
   'card_blockers',
   'card_commits',
-  'intake_items'
+  'intake_items',
+  'attachments'
 ] as const
 
 // Identity/system tables deliberately kept OUT of project backups: a backup
@@ -75,7 +78,25 @@ function envelope(
 const emptyData = (): Record<string, unknown[]> =>
   Object.fromEntries(BACKUP_TABLE_NAMES.map(name => [name, []]))
 
+type RawAttachment = typeof schema.attachments.$inferSelect
+
+// bytea can't ride in JSON, so the bytes are base64-encoded into the envelope
+// (createdAt stays a Date — JSON.stringify renders it ISO like every other row).
+// includeData OFF drops the `data` field entirely (metadata-only), keeping the
+// envelope small; the importer tolerates the missing field.
+function serializeAttachments(
+  rows: RawAttachment[],
+  includeData: boolean
+): unknown[] {
+  return rows.map(({ data, ...meta }) =>
+    includeData
+      ? { ...meta, data: data ? Buffer.from(data).toString('base64') : null }
+      : meta
+  )
+}
+
 export async function exportAll(db: Database): Promise<BackupEnvelope> {
+  const { includeAttachmentsInBackup } = await getSystemSettings(db)
   const [
     projects,
     roadmaps,
@@ -87,7 +108,8 @@ export async function exportAll(db: Database): Promise<BackupEnvelope> {
     cardTags,
     cardBlockers,
     cardCommits,
-    intakeItems
+    intakeItems,
+    attachments
   ] = await Promise.all([
     db.select().from(schema.projects),
     db.select().from(schema.roadmaps),
@@ -99,7 +121,8 @@ export async function exportAll(db: Database): Promise<BackupEnvelope> {
     db.select().from(schema.cardTags),
     db.select().from(schema.cardBlockers),
     db.select().from(schema.cardCommits),
-    db.select().from(schema.intakeItems)
+    db.select().from(schema.intakeItems),
+    db.select().from(schema.attachments)
   ])
   return envelope(
     'all',
@@ -115,7 +138,8 @@ export async function exportAll(db: Database): Promise<BackupEnvelope> {
       card_tags: cardTags,
       card_blockers: cardBlockers,
       card_commits: cardCommits,
-      intake_items: intakeItems
+      intake_items: intakeItems,
+      attachments: serializeAttachments(attachments, includeAttachmentsInBackup)
     }
   )
 }
@@ -124,6 +148,7 @@ export async function exportProject(
   db: Database,
   projectId: string
 ): Promise<BackupEnvelope> {
+  const { includeAttachmentsInBackup } = await getSystemSettings(db)
   const projects = await db
     .select()
     .from(schema.projects)
@@ -147,7 +172,8 @@ export async function exportProject(
     cardTags,
     cardBlockers,
     cardCommits,
-    intakeItems
+    intakeItems,
+    attachments
   ] = await Promise.all([
     db
       .select()
@@ -193,7 +219,11 @@ export async function exportProject(
     db
       .select()
       .from(schema.intakeItems)
-      .where(eq(schema.intakeItems.projectId, projectId))
+      .where(eq(schema.intakeItems.projectId, projectId)),
+    db
+      .select()
+      .from(schema.attachments)
+      .where(eq(schema.attachments.projectId, projectId))
   ])
 
   return envelope(
@@ -210,7 +240,8 @@ export async function exportProject(
       card_tags: cardTags,
       card_blockers: cardBlockers,
       card_commits: cardCommits,
-      intake_items: intakeItems
+      intake_items: intakeItems,
+      attachments: serializeAttachments(attachments, includeAttachmentsInBackup)
     }
   )
 }
@@ -227,7 +258,9 @@ type BackupData = Record<string, unknown[]>
 // server (the central guarantee of CO-140).
 const MIGRATORS: Array<(data: BackupData) => BackupData> = [
   // v0 → v1: `intake_items` joined the schema; older backups lack the table.
-  data => ({ ...data, intake_items: data.intake_items ?? [] })
+  data => ({ ...data, intake_items: data.intake_items ?? [] }),
+  // v1 → v2: `attachments` joined the schema; older backups lack the table.
+  data => ({ ...data, attachments: data.attachments ?? [] })
 ]
 
 const backupEnvelopeSchema = z
@@ -299,6 +332,8 @@ async function restoreAsNew(db: Database, data: BackupData): Promise<string[]> {
     const T: Record<string, string> = {}
     const C: Record<string, string> = {}
     const D: Record<string, string> = {}
+    const CM: Record<string, string> = {}
+    const IT: Record<string, string> = {}
 
     // A slug is unique by constraint; keyPrefix we keep distinct too so future
     // keys stay unambiguous. Each field is suffixed independently — only the one
@@ -444,8 +479,10 @@ async function restoreAsNew(db: Database, data: BackupData): Promise<string[]> {
     }
 
     for (const cm of rows<CommentRow>('comments')) {
+      const id = createId('cmt')
+      CM[cm.id] = id
       await tx.insert(schema.comments).values({
-        id: createId('cmt'),
+        id,
         cardId: C[cm.cardId]!,
         author: cm.author,
         bodyMd: cm.bodyMd,
@@ -515,8 +552,10 @@ async function restoreAsNew(db: Database, data: BackupData): Promise<string[]> {
     }
 
     for (const it of rows<IntakeItemRow>('intake_items')) {
+      const id = createId('itk')
+      IT[it.id] = id
       await tx.insert(schema.intakeItems).values({
-        id: createId('itk'),
+        id,
         projectId: P[it.projectId]!,
         bodyMd: it.bodyMd,
         status: it.status,
@@ -524,6 +563,31 @@ async function restoreAsNew(db: Database, data: BackupData): Promise<string[]> {
         createdAt: new Date(it.createdAt),
         updatedAt: new Date(it.updatedAt),
         archivedAt: toDate(it.archivedAt)
+      })
+    }
+
+    // Owner link is polymorphic/optional; remap it via the matching id-map and
+    // drop a dangling owner to null (the markdown reference is the real link).
+    // `data` rode in as base64 (or is absent when exported with the toggle OFF).
+    const ownerMaps = { card: C, comment: CM, doc: D, inbox: IT } as const
+    for (const a of rows<AttachmentRow & { data?: string | null }>(
+      'attachments'
+    )) {
+      const mappedOwner
+        = a.ownerType && a.ownerId ? ownerMaps[a.ownerType][a.ownerId] : undefined
+      await tx.insert(schema.attachments).values({
+        id: createId('att'),
+        projectId: P[a.projectId]!,
+        ownerType: mappedOwner ? a.ownerType : null,
+        ownerId: mappedOwner ?? null,
+        mime: a.mime,
+        filename: a.filename,
+        byteSize: a.byteSize,
+        width: a.width,
+        height: a.height,
+        description: a.description,
+        data: typeof a.data === 'string' ? Buffer.from(a.data, 'base64') : null,
+        createdAt: new Date(a.createdAt)
       })
     }
 

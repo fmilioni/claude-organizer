@@ -36,3 +36,16 @@ export type UserRole = (typeof USER_ROLES)[number]
 
 export const USER_STATUSES = ['pending', 'approved'] as const
 export type UserStatus = (typeof USER_STATUSES)[number]
+
+// Owner entity an attachment may be linked to. The link is optional (the
+// markdown reference is the source of truth); 'inbox' maps to intake_items.
+export const ATTACHMENT_OWNER_TYPES = ['card', 'comment', 'doc', 'inbox'] as const
+export type AttachmentOwnerType = (typeof ATTACHMENT_OWNER_TYPES)[number]
+
+export const ATTACHMENT_MIME_TYPES = [
+  'image/png',
+  'image/jpeg',
+  'image/gif',
+  'image/webp'
+] as const
+export type AttachmentMime = (typeof ATTACHMENT_MIME_TYPES)[number]

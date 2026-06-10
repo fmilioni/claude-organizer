@@ -1,4 +1,5 @@
 import type {
+  AttachmentOwnerType,
   CardStatus,
   CommentAuthor,
   DocKind,
@@ -136,6 +137,26 @@ export interface IntakeItemRow {
   archivedAt: string | null
 }
 
+/**
+ * Attachment metadata in wire form. The `bytea` `data` column is deliberately
+ * absent: bytes never travel in JSON payloads (images are served over a URL),
+ * so — like the generated tsv/embedding columns — `data` is out of the API
+ * contract and excluded from the schema conformance check.
+ */
+export interface AttachmentRow {
+  id: string
+  projectId: string
+  ownerType: AttachmentOwnerType | null
+  ownerId: string | null
+  mime: string
+  filename: string | null
+  byteSize: number
+  width: number
+  height: number
+  description: string | null
+  createdAt: string
+}
+
 export interface UserAuthzRow {
   userId: string
   role: UserRole
@@ -156,6 +177,7 @@ export interface SystemSettingsRow {
   authEnabled: boolean
   keepDiffsOnArchive: boolean
   embeddingModel: string | null
+  includeAttachmentsInBackup: boolean
   createdAt: string
   updatedAt: string
 }

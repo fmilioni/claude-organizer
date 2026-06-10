@@ -9,6 +9,13 @@ export const tsvector = customType<{ data: string }>({
   }
 })
 
+/** Postgres `bytea` column for raw binary blobs (attachment bytes). */
+export const bytea = customType<{ data: Buffer, driverData: Buffer }>({
+  dataType() {
+    return 'bytea'
+  }
+})
+
 /**
  * pgvector `vector(N)` column for semantic search embeddings. Stored/read as a
  * JS `number[]`; the driver bridges to pgvector's `[1,2,3]` text literal. The

@@ -13,6 +13,7 @@ import {
   addTagToCard,
   archiveCard,
   BACKUP_TABLE_NAMES,
+  createAttachment,
   createCard,
   createDoc,
   createIntakeItem,
@@ -62,6 +63,14 @@ async function seedProject(db: typeof ctx.db) {
   await addComment(db, { cardId: card.id, author: 'user', bodyMd: 'hi' })
   await createDoc(db, { projectId: project.id, title: 'Doc', bodyMd: 'x' })
   await createIntakeItem(db, { projectId: project.id, bodyMd: 'raw demand' })
+  await createAttachment(db, {
+    projectId: project.id,
+    mime: 'image/png',
+    data: Buffer.alloc(8, 1),
+    width: 4,
+    height: 4,
+    owner: { ownerType: 'card', ownerId: card.id }
+  })
   const tag = await createTag(db, { projectId: project.id, name: 'area' })
   await addTagToCard(db, card.id, tag.id)
   // an archived card must still be exported (backup is not filtered by archive)
@@ -93,6 +102,7 @@ describe('exportProject', () => {
     expect(env.data.card_tags.length).toBeGreaterThan(0)
     expect(env.data.intake_items.length).toBeGreaterThan(0)
     expect(env.data.card_blockers.length).toBeGreaterThan(0)
+    expect(env.data.attachments.length).toBeGreaterThan(0)
   })
 
   it('scopes to one project — other projects rows do not leak in', async () => {

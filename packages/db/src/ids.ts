@@ -13,6 +13,7 @@ export const idPrefixes = {
   tag: 'tag',
   doc: 'doc',
   intake: 'itk',
+  attachment: 'att',
   user: 'usr',
   session: 'ses',
   account: 'acc',

@@ -6,13 +6,17 @@ import { schema } from '@claude-organizer/db'
 import {
   addComment,
   addTagToCard,
+  createAttachment,
   createCard,
   createProject,
   createSprint,
   createTag,
   exportProject,
+  getAttachment,
   importBackup,
-  serializeBackup
+  listAttachments,
+  serializeBackup,
+  setIncludeAttachmentsInBackup
 } from '../src/index'
 import { freshProject, useTestDb } from './helpers'
 
@@ -172,5 +176,59 @@ describe('importBackup — restore as new', () => {
     const future = serializeBackup({ ...env, version: 999 })
 
     await expect(importBackup(ctx.db, future)).rejects.toThrow()
+  })
+
+  it('round-trips an attachment with bytes and remaps its owner (toggle ON)', async () => {
+    await setIncludeAttachmentsInBackup(ctx.db, true)
+    const { project, card } = await seedProject()
+    const bytes = Buffer.from('hello-bytes', 'utf8')
+    await createAttachment(ctx.db, {
+      projectId: project.id,
+      mime: 'image/png',
+      data: bytes,
+      width: 3,
+      height: 3,
+      owner: { ownerType: 'card', ownerId: card.id }
+    })
+
+    const env = await exportProject(ctx.db, project.id)
+    const { projectIds } = await importBackup(ctx.db, serializeBackup(env))
+    const newId = projectIds[0]!
+
+    const list = await listAttachments(ctx.db, { projectId: newId })
+    expect(list).toHaveLength(1)
+    const restored = (await getAttachment(ctx.db, list[0]!.id))!
+    expect(restored.data).toEqual(bytes)
+
+    const [newCard] = await cardsOf(newId)
+    expect(restored.ownerType).toBe('card')
+    expect(restored.ownerId).toBe(newCard!.id)
+  })
+
+  it('omits bytes when the backup toggle is OFF (metadata-only attachment)', async () => {
+    const { project } = await seedProject()
+    await createAttachment(ctx.db, {
+      projectId: project.id,
+      mime: 'image/png',
+      data: Buffer.from('dropped', 'utf8'),
+      width: 2,
+      height: 2
+    })
+
+    // The toggle is a global singleton shared across parallel test files; reset
+    // it in finally so a failed assertion can't leak OFF into other exports.
+    await setIncludeAttachmentsInBackup(ctx.db, false)
+    try {
+      const env = await exportProject(ctx.db, project.id)
+      expect(env.data.attachments[0]).not.toHaveProperty('data')
+
+      const { projectIds } = await importBackup(ctx.db, serializeBackup(env))
+      const list = await listAttachments(ctx.db, { projectId: projectIds[0]! })
+      expect(list).toHaveLength(1)
+      const restored = (await getAttachment(ctx.db, list[0]!.id))!
+      expect(restored.data).toBeNull()
+    } finally {
+      await setIncludeAttachmentsInBackup(ctx.db, true)
+    }
   })
 })

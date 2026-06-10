@@ -7,6 +7,8 @@
 import type { InferSelectModel } from 'drizzle-orm'
 
 import type {
+  AttachmentOwnerType,
+  AttachmentRow,
   CardClaimRow,
   CardCommitRow,
   CardRow,
@@ -31,6 +33,8 @@ import type {
 } from '@claude-organizer/shared'
 
 import {
+  attachmentOwnerTypeEnum,
+  attachments,
   cardClaims,
   cardCommits,
   cards,
@@ -77,6 +81,7 @@ type Assert<T extends true> = T
  * contract, so they are excluded.
  */
 export type SchemaConformance = [
+  Assert<Equal<AttachmentRow, Wire<Omit<InferSelectModel<typeof attachments>, 'data'>>>>,
   Assert<Equal<CardRow, Wire<Omit<InferSelectModel<typeof cards>, 'searchTsv' | 'embedding'>>>>,
   Assert<Equal<SprintRow, Wire<InferSelectModel<typeof sprints>>>>,
   Assert<Equal<CommentRow, Wire<Omit<InferSelectModel<typeof comments>, 'bodyTsv' | 'embedding'>>>>,
@@ -99,5 +104,6 @@ export type SchemaConformance = [
   Assert<Equal<RepoProvider, (typeof repoProviderEnum.enumValues)[number]>>,
   Assert<Equal<IntakeStatus, (typeof intakeStatusEnum.enumValues)[number]>>,
   Assert<Equal<UserRole, (typeof userRoleEnum.enumValues)[number]>>,
-  Assert<Equal<UserStatus, (typeof userStatusEnum.enumValues)[number]>>
+  Assert<Equal<UserStatus, (typeof userStatusEnum.enumValues)[number]>>,
+  Assert<Equal<AttachmentOwnerType, (typeof attachmentOwnerTypeEnum.enumValues)[number]>>
 ]
