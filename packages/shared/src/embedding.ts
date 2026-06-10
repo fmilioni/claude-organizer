@@ -38,6 +38,9 @@ export interface EmbeddingConfig {
   e5Prefix: boolean
 }
 
+/** Key the MCP records its loaded model under (shared by the writer and reader). */
+export const MCP_RUNTIME_SERVICE = 'mcp'
+
 /** State of an in-flight (or last) runtime model swap; `idle` ⇒ none this process. */
 export type EmbeddingRuntimeState
   = | 'idle'

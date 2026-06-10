@@ -4,6 +4,7 @@ import { eq } from 'drizzle-orm'
 import { beforeEach, describe, expect, it } from 'vitest'
 
 import { schema } from '@claude-organizer/db'
+import { MCP_RUNTIME_SERVICE } from '@claude-organizer/shared'
 
 import {
   addComment,
@@ -20,6 +21,7 @@ import {
   InputError,
   listAccessibleProjectIds,
   listAllUsers,
+  recordRuntimeEmbeddingConfig,
   resolveCommentsProjectIds,
   resolveEffectiveEmbeddingConfig,
   resolveEntityProjectId,
@@ -331,5 +333,24 @@ describe('embedding runtime apply', () => {
     expect(rejected.reason).toBeInstanceOf(ConflictError)
     await settle(ctx.db)
     await setEmbeddingModel(ctx.db, null)
+  })
+
+  it('flags mcpRestartRequired durably when the MCP loaded a stale model', async () => {
+    await setEmbeddingModel(ctx.db, null)
+    const eff = await resolveEffectiveEmbeddingConfig(ctx.db)
+
+    // MCP recorded a different model than the persisted/effective one ⇒ stale.
+    await recordRuntimeEmbeddingConfig(ctx.db, MCP_RUNTIME_SERVICE, {
+      model: 'intfloat/multilingual-e5-large',
+      dim: 1024,
+      e5Prefix: true
+    })
+    expect((await getEmbeddingStatus(ctx.db)).mcpRestartRequired).toBe(true)
+
+    // MCP matches the effective config ⇒ no restart needed.
+    await recordRuntimeEmbeddingConfig(ctx.db, MCP_RUNTIME_SERVICE, eff)
+    expect((await getEmbeddingStatus(ctx.db)).mcpRestartRequired).toBe(false)
+
+    await ctx.db.delete(schema.embeddingRuntime)
   })
 })

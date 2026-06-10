@@ -54,7 +54,8 @@ export const NON_BACKUP_TABLE_NAMES = [
   'user_authz',
   'user_project_access',
   'card_claims',
-  'system_settings'
+  'system_settings',
+  'embedding_runtime'
 ] as const
 
 function envelope(

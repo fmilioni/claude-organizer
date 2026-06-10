@@ -1,19 +1,19 @@
 import type { Database } from '@claude-organizer/db'
 import { reconcileEmbeddingDim } from '@claude-organizer/db'
 import type { EmbeddingRuntimeState, EmbeddingRuntimeStatus } from '@claude-organizer/shared'
+import { MCP_RUNTIME_SERVICE } from '@claude-organizer/shared'
 
 import { getSystemSettings, setEmbeddingModel } from './authz'
 import { backfillCardEmbeddings } from './cards'
 import { backfillCommentEmbeddings } from './comments'
 import { backfillDocEmbeddings } from './docs'
 import { setEmbeddingConfig } from './embedding'
-import { resolveEffectiveEmbeddingConfig } from './embeddingConfig'
+import { getRuntimeEmbeddingConfig, resolveEffectiveEmbeddingConfig } from './embeddingConfig'
 import { ConflictError } from './errors'
 
 interface ApplyProgress {
   state: Exclude<EmbeddingRuntimeState, 'idle'>
   dimChanged: boolean
-  mcpRestartRequired: boolean
   backfill: { docs: number, cards: number, comments: number }
   error: string | null
 }
@@ -31,16 +31,24 @@ function isApplying(): boolean {
  * Effective embedding config (live from the DB) plus the progress of the last
  * model swap in this process. The model/dim always reflect the persisted choice,
  * so the status is correct even after a restart cleared `progress`.
+ *
+ * `mcpRestartRequired` is derived durably (not from the ephemeral apply flag):
+ * the MCP records the model it loaded at boot, so a mismatch with the persisted
+ * choice means it is still serving the old model until restarted — surfaced even
+ * after the API itself restarted or the apply ran in a prior process.
  */
 export async function getEmbeddingStatus(db: Database): Promise<EmbeddingRuntimeStatus> {
   const cfg = await resolveEffectiveEmbeddingConfig(db)
+  const mcp = await getRuntimeEmbeddingConfig(db, MCP_RUNTIME_SERVICE)
+  const mcpRestartRequired
+    = mcp !== null && (mcp.model !== cfg.model || mcp.dim !== cfg.dim)
   return {
     state: progress?.state ?? 'idle',
     model: cfg.model,
     dim: cfg.dim,
     enabled: cfg.model !== null,
     dimChanged: progress?.dimChanged ?? false,
-    mcpRestartRequired: progress?.mcpRestartRequired ?? false,
+    mcpRestartRequired,
     backfill: progress?.backfill ?? { docs: 0, cards: 0, comments: 0 },
     error: progress?.error ?? null
   }
@@ -66,7 +74,6 @@ export async function applyEmbeddingModel(
   const slot: ApplyProgress = {
     state: 'reconciling',
     dimChanged: false,
-    mcpRestartRequired: false,
     backfill: { docs: 0, cards: 0, comments: 0 },
     error: null
   }
@@ -81,7 +88,6 @@ export async function applyEmbeddingModel(
     persisted = true
     const next = await resolveEffectiveEmbeddingConfig(db)
     slot.dimChanged = prev.dim !== next.dim
-    slot.mcpRestartRequired = prev.model !== next.model || prev.dim !== next.dim
 
     await reconcileEmbeddingDim(db)
     setEmbeddingConfig(next)
