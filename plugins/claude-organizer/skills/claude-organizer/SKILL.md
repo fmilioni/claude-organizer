@@ -113,6 +113,14 @@ User comments arrive flagged unread. **Reading is read-only — it never marks a
 
 **Always tag a task after creating it.** Attach the tag(s) that fit — area/layer (e.g. `web`, `api`, `mcp`) or type (e.g. `bug`). If no existing tag fits, **suggest new tag(s) and ask the user before creating them** — never invent tags silently. Tagged cards keep the board filterable and scannable.
 
+## Archiving done cards — default to sprint-less, and always confirm
+
+Archiving clears finished cards off the board; how you scope the batch depends on what the user actually said:
+
+- **"archive the done cards"** (no sprint mentioned) ⇒ assume the **done cards with no sprint**: enumerate with `list_cards(projectId, status=["done"], backlogOnly=true)`. Rationale: archiving a sprint already takes its cards off the board, and archiving the done cards of an *archived* sprint is moot — so the natural default target is the **sprint-less** done.
+- **"archive the done cards of sprint X"** (explicit) ⇒ only then use the sprint filter: that sprint's done cards.
+- **Always confirm before archiving** — present the **count** and the **keys** (`CO-N`) you're about to archive, and wait for the OK. Never bulk-archive without it.
+
 ## Docs — read before building, record after deciding
 
 Docs are organized into **four top-level groups**; put each new doc under the right one:
