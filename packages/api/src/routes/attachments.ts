@@ -10,6 +10,7 @@ import {
   getSystemSettings,
   InputError,
   resolveCommitTokenSecret,
+  setAttachmentOwner,
   signAttachmentToken
 } from '@claude-organizer/core'
 import type { Database } from '@claude-organizer/db'
@@ -161,6 +162,20 @@ export function registerAttachmentRoutes(app: FastifyInstance, db: Database) {
     const signed = signAttachmentToken(id, secret)
     return { url: `/attachments/${id}?sig=${signed.token}`, expiresAt: signed.expiresAt }
   })
+
+  // Bind an unowned (tmp) attachment to its entity once it exists (new comment /
+  // inbox composer uploads before it has an id).
+  app.patch<{ Params: { id: string }, Body: unknown }>(
+    '/attachments/:id',
+    async (req, reply) => {
+      const owner = z
+        .object({ ownerType: ownerTypeSchema, ownerId: z.string().min(1) })
+        .parse(req.body)
+      const row = await setAttachmentOwner(db, req.params.id, owner)
+      if (!row) return reply.code(404).send({ error: 'not_found' })
+      return { id: row.id, ownerType: row.ownerType, ownerId: row.ownerId }
+    }
+  )
 
   app.delete<{ Params: { id: string } }>('/attachments/:id', async (req, reply) => {
     const row = await deleteAttachment(db, req.params.id)

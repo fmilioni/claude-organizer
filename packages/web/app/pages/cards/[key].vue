@@ -251,21 +251,27 @@ const blockerCandidateOptions = computed(() => {
 
 const newComment = ref('')
 const submittingComment = ref(false)
+// A new comment has no id while being composed, so pasted images upload unowned
+// and bind to the comment on submit (or get discarded if the composer is left).
+const commentTmp = useTmpAttachments('comment')
 
 async function submitComment() {
   if (!card.value || !newComment.value.trim()) return
   submittingComment.value = true
   try {
-    await api(`/cards/${card.value.id}/comments`, {
+    const created = await api<Comment>(`/cards/${card.value.id}/comments`, {
       method: 'POST',
       body: { author: 'user', bodyMd: newComment.value }
     })
+    await commentTmp.bindAll(created.id)
     newComment.value = ''
     await refreshComments()
   } finally {
     submittingComment.value = false
   }
 }
+
+onBeforeUnmount(() => commentTmp.discardAll())
 
 const commentToDelete = ref<Comment | null>(null)
 const deletingComment = ref(false)
@@ -833,6 +839,7 @@ const providerIcon = computed(() =>
                     v-model="editingCommentBody"
                     autofocus
                     placeholder="Edit the comment… (markdown supported)"
+                    :owner="{ type: 'comment', id: c.id }"
                   />
                   <div class="flex justify-end gap-2">
                     <UButton
@@ -861,6 +868,7 @@ const providerIcon = computed(() =>
               <MarkdownEditor
                 v-model="newComment"
                 placeholder="Write a comment for Claude… (markdown supported)"
+                @uploaded="commentTmp.track"
               />
               <div class="flex justify-end">
                 <UButton

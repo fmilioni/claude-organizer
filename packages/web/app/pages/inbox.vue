@@ -94,21 +94,28 @@ useProjectData(currentProjectId, loadInbox, {
   }
 })
 
+// A new inbox item has no id while being composed, so pasted images upload
+// unowned and bind on submit (or get discarded if the composer is left).
+const inboxTmp = useTmpAttachments('inbox')
+
 async function addItem() {
   const body = newBody.value.trim()
   if (!body || !currentProjectId.value || adding.value) return
   adding.value = true
   try {
-    await api(`/projects/${currentProjectId.value}/intake`, {
+    const created = await api<IntakeItem>(`/projects/${currentProjectId.value}/intake`, {
       method: 'POST',
       body: { bodyMd: body }
     })
+    await inboxTmp.bindAll(created.id)
     newBody.value = ''
     await loadInbox()
   } finally {
     adding.value = false
   }
 }
+
+onBeforeUnmount(() => inboxTmp.discardAll())
 
 function onQuickAddKeydown(e: KeyboardEvent) {
   if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
@@ -178,6 +185,7 @@ const plannedCompleted = computed(() => planned.value.filter(i => i.completed))
             v-model="newBody"
             min-height="80px"
             placeholder="Capture a raw demand… (markdown, ⌘/Ctrl+Enter to add)"
+            @uploaded="inboxTmp.track"
           />
           <div class="flex justify-end">
             <UButton
@@ -210,6 +218,7 @@ const plannedCompleted = computed(() => planned.value.filter(i => i.completed))
               placeholder="Empty demand"
               editor-placeholder="Describe the demand… (markdown)"
               :model-value="bodyModel(item)"
+              :owner="{ type: 'inbox', id: item.id }"
               @update:model-value="(v: string) => onBodyInput(item, v)"
               @edit-start="startEdit(item)"
               @edit-stop="stopEdit"

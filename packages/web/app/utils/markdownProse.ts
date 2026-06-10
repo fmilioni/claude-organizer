@@ -26,5 +26,8 @@ export const PROSE = [
   '[&_li]:my-0.5! [&_li]:ps-1.5',
   '[&_pre]:my-3 [&_pre]:bg-muted [&_pre]:rounded-md [&_pre]:p-2! [&_pre]:border-0! [&_pre]:text-sm [&_pre]:whitespace-pre-wrap [&_pre]:break-words [&_pre]:overflow-x-auto',
   '[&_pre_code]:bg-transparent [&_pre_code]:border-0 [&_pre_code]:p-0 [&_pre_code]:rounded-none [&_pre_code]:text-inherit [&_pre_code]:font-mono [&_pre_code]:inline',
-  '[&_code]:bg-muted [&_code]:border-0! [&_code]:text-highlighted [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:rounded-md [&_code]:text-sm [&_code]:font-mono [&_code]:font-medium [&_code]:inline-block'
+  '[&_code]:bg-muted [&_code]:border-0! [&_code]:text-highlighted [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:rounded-md [&_code]:text-sm [&_code]:font-mono [&_code]:font-medium [&_code]:inline-block',
+  // Block + auto inline-margin: an image narrower than the container centers; a
+  // full-width one stays put. Mirrors the editor theme so preview and editor match.
+  '[&_img]:block [&_img]:max-w-full [&_img]:rounded-md [&_img]:mx-auto'
 ].join(' ')

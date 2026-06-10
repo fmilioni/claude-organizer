@@ -20,6 +20,10 @@ const props = withDefaults(
   { placeholder: '', autofocus: false, minHeight: '120px', owner: undefined }
 )
 
+// Emitted with the uploaded attachment id so a composer without an entity id yet
+// (new comment / inbox) can bind the owner on submit or discard it on abandon.
+const emit = defineEmits<{ (e: 'uploaded', id: string): void }>()
+
 const model = defineModel<string>({ default: '' })
 
 const toast = useToast()
@@ -72,8 +76,9 @@ function insertImage(view: PmView, src: string, pos?: number) {
 async function uploadAndInsert(view: PmView, files: File[], pos?: number) {
   for (const file of files) {
     try {
-      const { url } = await uploadImage(file, props.owner ?? null)
+      const { id, url } = await uploadImage(file, props.owner ?? null)
       insertImage(view, url, pos)
+      emit('uploaded', id)
     } catch (e) {
       toast.add({
         title: 'Image upload failed',

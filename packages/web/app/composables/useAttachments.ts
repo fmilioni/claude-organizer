@@ -51,5 +51,16 @@ export function useAttachments() {
     return `${base}${url}`
   }
 
-  return { uploadImage, resolveDisplaySrc }
+  async function bindAttachmentOwner(id: string, owner: AttachmentOwner): Promise<void> {
+    await api(`/attachments/${id}`, {
+      method: 'PATCH',
+      body: { ownerType: owner.type, ownerId: owner.id }
+    })
+  }
+
+  async function removeAttachment(id: string): Promise<void> {
+    await api(`/attachments/${id}`, { method: 'DELETE' })
+  }
+
+  return { uploadImage, resolveDisplaySrc, bindAttachmentOwner, removeAttachment }
 }

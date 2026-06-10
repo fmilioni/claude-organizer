@@ -59,6 +59,23 @@ export async function createAttachment(db: Database, input: CreateAttachmentInpu
   return row!
 }
 
+// Binds an unowned (tmp) attachment to its entity after the entity exists — the
+// new-comment / new-inbox composers upload before they have an id, then set the
+// owner on submit (the owner-link is the cleanup index; see the attachments ADR).
+export async function setAttachmentOwner(
+  db: Database,
+  id: string,
+  owner: { ownerType: (typeof ATTACHMENT_OWNER_TYPES)[number], ownerId: string }
+) {
+  const parsed = ownerInput.parse(owner)
+  const [row] = await db
+    .update(schema.attachments)
+    .set({ ownerType: parsed.ownerType, ownerId: parsed.ownerId })
+    .where(eq(schema.attachments.id, id))
+    .returning(attachmentColumns)
+  return row ?? null
+}
+
 export async function getAttachment(db: Database, id: string) {
   const [row] = await db
     .select()
