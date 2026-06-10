@@ -4,6 +4,7 @@ import { z } from 'zod'
 import { createId, type Database, schema } from '@claude-organizer/db'
 
 import type { ArchiveFilter } from './archive'
+import { gcAttachmentsOnDestroy } from './attachmentGc'
 import { backfillEmbeddings, embed } from './embedding'
 import { notify } from './events'
 import { paginate } from './pagination'
@@ -195,10 +196,31 @@ export async function restoreDoc(db: Database, id: string) {
 
 /** Hard-delete a doc and its descendants (children cascade via FK). */
 export async function destroyDoc(db: Database, id: string) {
-  const [row] = await db
-    .delete(schema.docs)
-    .where(eq(schema.docs.id, id))
-    .returning({ id: schema.docs.id, projectId: schema.docs.projectId })
+  const row = await db.transaction(async (tx) => {
+    const [doc] = await tx
+      .select({ id: schema.docs.id, projectId: schema.docs.projectId })
+      .from(schema.docs)
+      .where(eq(schema.docs.id, id))
+      .limit(1)
+    if (!doc) return null
+
+    // The whole subtree is destroyed by the FK cascade; gather its ids first so
+    // the attachment GC can match every doc-owned anexo, not just the root's.
+    const docIds: string[] = []
+    let frontier = [id]
+    while (frontier.length) {
+      docIds.push(...frontier)
+      const children = await tx
+        .select({ id: schema.docs.id })
+        .from(schema.docs)
+        .where(inArray(schema.docs.parentId, frontier))
+      frontier = children.map(c => c.id)
+    }
+    await gcAttachmentsOnDestroy(tx, { projectId: doc.projectId, docIds })
+
+    await tx.delete(schema.docs).where(eq(schema.docs.id, id))
+    return doc
+  })
   if (row) {
     await notify(db, {
       type: 'doc.deleted',

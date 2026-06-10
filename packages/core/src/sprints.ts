@@ -4,7 +4,7 @@ import { z } from 'zod'
 import { createId, type Database, schema } from '@claude-organizer/db'
 
 import { archivedCondition, type ArchiveFilter } from './archive'
-import { gcAttachmentsOnArchive } from './attachmentGc'
+import { gcAttachmentsOnArchive, gcAttachmentsOnDestroy } from './attachmentGc'
 import { getSystemSettings } from './authz'
 import { notify } from './events'
 import { syncIntakeForSprint } from './intake'
@@ -199,6 +199,14 @@ export async function destroySprint(db: Database, id: string) {
       .where(eq(schema.sprints.id, id))
       .limit(1)
     if (!sprint) return null
+    const sprintCards = await tx
+      .select({ id: schema.cards.id })
+      .from(schema.cards)
+      .where(eq(schema.cards.sprintId, id))
+    await gcAttachmentsOnDestroy(tx, {
+      projectId: sprint.projectId,
+      cardIds: sprintCards.map(c => c.id)
+    })
     await tx.delete(schema.cards).where(eq(schema.cards.sprintId, id))
     await tx.delete(schema.sprints).where(eq(schema.sprints.id, id))
     return sprint

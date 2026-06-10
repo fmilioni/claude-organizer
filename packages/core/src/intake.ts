@@ -8,7 +8,7 @@ import {
   type IntakeStatus
 } from '@claude-organizer/shared'
 
-import { gcAttachmentsOnArchive } from './attachmentGc'
+import { gcAttachmentsOnArchive, gcAttachmentsOnDestroy } from './attachmentGc'
 import { notify } from './events'
 import { paginate } from './pagination'
 
@@ -318,10 +318,20 @@ export async function pruneIntakeForDestroyedCards(
 }
 
 export async function destroyIntakeItem(db: Database, id: string) {
-  const [row] = await db
-    .delete(schema.intakeItems)
-    .where(eq(schema.intakeItems.id, id))
-    .returning(intakeColumns)
+  const row = await db.transaction(async (tx) => {
+    const [item] = await tx
+      .select({ projectId: schema.intakeItems.projectId })
+      .from(schema.intakeItems)
+      .where(eq(schema.intakeItems.id, id))
+      .limit(1)
+    if (!item) return null
+    await gcAttachmentsOnDestroy(tx, { projectId: item.projectId, intakeIds: [id] })
+    const [deleted] = await tx
+      .delete(schema.intakeItems)
+      .where(eq(schema.intakeItems.id, id))
+      .returning(intakeColumns)
+    return deleted ?? null
+  })
   if (row) {
     await notify(db, {
       type: 'inbox.deleted',
