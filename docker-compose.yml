@@ -14,6 +14,14 @@ x-app: &app
 x-db-env: &db-env
   DATABASE_URL: postgres://${POSTGRES_USER:-organizer}:${POSTGRES_PASSWORD:-organizer}@postgres:5432/${POSTGRES_DB:-organizer}
 
+# Stable cache dir for the embedding model weights (Transformers.js ignores
+# HF_HOME, so the code reads EMBEDDING_CACHE_DIR). Backed by one shared volume on
+# api/mcp so the ~470MB weights survive a rebuild instead of re-downloading.
+# Sharing is safe: Transformers.js writes to a per-process temp file and renames
+# atomically, so the two services racing on an empty volume never corrupt it.
+x-embedding-cache-env: &embedding-cache-env
+  EMBEDDING_CACHE_DIR: /cache/transformers
+
 services:
   postgres:
     # pgvector overlay on postgres:16 — adds the `vector` extension for semantic
@@ -49,8 +57,10 @@ services:
   api:
     <<: *app
     command: pnpm --filter @claude-organizer/api exec tsx src/server.ts
+    volumes:
+      - model-cache:/cache/transformers
     environment:
-      <<: *db-env
+      <<: [*db-env, *embedding-cache-env]
       API_HOST: 0.0.0.0
       API_PORT: 4400
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-}
@@ -75,8 +85,10 @@ services:
   mcp:
     <<: *app
     command: node packages/mcp/dist/server.mjs
+    volumes:
+      - model-cache:/cache/transformers
     environment:
-      <<: *db-env
+      <<: [*db-env, *embedding-cache-env]
       MCP_HTTP_PORT: 4402
       # Resource server: validates OAuth bearers against the same better-auth
       # store as the API, so it needs the matching secret + the authz-server URL.
@@ -105,3 +117,6 @@ services:
     depends_on:
       api:
         condition: service_started
+
+volumes:
+  model-cache:

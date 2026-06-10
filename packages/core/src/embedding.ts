@@ -44,7 +44,14 @@ function activeConfig(): EmbeddingConfig {
 async function loadEmbedder(): Promise<Embedder | null> {
   const cfg = activeConfig()
   if (!cfg.model) return null
-  const { pipeline } = await import('@huggingface/transformers')
+  const { pipeline, env } = await import('@huggingface/transformers')
+  // Transformers.js ignores HF_HOME/TRANSFORMERS_CACHE — the weights cache dir is
+  // only overridable programmatically. Point it at a stable path (a mounted volume
+  // in Docker, shared across services) so the weights survive a rebuild instead of
+  // re-downloading. Concurrent writers are safe: FileCache writes a per-process
+  // temp file and renames atomically.
+  const cacheDir = process.env.EMBEDDING_CACHE_DIR?.trim()
+  if (cacheDir) env.cacheDir = cacheDir
   // fp32 is the variant present in the default model's repo; override with a
   // quantized one (q8/int8…) via EMBEDDING_DTYPE when the repo ships it.
   const dtype = process.env.EMBEDDING_DTYPE?.trim() || 'fp32'
