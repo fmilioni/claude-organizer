@@ -20,6 +20,7 @@ import {
 } from '@claude-organizer/core'
 import type { Database } from '@claude-organizer/db'
 
+import { attachmentsForOwner } from '../attachments'
 import { asJson, pageEnvelope, pageInputs } from './index'
 
 // search_cards returns enriched cards + matchedComment (heavier than list_cards),
@@ -35,9 +36,11 @@ const searchLimit = z
 
 // get_card/get_card_by_key embed the card's commits as METADATA only (no diff):
 // the agent has the local git and can `git show <sha>`, and a squashed PR commit
-// is fetched on demand via get_commit_diff. Built in the MCP layer so the shared
-// Card DTO (and the web payload) stay lean.
-async function withCommits(
+// is fetched on demand via get_commit_diff. Plus the card's image attachments
+// (owner = card) so the agent can read them via attachment:// without parsing the
+// markdown. Built in the MCP layer so the shared Card DTO (and the web payload)
+// stay lean.
+async function withCommitsAndAttachments(
   db: Database,
   card: Awaited<ReturnType<typeof getCard>>
 ) {
@@ -51,7 +54,8 @@ async function withCommits(
     authorName: c.authorName,
     createdAt: c.createdAt
   }))
-  return { ...card, commits }
+  const attachments = await attachmentsForOwner(db, card.projectId, 'card', card.id)
+  return { ...card, commits, attachments }
 }
 
 const cardStatus = z.enum([
@@ -142,7 +146,7 @@ export function registerCardTools(server: McpServer, db: Database) {
         'Get a single card by its internal id (crd_xxx) with full descriptionMd.',
       inputSchema: { id: z.string() }
     },
-    async ({ id }) => asJson(await withCommits(db, await getCard(db, id)))
+    async ({ id }) => asJson(await withCommitsAndAttachments(db, await getCard(db, id)))
   )
 
   server.registerTool(
@@ -152,7 +156,7 @@ export function registerCardTools(server: McpServer, db: Database) {
         'Get a single card by its human-readable key (e.g. \'CO-12\') with full descriptionMd.',
       inputSchema: { key: z.string() }
     },
-    async ({ key }) => asJson(await withCommits(db, await getCardByKey(db, key)))
+    async ({ key }) => asJson(await withCommitsAndAttachments(db, await getCardByKey(db, key)))
   )
 
   server.registerTool(

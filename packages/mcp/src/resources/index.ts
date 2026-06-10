@@ -3,13 +3,17 @@ import { ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp.js'
 
 import {
   getActiveSprint,
+  getAttachment,
+  getAttachmentMeta,
   getCardByKey,
   getProjectBySlug,
+  listAttachments,
   listCards,
   listProjects
 } from '@claude-organizer/core'
 import type { Database } from '@claude-organizer/db'
 
+import { attachmentUri } from '../attachments'
 import {
   canAccessProjectId,
   filterProjectsByScope,
@@ -185,6 +189,51 @@ export function registerResources(
         return md(uri, `Card \`${String(key)}\` not found.`)
       }
       return md(uri, formatCard(card))
+    }
+  )
+
+  server.registerResource(
+    'attachment',
+    new ResourceTemplate('attachment://{id}', {
+      list: async () => {
+        const projects = await scopedProjects()
+        const lists = await Promise.all(
+          projects.map(p => listAttachments(db, { projectId: p.id }))
+        )
+        return {
+          resources: lists.flat().map(a => ({
+            uri: attachmentUri(a.id),
+            name: a.filename ?? a.description ?? a.id,
+            mimeType: a.mime
+          }))
+        }
+      }
+    }),
+    {
+      title: 'Image attachment',
+      description:
+        'An image attached to a card, comment, doc or inbox item, by its id (att_xxx) — the model reads it as a blob. Discover ids via the `attachments` array on get_card/list_comments/read_doc/list_inbox.'
+    },
+    async (uri, { id }) => {
+      // Check existence + scope on the metadata (no bytes) first, so an
+      // out-of-scope or missing id never pulls the blob into memory. Only then
+      // fetch the bytes. Out-of-scope / missing / bytes-cleaned (archived) all
+      // answer the same "not found", so a scoped session can't probe what exists.
+      const meta = await getAttachmentMeta(db, String(id))
+      if (!meta || !canAccessProjectId(scope, meta.projectId)) {
+        return md(uri, `Attachment \`${String(id)}\` not found.`)
+      }
+      const att = await getAttachment(db, String(id))
+      if (!att?.data) return md(uri, `Attachment \`${String(id)}\` not found.`)
+      return {
+        contents: [
+          {
+            uri: uri.href,
+            mimeType: att.mime,
+            blob: Buffer.from(att.data).toString('base64')
+          }
+        ]
+      }
     }
   )
 }

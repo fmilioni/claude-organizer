@@ -11,6 +11,7 @@ import {
 } from '@claude-organizer/core'
 import type { Database } from '@claude-organizer/db'
 
+import { attachmentsByOwner } from '../attachments'
 import { asJson, pageEnvelope, pageInputs } from './index'
 
 export function registerIntakeTools(server: McpServer, db: Database) {
@@ -45,7 +46,18 @@ export function registerIntakeTools(server: McpServer, db: Database) {
         limit: limit + 1,
         offset
       })
-      return asJson(pageEnvelope('items', rows, limit, offset))
+      // Batch over the page only (not the limit+1 probe row), grouped per item.
+      const byItem = await attachmentsByOwner(
+        db,
+        projectId,
+        'inbox',
+        rows.slice(0, limit).map(r => r.id)
+      )
+      const enriched = rows.map(r => ({
+        ...r,
+        attachments: byItem.get(r.id) ?? []
+      }))
+      return asJson(pageEnvelope('items', enriched, limit, offset))
     }
   )
 

@@ -1,4 +1,4 @@
-import { and, desc, eq } from 'drizzle-orm'
+import { and, desc, eq, inArray } from 'drizzle-orm'
 import { z } from 'zod'
 
 import { createId, type Database, schema } from '@claude-organizer/db'
@@ -97,6 +97,30 @@ export async function listAttachments(
     .select(attachmentColumns)
     .from(schema.attachments)
     .where(and(...conditions))
+    .orderBy(desc(schema.attachments.createdAt))
+}
+
+// Batch read for a set of same-type owners — one query for a whole comment/inbox
+// list instead of N. Rows keep `ownerId` so the caller can group them back.
+export async function listAttachmentsByOwners(
+  db: Database,
+  options: {
+    projectId: string
+    ownerType: (typeof ATTACHMENT_OWNER_TYPES)[number]
+    ownerIds: string[]
+  }
+) {
+  if (options.ownerIds.length === 0) return []
+  return db
+    .select(attachmentColumns)
+    .from(schema.attachments)
+    .where(
+      and(
+        eq(schema.attachments.projectId, options.projectId),
+        eq(schema.attachments.ownerType, options.ownerType),
+        inArray(schema.attachments.ownerId, options.ownerIds)
+      )
+    )
     .orderBy(desc(schema.attachments.createdAt))
 }
 
