@@ -16,8 +16,8 @@ describe('pgvector foundation', () => {
     expect(rows.map(r => r.extname)).toContain('vector')
   })
 
-  it('has an embedding vector(384) column on docs, cards and comments', async () => {
-    for (const table of ['docs', 'cards', 'comments']) {
+  it('has an embedding vector(384) column on each chunk table', async () => {
+    for (const table of ['doc_chunks', 'card_chunks', 'comment_chunks']) {
       const rows = (await ctx.db.execute(sql`
         select a.atttypmod as typmod
         from pg_attribute a
@@ -32,15 +32,15 @@ describe('pgvector foundation', () => {
     }
   })
 
-  it('has an hnsw index on each embedding column', async () => {
+  it('has an hnsw index on each chunk embedding column', async () => {
     const rows = (await ctx.db.execute(sql`
       select indexname from pg_indexes
-      where indexname in ('docs_embedding_idx', 'cards_embedding_idx', 'comments_embedding_idx')
+      where indexname in ('doc_chunks_embedding_idx', 'card_chunks_embedding_idx', 'comment_chunks_embedding_idx')
     `)) as unknown as Array<{ indexname: string }>
     expect(rows.map(r => r.indexname).sort()).toEqual([
-      'cards_embedding_idx',
-      'comments_embedding_idx',
-      'docs_embedding_idx'
+      'card_chunks_embedding_idx',
+      'comment_chunks_embedding_idx',
+      'doc_chunks_embedding_idx'
     ])
   })
 })

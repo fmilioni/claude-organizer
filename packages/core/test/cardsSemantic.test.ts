@@ -35,15 +35,16 @@ function vecLiteral(axis: number): string {
   return `[${basis(axis).join(',')}]`
 }
 
+// Seed a single chunk vector for a card / comment (search reads the chunk tables now).
 async function seedCard(id: string, axis: number) {
   await ctx.db.execute(
-    sql`update cards set embedding = ${vecLiteral(axis)}::vector where id = ${id}`
+    sql`insert into card_chunks (card_id, idx, embedding) values (${id}, 0, ${vecLiteral(axis)}::vector)`
   )
 }
 
 async function seedComment(id: string, axis: number) {
   await ctx.db.execute(
-    sql`update comments set embedding = ${vecLiteral(axis)}::vector where id = ${id}`
+    sql`insert into comment_chunks (comment_id, idx, embedding) values (${id}, 0, ${vecLiteral(axis)}::vector)`
   )
 }
 
@@ -79,6 +80,21 @@ describe('cards semantic search', () => {
     const results = await searchCards(ctx.db, project.id, 'DANFCE PDF')
     expect(results.map(r => r.id)).toContain(fiscal!.id)
     expect(results[0]?.id).toBe(fiscal!.id)
+  })
+
+  it('finds a card via a non-first (tail) chunk — the part a single vector truncated', async () => {
+    const project = await freshProject(ctx.db)
+    const long = await createCard(ctx.db, { projectId: project.id, title: 'longo' })
+    const other = await createCard(ctx.db, { projectId: project.id, title: 'outro' })
+    await ctx.db.execute(sql`insert into card_chunks (card_id, idx, embedding) values
+      (${long!.id}, 0, ${vecLiteral(0)}::vector), (${long!.id}, 1, ${vecLiteral(1)}::vector)`)
+    await seedCard(other!.id, 2)
+
+    // The query lands on axis 1 — only the TAIL chunk of `long` is near it.
+    mockedEmbed.mockResolvedValueOnce(basis(1))
+    const results = await searchCards(ctx.db, project.id, 'DANFCE PDF')
+    expect(results.map(r => r.id)).toContain(long!.id)
+    expect(results[0]?.id).toBe(long!.id)
   })
 
   it('recovers a card via a comment vector and returns the comment snippet', async () => {

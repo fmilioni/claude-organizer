@@ -341,17 +341,25 @@ export async function searchCards(
   const vectorConditions = cardFilterConditions(db, projectId, filters)
   vectorConditions.push(notExcluded)
   vectorConditions.push(sql`(
-    ${schema.cards.embedding} is not null
-    or exists (select 1 from comments c where c.card_id = ${schema.cards.id} and c.embedding is not null)
+    exists (select 1 from card_chunks cc where cc.card_id = ${schema.cards.id})
+    or exists (
+      select 1 from comment_chunks cm
+      join comments c on c.id = cm.comment_id
+      where c.card_id = ${schema.cards.id}
+    )
   )`)
-  // Best (smallest) cosine distance over the card's own vector OR any of its
-  // comments' — coalesce a missing vector to 2 (max) so it never wins.
+  // Best (smallest) cosine distance over the card's own chunks OR any of its
+  // comments' chunks — coalesce a missing side to 2 (max) so it never wins.
   const dist = sql<number>`least(
-    coalesce(${schema.cards.embedding} <=> ${param}::vector, 2),
     coalesce((
-      select min(c.embedding <=> ${param}::vector)
-      from comments c
-      where c.card_id = ${schema.cards.id} and c.embedding is not null
+      select min(cc.embedding <=> ${param}::vector)
+      from card_chunks cc where cc.card_id = ${schema.cards.id}
+    ), 2),
+    coalesce((
+      select min(cm.embedding <=> ${param}::vector)
+      from comment_chunks cm
+      join comments c on c.id = cm.comment_id
+      where c.card_id = ${schema.cards.id}
     ), 2)
   )`
   const vecRows = await db
@@ -432,10 +440,13 @@ async function nearestCommentSnippets(
     .where(
       and(
         inArray(schema.comments.cardId, cardIds),
-        sql`${schema.comments.embedding} is not null`
+        sql`exists (select 1 from comment_chunks cm where cm.comment_id = ${schema.comments.id})`
       )
     )
-    .orderBy(schema.comments.cardId, sql`${schema.comments.embedding} <=> ${param}::vector`)
+    .orderBy(
+      schema.comments.cardId,
+      sql`(select min(cm.embedding <=> ${param}::vector) from comment_chunks cm where cm.comment_id = ${schema.comments.id})`
+    )
   for (const r of rows) {
     map.set(r.cardId, { commentId: r.id, snippet: r.snippet })
   }
@@ -559,11 +570,7 @@ export async function createCard(db: Database, input: CreateCardInput) {
   })
   if (row) {
     // Chunk after insert: the content text includes the key, generated in the txn.
-    const vectors = await embedChunks(cardContentText(row))
-    if (vectors !== null) {
-      await db.update(schema.cards).set({ embedding: vectors[0] ?? null }).where(eq(schema.cards.id, row.id))
-    }
-    await writeCardChunks(db, row.id, vectors)
+    await writeCardChunks(db, row.id, await embedChunks(cardContentText(row)))
     await notify(db, {
       type: 'card.changed',
       projectId: row.projectId,
@@ -610,11 +617,7 @@ export async function updateCard(db: Database, input: UpdateCardInput) {
     // Re-chunk only when an embedded field changed; a transient failure (null)
     // keeps the valid vectors — handled inside writeCardChunks.
     if (rest.title !== undefined || rest.summary !== undefined || rest.descriptionMd !== undefined) {
-      const vectors = await embedChunks(cardContentText(row))
-      if (vectors !== null) {
-        await db.update(schema.cards).set({ embedding: vectors[0] ?? null }).where(eq(schema.cards.id, row.id))
-      }
-      await writeCardChunks(db, row.id, vectors)
+      await writeCardChunks(db, row.id, await embedChunks(cardContentText(row)))
     }
     await notify(db, {
       type: 'card.changed',

@@ -136,8 +136,7 @@ export async function createDoc(db: Database, input: CreateDocInput) {
         summary: parsed.summary,
         bodyMd: parsed.bodyMd,
         kind: parsed.kind ?? 'note',
-        position: parsed.position ?? 0,
-        embedding: vectors?.[0] ?? null
+        position: parsed.position ?? 0
       })
       .returning(docDetailColumns)
     if (inserted[0])
@@ -180,11 +179,7 @@ export async function updateDoc(db: Database, input: UpdateDocInput) {
     // field changed; a metadata-only edit keeps the existing chunks. A transient
     // failure (null) keeps the valid vectors — handled inside writeDocChunks.
     if (rest.title !== undefined || rest.summary !== undefined || rest.bodyMd !== undefined) {
-      const vectors = await embedChunks(docContentText(row))
-      if (vectors !== null) {
-        await db.update(schema.docs).set({ embedding: vectors[0] ?? null }).where(eq(schema.docs.id, id))
-      }
-      await writeDocChunks(db, id, vectors)
+      await writeDocChunks(db, id, await embedChunks(docContentText(row)))
     }
     await notify(db, { type: 'doc.changed', projectId: row.projectId, docId: row.id })
   }
@@ -331,18 +326,24 @@ export async function searchDocs(
     .orderBy(...lexicalOrder)
     .limit(LEXICAL_POOL)
   const param = toVectorParam(queryVec)
+  // A doc's vector distance is the MIN over its chunks (long bodies span several);
+  // candidates are docs that have at least one chunk.
+  const chunkDist = sql`(
+    select min(dc.embedding <=> ${param}::vector)
+    from doc_chunks dc where dc.doc_id = ${schema.docs.id}
+  )`
   const vecRows = await db
     .select({ id: schema.docs.id })
     .from(schema.docs)
     .where(
       and(
         eq(schema.docs.projectId, projectId),
-        isNotNull(schema.docs.embedding),
+        sql`exists (select 1 from doc_chunks dc where dc.doc_id = ${schema.docs.id})`,
         notExcluded,
         notArchived
       )
     )
-    .orderBy(sql`${schema.docs.embedding} <=> ${param}::vector`)
+    .orderBy(chunkDist)
     .limit(vectorK())
 
   const ordered = hybridOrder(

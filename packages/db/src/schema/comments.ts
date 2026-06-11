@@ -7,11 +7,9 @@ import {
   timestamp
 } from 'drizzle-orm/pg-core'
 
-import { DEFAULT_EMBEDDING_DIM } from '@claude-organizer/shared'
-
 import { users } from './auth'
 import { cards } from './cards'
-import { tsvector, vector } from './columns'
+import { tsvector } from './columns'
 import { commentAuthorEnum } from './enums'
 
 export const comments = pgTable(
@@ -28,8 +26,6 @@ export const comments = pgTable(
     bodyTsv: tsvector('body_tsv').generatedAlwaysAs(
       sql`to_tsvector('simple', coalesce(body_md, ''))`
     ),
-    // App-written semantic embedding; its HNSW index lives in custom migration SQL.
-    embedding: vector('embedding', { dimensions: DEFAULT_EMBEDDING_DIM }),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .default(sql`now()`)

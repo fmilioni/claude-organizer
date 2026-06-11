@@ -22,8 +22,8 @@ export const updateCommentInput = z.object({
 })
 export type UpdateCommentInput = z.infer<typeof updateCommentInput>
 
-// Allow-list, not a bare `.returning()`: the generated bodyTsv and the embedding
-// vector must not leak into the comment wire response.
+// Allow-list, not a bare `.returning()`: the generated bodyTsv must not leak into
+// the comment wire response.
 const commentReturnColumns = {
   id: schema.comments.id,
   cardId: schema.comments.cardId,
@@ -99,8 +99,7 @@ export async function addComment(db: Database, input: AddCommentInput) {
         author: parsed.author,
         userId: parsed.userId ?? null,
         bodyMd: parsed.bodyMd,
-        readByAi: parsed.author === 'ai',
-        embedding: vectors?.[0] ?? null
+        readByAi: parsed.author === 'ai'
       })
       .returning(commentReturnColumns)
     if (inserted[0])
@@ -157,7 +156,7 @@ export async function updateComment(db: Database, input: UpdateCommentInput) {
   const [row] = await db.transaction(async (tx) => {
     const updated = await tx
       .update(schema.comments)
-      .set(vectors !== null ? { bodyMd: parsed.bodyMd, embedding: vectors[0] ?? null } : { bodyMd: parsed.bodyMd })
+      .set({ bodyMd: parsed.bodyMd })
       .where(eq(schema.comments.id, parsed.id))
       .returning(commentReturnColumns)
     if (updated[0])
@@ -237,11 +236,7 @@ export async function deleteComment(db: Database, id: string) {
   return row ?? null
 }
 
-/**
- * Backfill chunks for comments that have none yet (post-deploy, or after a
- * model/dim change). Idempotent — only sees comments still missing chunks, in
- * batches. A no-op when embeddings are disabled. Returns the count chunked.
- */
+/** Backfill chunks for comments that have none yet. See `backfillChunks`. */
 export function backfillCommentEmbeddings(db: Database, batchSize = 50): Promise<number> {
   return backfillChunks(
     batchSize,

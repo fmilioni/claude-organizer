@@ -35,9 +35,10 @@ function vecLiteral(axis: number): string {
   return `[${basis(axis).join(',')}]`
 }
 
+// Seed a single chunk vector for a doc (search reads the chunk tables now).
 async function seedEmbedding(id: string, axis: number) {
   await ctx.db.execute(
-    sql`update docs set embedding = ${vecLiteral(axis)}::vector where id = ${id}`
+    sql`insert into doc_chunks (doc_id, idx, embedding) values (${id}, 0, ${vecLiteral(axis)}::vector)`
   )
 }
 
@@ -77,6 +78,23 @@ describe('docs semantic search', () => {
     const results = await searchDocs(ctx.db, project.id, 'DANFCE PDF')
     expect(results.map(d => d.id)).toContain(fiscal!.id)
     expect(results[0]?.id).toBe(fiscal!.id)
+  })
+
+  it('finds a doc via a non-first (tail) chunk — the part a single vector truncated', async () => {
+    const project = await freshProject(ctx.db)
+    const long = await createDoc(ctx.db, { projectId: project.id, title: 'longo', bodyMd: 'corpo' })
+    const other = await createDoc(ctx.db, { projectId: project.id, title: 'outro', bodyMd: 'corpo' })
+    // `long` has a head chunk (axis 0) and a tail chunk (axis 1); `other` sits on axis 2.
+    await ctx.db.execute(sql`insert into doc_chunks (doc_id, idx, embedding) values
+      (${long!.id}, 0, ${vecLiteral(0)}::vector), (${long!.id}, 1, ${vecLiteral(1)}::vector)`)
+    await seedEmbedding(other!.id, 2)
+
+    // The query lands on axis 1 — only the TAIL chunk of `long` is near it. Without
+    // min-over-chunks (e.g. matching only the head) `long` would not surface.
+    mockedEmbed.mockResolvedValueOnce(basis(1))
+    const results = await searchDocs(ctx.db, project.id, 'DANFCE PDF')
+    expect(results.map(d => d.id)).toContain(long!.id)
+    expect(results[0]?.id).toBe(long!.id)
   })
 
   it('keeps an exact lexical hit on top after fusion (no regression)', async () => {
