@@ -48,7 +48,9 @@ export const BACKUP_TABLE_NAMES = [
 // imports as a brand-new copy, so duplicating users/sessions or system config
 // would be wrong. Listed (not just omitted) so the coverage test forces a
 // conscious choice for every future table. `attachment_links` is a derived
-// index of the markdown — rebuilt from the imported bodies, never exported.
+// index of the markdown — rebuilt from the imported bodies, never exported. The
+// `*_chunks` tables are likewise derived (semantic vectors rebuilt by the
+// embedding backfill from each entity's body), so they stay out too.
 export const NON_BACKUP_TABLE_NAMES = [
   'users',
   'sessions',
@@ -62,7 +64,10 @@ export const NON_BACKUP_TABLE_NAMES = [
   'card_claims',
   'system_settings',
   'embedding_runtime',
-  'attachment_links'
+  'attachment_links',
+  'doc_chunks',
+  'card_chunks',
+  'comment_chunks'
 ] as const
 
 function envelope(
