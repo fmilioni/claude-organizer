@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 // Record the ordering of reconcile / reload / backfill. backfillDoc/Card/Comment
-// all funnel through the `backfillEmbeddings` primitive in `../src/embedding`, so
+// all funnel through the `backfillChunks` primitive in `../src/embedding`, so
 // mocking that module intercepts the reload push and every backfill; reconcile is
 // mocked separately (in `@claude-organizer/db`) so it records without touching the
 // real, shared `vector(N)` column — a real dim change would break sibling suites.
@@ -30,7 +30,7 @@ vi.mock('../src/embedding', async (importOriginal) => {
       calls.push('reload')
       return reloadMock()
     }),
-    backfillEmbeddings: vi.fn(async () => {
+    backfillChunks: vi.fn(async () => {
       calls.push('backfill')
       return 0
     })

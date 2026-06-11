@@ -1,3 +1,7 @@
+import type { Database } from '@claude-organizer/db'
+
+import { chunkText } from './chunking'
+
 export type EmbeddingKind = 'query' | 'passage'
 
 // The dedicated embedding service holds the model; this module is a thin HTTP
@@ -80,29 +84,76 @@ export async function reloadEmbeddingService(): Promise<boolean> {
 }
 
 /**
- * Generic embedding backfill loop shared by the docs/cards/comments verticals.
- * Pulls batches of `{ id, text }` still missing an embedding, embeds each
- * (`passage`), and stores it. Idempotent; stops early (returning the count so
- * far) the moment an embed yields `null` — embeddings are disabled/unavailable,
- * so there's no point scanning the rest. The caller supplies the table-specific
- * fetch (mapping its rows to id + content text) and store.
+ * Split content into windows and embed each as a `passage`. Returns one vector
+ * per chunk (short content ⇒ a single chunk), `[]` when the content is empty, or
+ * `null` when embeddings are disabled/unavailable so callers keep existing chunks
+ * (a transient failure must not wipe valid vectors).
  */
-export async function backfillEmbeddings(
+export async function embedChunks(text: string): Promise<number[][] | null> {
+  const chunks = chunkText(text)
+  if (chunks.length === 0) return []
+  return embedMany(chunks, 'passage')
+}
+
+type ChunkRows = Array<{ idx: number, embedding: number[] }>
+
+/**
+ * Persist a freshly-embedded chunk set to an entity's chunk table, honoring the
+ * write invariant: `null` (embeddings off or a transient failure) keeps the
+ * existing chunks untouched — never wipe valid vectors; otherwise replace them in
+ * one transaction (an empty set just clears). `clear` + `insert` are the
+ * table-specific delete/insert; they run against the transaction handle.
+ */
+export async function applyChunks(
+  db: Database,
+  vectors: number[][] | null,
+  clear: (tx: Database) => Promise<unknown>,
+  insert: (tx: Database, rows: ChunkRows) => Promise<unknown>
+): Promise<void> {
+  if (vectors === null) return
+  await db.transaction(async (tx) => {
+    await clear(tx)
+    if (vectors.length) {
+      await insert(tx, vectors.map((embedding, idx) => ({ idx, embedding })))
+    }
+  })
+}
+
+/**
+ * Generic chunk backfill loop shared by the docs/cards/comments verticals. Pages
+ * (by `id` keyset) over entities with NO chunks yet, embeds each into its windows
+ * (via the caller-supplied `embedFn`, normally `embedChunks`), and stores them.
+ * Idempotent across runs (it only sees entities still missing chunks); stops early
+ * (returning the count so far) the moment an embed yields `null` — embeddings are
+ * disabled/unavailable, so there's no point scanning the rest. The caller supplies
+ * the table-specific fetch (ordered by `id`, filtered `id > afterId`) and store;
+ * `embedFn` is a parameter (not called inline) so a test can substitute it.
+ *
+ * The keyset cursor (not a bare re-query of the candidate set) is what guarantees
+ * termination: a row whose content embeds to `[]` (empty/whitespace-only) stores
+ * nothing and stays in the candidate set, so re-querying it would loop forever —
+ * advancing `afterId` past each batch steps over it instead.
+ */
+export async function backfillChunks(
   batchSize: number,
-  fetchBatch: (limit: number) => Promise<Array<{ id: string, text: string }>>,
-  embedOne: (text: string) => Promise<number[] | null>,
-  store: (id: string, embedding: number[]) => Promise<unknown>
+  fetchBatch: (limit: number, afterId: string | null) => Promise<Array<{ id: string, text: string }>>,
+  embedFn: (text: string) => Promise<number[][] | null>,
+  store: (id: string, vectors: number[][]) => Promise<unknown>
 ): Promise<number> {
   let total = 0
+  let afterId: string | null = null
   for (;;) {
-    const rows = await fetchBatch(batchSize)
+    const rows = await fetchBatch(batchSize, afterId)
     if (rows.length === 0) break
     for (const row of rows) {
-      const embedding = await embedOne(row.text)
-      if (!embedding) return total
-      await store(row.id, embedding)
-      total++
+      const vectors = await embedFn(row.text)
+      if (vectors === null) return total
+      if (vectors.length) {
+        await store(row.id, vectors)
+        total++
+      }
     }
+    afterId = rows[rows.length - 1]!.id
     if (rows.length < batchSize) break
   }
   return total

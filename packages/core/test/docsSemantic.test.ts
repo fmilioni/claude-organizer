@@ -4,13 +4,15 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 vi.mock('../src/embedding', async importOriginal => ({
   ...(await importOriginal<typeof import('../src/embedding')>()),
   embed: vi.fn(async () => null),
-  embedMany: vi.fn(async () => null)
+  embedMany: vi.fn(async () => null),
+  embedChunks: vi.fn(async () => null)
 }))
 
 import {
   backfillDocEmbeddings,
   createDoc,
   embed,
+  embedChunks,
   searchDocs,
   updateDoc
 } from '../src/index'
@@ -18,6 +20,7 @@ import { freshProject, useTestDb } from './helpers'
 
 const ctx = useTestDb()
 const mockedEmbed = vi.mocked(embed)
+const mockedEmbedChunks = vi.mocked(embedChunks)
 
 // A 384-dim (the column dimension) unit basis vector — one concept per axis, so
 // cosine distance is 0 to itself and 1 to any other basis. Lets a test place docs
@@ -38,9 +41,18 @@ async function seedEmbedding(id: string, axis: number) {
   )
 }
 
+async function chunkCount(docId: string): Promise<number> {
+  const rows = (await ctx.db.execute(
+    sql`select count(*)::int as n from doc_chunks where doc_id = ${docId}`
+  )) as unknown as Array<{ n: number }>
+  return rows[0]?.n ?? 0
+}
+
 beforeEach(() => {
   mockedEmbed.mockReset()
-  mockedEmbed.mockResolvedValue(null) // default: writes store null; search falls back to lexical
+  mockedEmbed.mockResolvedValue(null) // default: search query falls back to lexical
+  mockedEmbedChunks.mockReset()
+  mockedEmbedChunks.mockResolvedValue(null) // default: writes store no chunks
 })
 
 describe('docs semantic search', () => {
@@ -104,53 +116,92 @@ describe('docs semantic search', () => {
     expect(results.map(d => d.id)).toEqual([arch!.id])
   })
 
-  it('embeds title+summary+body as a passage on create', async () => {
+  it('chunks title+summary+body as a passage on create', async () => {
+    mockedEmbedChunks.mockResolvedValue([basis(0)])
     const project = await freshProject(ctx.db)
-    await createDoc(ctx.db, {
+    const doc = await createDoc(ctx.db, {
       projectId: project.id,
       title: 'T',
       summary: 'S',
       bodyMd: 'B'
     })
-    expect(mockedEmbed).toHaveBeenCalledWith('T\nS\nB', 'passage')
+    expect(mockedEmbedChunks).toHaveBeenCalledWith('T\nS\nB')
+    expect(await chunkCount(doc!.id)).toBe(1)
   })
 
-  it('re-embeds on a content edit but not on a metadata-only edit', async () => {
+  it('persists one chunk row per returned vector', async () => {
+    mockedEmbedChunks.mockResolvedValue([basis(0), basis(1), basis(2)])
+    const project = await freshProject(ctx.db)
+    const doc = await createDoc(ctx.db, {
+      projectId: project.id,
+      title: 'longo',
+      bodyMd: 'corpo extenso'
+    })
+    expect(await chunkCount(doc!.id)).toBe(3)
+    const rows = (await ctx.db.execute(
+      sql`select idx from doc_chunks where doc_id = ${doc!.id} order by idx`
+    )) as unknown as Array<{ idx: number }>
+    expect(rows.map(r => r.idx)).toEqual([0, 1, 2])
+  })
+
+  it('re-chunks on a content edit but not on a metadata-only edit', async () => {
+    mockedEmbedChunks.mockResolvedValue([basis(0)])
     const project = await freshProject(ctx.db)
     const doc = await createDoc(ctx.db, {
       projectId: project.id,
       title: 'Original',
       bodyMd: 'corpo'
     })
-    mockedEmbed.mockClear()
+    mockedEmbedChunks.mockClear()
 
     await updateDoc(ctx.db, { id: doc!.id, position: 3 })
-    expect(mockedEmbed).not.toHaveBeenCalled()
+    expect(mockedEmbedChunks).not.toHaveBeenCalled()
 
     await updateDoc(ctx.db, { id: doc!.id, title: 'Editado' })
-    expect(mockedEmbed).toHaveBeenCalledTimes(1)
+    expect(mockedEmbedChunks).toHaveBeenCalledTimes(1)
   })
 
-  it('backfills embeddings for docs missing one', async () => {
+  it('regenerates chunks on edit without leaving orphans from the prior version', async () => {
+    mockedEmbedChunks.mockResolvedValue([basis(0), basis(1), basis(2)])
     const project = await freshProject(ctx.db)
+    const doc = await createDoc(ctx.db, { projectId: project.id, title: 'v1', bodyMd: 'longo' })
+    expect(await chunkCount(doc!.id)).toBe(3)
+
+    mockedEmbedChunks.mockResolvedValue([basis(0)]) // shorter content → fewer chunks
+    await updateDoc(ctx.db, { id: doc!.id, bodyMd: 'curto' })
+    expect(await chunkCount(doc!.id)).toBe(1)
+  })
+
+  it('keeps existing chunks when a re-embed fails (null does not wipe vectors)', async () => {
+    mockedEmbedChunks.mockResolvedValue([basis(0), basis(1)])
+    const project = await freshProject(ctx.db)
+    const doc = await createDoc(ctx.db, { projectId: project.id, title: 'ok', bodyMd: 'corpo' })
+    expect(await chunkCount(doc!.id)).toBe(2)
+
+    mockedEmbedChunks.mockResolvedValue(null) // transient failure / model off
+    await updateDoc(ctx.db, { id: doc!.id, title: 'editado' })
+    expect(await chunkCount(doc!.id)).toBe(2)
+  })
+
+  it('backfills chunks for docs missing them, idempotently', async () => {
+    const project = await freshProject(ctx.db)
+    // created under the null default -> no chunks
     const doc = await createDoc(ctx.db, {
       projectId: project.id,
-      title: 'sem vetor',
+      title: 'sem chunk',
       bodyMd: 'corpo'
     })
-    // created under the null mock -> embedding is null
-    const before = (await ctx.db.execute(
-      sql`select embedding from docs where id = ${doc!.id}`
-    )) as unknown as Array<{ embedding: string | null }>
-    expect(before[0]?.embedding).toBeNull()
+    expect(await chunkCount(doc!.id)).toBe(0)
 
-    mockedEmbed.mockResolvedValue(basis(0))
+    mockedEmbedChunks.mockResolvedValue([basis(0)])
     const count = await backfillDocEmbeddings(ctx.db, 10)
     expect(count).toBeGreaterThanOrEqual(1)
+    expect(await chunkCount(doc!.id)).toBe(1)
 
-    const after = (await ctx.db.execute(
-      sql`select embedding from docs where id = ${doc!.id}`
-    )) as unknown as Array<{ embedding: string | null }>
-    expect(after[0]?.embedding).not.toBeNull()
+    // Idempotent: the doc already has chunks, so a second run leaves it at one
+    // (it's excluded by `not exists`) — no duplicates. (The backfill is global,
+    // so its return count isn't asserted in the shared test DB.)
+    await backfillDocEmbeddings(ctx.db, 10)
+    expect(await chunkCount(doc!.id)).toBe(1)
   })
 })

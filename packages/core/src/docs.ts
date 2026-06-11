@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, ilike, inArray, isNotNull, isNull, notInArray, or, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, gt, ilike, inArray, isNotNull, notInArray, or, sql } from 'drizzle-orm'
 import { z } from 'zod'
 
 import { createId, type Database, schema } from '@claude-organizer/db'
@@ -6,7 +6,7 @@ import { createId, type Database, schema } from '@claude-organizer/db'
 import type { ArchiveFilter } from './archive'
 import { gcAttachmentsOnDestroy } from './attachmentGc'
 import { reconcileAttachmentLinks } from './attachmentLinks'
-import { backfillEmbeddings, embed } from './embedding'
+import { applyChunks, backfillChunks, embed, embedChunks } from './embedding'
 import { notify } from './events'
 import { paginate } from './pagination'
 import { excludedTsQuery, hybridOrder, LEXICAL_POOL, orTsQuery, toVectorParam, vectorK } from './search'
@@ -124,7 +124,7 @@ export async function getDoc(db: Database, id: string) {
 
 export async function createDoc(db: Database, input: CreateDocInput) {
   const parsed = createDocInput.parse(input)
-  const embedding = await embed(docContentText(parsed), 'passage')
+  const vectors = await embedChunks(docContentText(parsed))
   const [row] = await db.transaction(async (tx) => {
     const inserted = await tx
       .insert(schema.docs)
@@ -137,7 +137,7 @@ export async function createDoc(db: Database, input: CreateDocInput) {
         bodyMd: parsed.bodyMd,
         kind: parsed.kind ?? 'note',
         position: parsed.position ?? 0,
-        embedding
+        embedding: vectors?.[0] ?? null
       })
       .returning(docDetailColumns)
     if (inserted[0])
@@ -145,9 +145,21 @@ export async function createDoc(db: Database, input: CreateDocInput) {
     return inserted
   })
   if (row) {
+    await writeDocChunks(db, row.id, vectors)
     await notify(db, { type: 'doc.changed', projectId: row.projectId, docId: row.id })
   }
   return row
+}
+
+/** Replace a doc's chunk rows with `vectors` (no-op when embeddings are off). */
+function writeDocChunks(db: Database, docId: string, vectors: number[][] | null) {
+  return applyChunks(
+    db,
+    vectors,
+    tx => tx.delete(schema.docChunks).where(eq(schema.docChunks.docId, docId)),
+    (tx, rows) =>
+      tx.insert(schema.docChunks).values(rows.map(r => ({ docId, idx: r.idx, embedding: r.embedding })))
+  )
 }
 
 export async function updateDoc(db: Database, input: UpdateDocInput) {
@@ -164,15 +176,15 @@ export async function updateDoc(db: Database, input: UpdateDocInput) {
     return updated
   })
   if (row) {
-    // Re-embed off the merged row (the patch is partial) only when an embedded
-    // field changed; a metadata-only edit keeps the existing vector. Only
-    // overwrite on a successful embed — a transient failure (null) must not wipe
-    // a valid vector (search would silently lose this doc until a backfill).
+    // Re-chunk off the merged row (the patch is partial) only when an embedded
+    // field changed; a metadata-only edit keeps the existing chunks. A transient
+    // failure (null) keeps the valid vectors — handled inside writeDocChunks.
     if (rest.title !== undefined || rest.summary !== undefined || rest.bodyMd !== undefined) {
-      const embedding = await embed(docContentText(row), 'passage')
-      if (embedding) {
-        await db.update(schema.docs).set({ embedding }).where(eq(schema.docs.id, id))
+      const vectors = await embedChunks(docContentText(row))
+      if (vectors !== null) {
+        await db.update(schema.docs).set({ embedding: vectors[0] ?? null }).where(eq(schema.docs.id, id))
       }
+      await writeDocChunks(db, id, vectors)
     }
     await notify(db, { type: 'doc.changed', projectId: row.projectId, docId: row.id })
   }
@@ -348,11 +360,11 @@ export async function searchDocs(
   return pageIds.map(id => byId.get(id)).filter(row => row !== undefined)
 }
 
-/** Backfill embeddings for docs missing one. See `backfillEmbeddings`. */
+/** Backfill chunks for docs that have none yet. See `backfillChunks`. */
 export function backfillDocEmbeddings(db: Database, batchSize = 50): Promise<number> {
-  return backfillEmbeddings(
+  return backfillChunks(
     batchSize,
-    async (limit) => {
+    async (limit, afterId) => {
       const rows = await db
         .select({
           id: schema.docs.id,
@@ -361,11 +373,18 @@ export function backfillDocEmbeddings(db: Database, batchSize = 50): Promise<num
           bodyMd: schema.docs.bodyMd
         })
         .from(schema.docs)
-        .where(isNull(schema.docs.embedding))
+        .where(
+          and(
+            sql`not exists (select 1 from doc_chunks where doc_id = ${schema.docs.id})`,
+            afterId ? gt(schema.docs.id, afterId) : undefined
+          )
+        )
+        .orderBy(asc(schema.docs.id))
         .limit(limit)
       return rows.map(r => ({ id: r.id, text: docContentText(r) }))
     },
-    text => embed(text, 'passage'),
-    (id, embedding) => db.update(schema.docs).set({ embedding }).where(eq(schema.docs.id, id))
+    embedChunks,
+    (id, vectors) =>
+      db.insert(schema.docChunks).values(vectors.map((embedding, idx) => ({ docId: id, idx, embedding })))
   )
 }

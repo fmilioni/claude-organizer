@@ -3,6 +3,7 @@ import {
   asc,
   desc,
   eq,
+  gt,
   ilike,
   inArray,
   isNull,
@@ -21,7 +22,7 @@ import { reconcileAttachmentLinks, relinkCardsAndComments } from './attachmentLi
 import { getSystemSettings } from './authz'
 import { listBlockedBy, listBlocking, pendingBlockerCounts } from './blockers'
 import { claimsByCardIds, getClaim, releaseClaimOnDone } from './cardClaims'
-import { backfillEmbeddings, embed } from './embedding'
+import { applyChunks, backfillChunks, embed, embedChunks } from './embedding'
 import { InputError } from './errors'
 import { notify } from './events'
 import { pruneIntakeForDestroyedCards, syncIntakeForCard } from './intake'
@@ -441,11 +442,11 @@ async function nearestCommentSnippets(
   return map
 }
 
-/** Backfill embeddings for cards missing one. See `backfillEmbeddings`. */
+/** Backfill chunks for cards that have none yet. See `backfillChunks`. */
 export function backfillCardEmbeddings(db: Database, batchSize = 50): Promise<number> {
-  return backfillEmbeddings(
+  return backfillChunks(
     batchSize,
-    async (limit) => {
+    async (limit, afterId) => {
       const rows = await db
         .select({
           id: schema.cards.id,
@@ -455,12 +456,19 @@ export function backfillCardEmbeddings(db: Database, batchSize = 50): Promise<nu
           descriptionMd: schema.cards.descriptionMd
         })
         .from(schema.cards)
-        .where(isNull(schema.cards.embedding))
+        .where(
+          and(
+            sql`not exists (select 1 from card_chunks where card_id = ${schema.cards.id})`,
+            afterId ? gt(schema.cards.id, afterId) : undefined
+          )
+        )
+        .orderBy(asc(schema.cards.id))
         .limit(limit)
       return rows.map(r => ({ id: r.id, text: cardContentText(r) }))
     },
-    text => embed(text, 'passage'),
-    (id, embedding) => db.update(schema.cards).set({ embedding }).where(eq(schema.cards.id, id))
+    embedChunks,
+    (id, vectors) =>
+      db.insert(schema.cardChunks).values(vectors.map((embedding, idx) => ({ cardId: id, idx, embedding })))
   )
 }
 
@@ -550,11 +558,12 @@ export async function createCard(db: Database, input: CreateCardInput) {
     return created
   })
   if (row) {
-    // Embed after insert: the content text includes the key, generated in the txn.
-    const embedding = await embed(cardContentText(row), 'passage')
-    if (embedding) {
-      await db.update(schema.cards).set({ embedding }).where(eq(schema.cards.id, row.id))
+    // Chunk after insert: the content text includes the key, generated in the txn.
+    const vectors = await embedChunks(cardContentText(row))
+    if (vectors !== null) {
+      await db.update(schema.cards).set({ embedding: vectors[0] ?? null }).where(eq(schema.cards.id, row.id))
     }
+    await writeCardChunks(db, row.id, vectors)
     await notify(db, {
       type: 'card.changed',
       projectId: row.projectId,
@@ -563,6 +572,17 @@ export async function createCard(db: Database, input: CreateCardInput) {
     })
   }
   return row
+}
+
+/** Replace a card's chunk rows with `vectors` (no-op when embeddings are off). */
+function writeCardChunks(db: Database, cardId: string, vectors: number[][] | null) {
+  return applyChunks(
+    db,
+    vectors,
+    tx => tx.delete(schema.cardChunks).where(eq(schema.cardChunks.cardId, cardId)),
+    (tx, rows) =>
+      tx.insert(schema.cardChunks).values(rows.map(r => ({ cardId, idx: r.idx, embedding: r.embedding })))
+  )
 }
 
 export async function updateCard(db: Database, input: UpdateCardInput) {
@@ -587,13 +607,14 @@ export async function updateCard(db: Database, input: UpdateCardInput) {
     return updated
   })
   if (row) {
-    // Re-embed off the merged row only when an embedded field changed, and only
-    // on a successful embed — a transient failure must not wipe a valid vector.
+    // Re-chunk only when an embedded field changed; a transient failure (null)
+    // keeps the valid vectors — handled inside writeCardChunks.
     if (rest.title !== undefined || rest.summary !== undefined || rest.descriptionMd !== undefined) {
-      const embedding = await embed(cardContentText(row), 'passage')
-      if (embedding) {
-        await db.update(schema.cards).set({ embedding }).where(eq(schema.cards.id, row.id))
+      const vectors = await embedChunks(cardContentText(row))
+      if (vectors !== null) {
+        await db.update(schema.cards).set({ embedding: vectors[0] ?? null }).where(eq(schema.cards.id, row.id))
       }
+      await writeCardChunks(db, row.id, vectors)
     }
     await notify(db, {
       type: 'card.changed',
