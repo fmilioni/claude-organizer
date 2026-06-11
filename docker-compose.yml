@@ -84,6 +84,24 @@ services:
       migrate:
         condition: service_completed_successfully
 
+  # One-shot, on `up`: (re)populate embedding chunks for rows that have none yet,
+  # once migrate has run and the embedding model is loaded. Idempotent — the first
+  # up after an embedding-storage change (e.g. CO-316's inline→chunks) backfills the
+  # existing rows; later ups find nothing missing and no-op. NOT a dependency of
+  # api/mcp/web: they boot immediately (serving lexical) while this fills chunks in
+  # the background. With embeddings disabled (model "none") it's a clean no-op.
+  backfill:
+    <<: *app
+    restart: "no"
+    command: pnpm backfill:embeddings
+    environment:
+      <<: [*db-env, *embedding-client-env]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      embedding:
+        condition: service_healthy
+
   api:
     <<: *app
     command: node packages/api/dist/server.mjs

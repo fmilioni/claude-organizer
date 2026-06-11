@@ -73,7 +73,7 @@ docker compose up -d --build
 | **MCP** (Streamable HTTP) | http://localhost:4402/mcp |
 | **Embedding service** | http://localhost:4403 |
 
-The embedding model loads in its own `embedding` service; the API and MCP call it over HTTP and fall back to lexical search if it's down. Migrations run automatically before the API and MCP start. Postgres data persists under `./docker/data/postgres`. Out of the box the board is **open** (no login) — see [Run modes](#run-modes) to turn auth on or to go remote.
+The embedding model loads in its own `embedding` service; the API and MCP call it over HTTP and fall back to lexical search if it's down. Migrations run automatically before the API and MCP start, and a one-shot `backfill` service then (re)builds the semantic search vectors for any content that's missing them — so upgrading is just `docker compose up -d --build`, with no manual step. It's idempotent and runs in the background, so the app stays up (search is lexical for not-yet-indexed content until it finishes). Postgres data persists under `./docker/data/postgres`. Out of the box the board is **open** (no login) — see [Run modes](#run-modes) to turn auth on or to go remote.
 
 ### 2. Configure the environment
 
