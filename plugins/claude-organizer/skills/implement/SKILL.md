@@ -47,7 +47,7 @@ Two things specific to execution:
 
 - **Re-read before you start.** Don't trust an earlier read or your memory — between cards the user may have re-prioritized, pulled in work, or left a comment. Re-query the active sprint and the sprint-less `todo`/`backlog` cards, and check `list_unread_comments`, so you act on the **current** state.
 - **`set_card_status(id, "in_progress")` the moment you pick the card up** — before writing a line of code, even for a one-line change. A card being worked while it still reads `todo` is the board lying.
-- **Reserve the card** — `claim_task(<key>, <sessionToken>, <label>)` (advisory — see _Reserving the card_). A **conflict** (held by another session) → **stop and ask** before taking it over; don't just start.
+- **Reserve the work** — `claim_task(<key>, <sessionToken>, <label>)` (advisory — see _Reserving the card_). **When the card belongs to a story, claim the parent story's key**, not just this child: claiming a story cascades the reservation to **all** its `todo` children, so the rest of the story can't be picked up by another session while you work it. (A standalone card claims only itself.) A **conflict** (held by another session) → **stop and ask** before taking it over; don't just start.
 - If it's a sub-task, move its **history** to `in_progress` now too (see _History status_).
 
 ### 2. Read THIS card's comments — `list_comments(cardId)` — even if you read them before
@@ -160,7 +160,7 @@ A batch of several cards may mean **several branches** — warn the user you'll 
 The board coordinates parallel sessions/machines with an **advisory** claim: it signals "this card is in my work buffer" so another session doesn't start the same thing. Nothing is locked (the API never blocks on it); the skill is what respects it.
 
 - **One session token per run.** At the start of a run, generate a single opaque `sessionToken` and a readable `label` — the user's name when you know it (auth on), otherwise a generic session label. **Reuse both** for every claim/release/take-over this run; don't mint a new one per card.
-- **Claim when you pick a card up** (step 1): `claim_task(<key>, <sessionToken>, <label>)`. A **story** also reserves its not-yet-started (`todo`) children. Reserved cards show an hourglass on the board.
+- **Claim when you pick a card up** (step 1): `claim_task(<key>, <sessionToken>, <label>)`. Claiming a **story** cascades the reservation to **all** its not-yet-started (`todo`) children — so when the card you start belongs to a story, **claim the parent story's key**, reserving the whole story up front instead of one child at a time (a child already in `in_progress`/`review`/`done` is left untouched). Picking up a **standalone** card claims only that card. Reserved cards show an hourglass on the board.
 - **Conflict = held by another session.** `claim_task` returns `{ ok:false, conflict:true, claim }` **without changing anything**. **Stop and ask the user** — _"`<key>` is reserved by `<claim.ownerLabel>` since `<claim.claimedAt>`; take it over?"_ On **yes**, `take_over_task(<key>, <sessionToken>, <label>)` swaps the token to you; on **no**, don't start that card. **Take-over is always user-confirmed.**
 - **Release.** Completing the card (`done`) **auto-releases** the claim. If you **abandon/cancel** a card without finishing, `release_task(<key>, <sessionToken>)`. A **CTRL-C keeps** the claim on purpose, so you can resume; resuming in a **new run** mints a new token, so your own earlier claim now reads as a conflict → the take-over prompt above retakes it.
 
@@ -172,7 +172,7 @@ A **history** (a parent card with sub-tasks) is a container; its status tracks i
 
 Per card, in order — no step skipped. **Standing rule: never assume — any ambiguity or decision the card doesn't settle goes to the user before you build; for a story, clear all of them up front.**
 
-1. Re-read the board → `claim_task` (conflict → ask, then take-over) → `in_progress` (history too, if a sub-task).
+1. Re-read the board → `claim_task` (a sub-task → claim the parent story; conflict → ask, then take-over) → `in_progress` (history too, if a sub-task).
 2. `list_comments(cardId)` (read-only) — even if read before; `mark_comments_read` once you've addressed them.
 3. Read the relevant docs.
 4. Implement — clean code, no needless comments; hit a doubt → stop and ask; then self-review your own diff with fresh eyes before handing off (doesn't replace the gate).
