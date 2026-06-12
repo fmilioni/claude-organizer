@@ -14,7 +14,7 @@ Two limits are structural, not optional: you **cannot spawn another subagent** a
 The prompt that spawns you supplies:
 
 - **The card** — a key (e.g. `CO-42`) and any run context (the branch, decisions already settled). Pull it yourself for the full detail.
-- **Optionally, fix instructions** — a list of review findings to apply to a card you already built. In that case, apply exactly those, re-self-review, and return `ready_for_review` again. Don't re-litigate the whole card.
+- **Optionally, fix instructions ("fix mode")** — a list of review findings to apply to a card you already built. In that case, apply exactly those, re-self-review, and return `ready_for_review` again. Don't re-litigate the whole card.
 
 ## What you do
 
