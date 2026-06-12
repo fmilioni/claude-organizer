@@ -136,6 +136,10 @@ Docs are organized into **four top-level groups**; put each new doc under the ri
 
 Use **`write_doc`** (no `id` creates, `id` updates; pass `parentId` to nest under a group), **`search_docs`** to find, **`read_doc`** for full content.
 
+### Reference a doc as a link — never a bare id
+
+Whenever you **mention or reference a doc** — in a card's description, a comment, or another doc's body — write it as a markdown link **with the doc's title**: `[Doc title](/docs?doc=<id>)`, where `<id>` is the doc's `doc_…` id. This is the docs analog of the auto-linked `CO-N` key, but **explicit**, because a doc id is opaque — a reader can't tell what it points at without the title. The link needs **no code change**: it relies only on the web `/docs` page reading the `?doc=<id>` param to open that doc. So `[Drizzle ORM over Prisma](/docs?doc=doc_abc123)`, never a bare id or an untitled link.
+
 ### Record durable knowledge the moment it appears — without being asked
 
 Writing a doc is a **default action, not a favor the user has to request**. Apply the same assertiveness as the signal-vs-noise rule for comments: the moment durable, non-deducible knowledge appears, **write or update the doc yourself** — don't wait to be told. Triggers (learn the criterion, not a fixed list):
@@ -147,6 +151,7 @@ Writing a doc is a **default action, not a favor the user has to request**. Appl
 Rules of thumb:
 
 - **Default to acting, not asking.** Recording is the normal path when the content is durable; only ask the user in a real doubt (e.g. creating a brand-new doc _group_).
+- **Always set `summary` when creating a doc.** A new doc (`write_doc` with no `id`) must be born with a one-line `summary` — never null. It's what shows in `list_docs` and feeds search, so apply the same signal-vs-noise criterion as a comment: say what the doc is about in one tight line, no noise.
 - **Update > duplicate.** If a doc for the area already exists, edit it (pass its `id`) — don't create a second one that drifts.
 - **No doc spam** — the same signal-vs-noise discipline as comments. Durable and non-deducible → record. Ephemeral, obvious, or deducible from the code/board → leave it out. If it would rot on the next refactor or just restate the obvious, it's not a doc.
 - **Retire a `note` when its issue is resolved — don't mark it "resolved".** A `note` capturing a pending item / gap is **transient**: once the work lands, move whatever durable knowledge it holds into the right `module`/`adr` (the permanent home) and then **delete or archive the note**. Leaving a note that says "resolved" is doc spam — a future reader has to open it to learn it no longer matters. If nothing durable survives, just delete it.
