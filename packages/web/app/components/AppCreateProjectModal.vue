@@ -97,7 +97,7 @@ async function submit() {
         </UFormField>
         <UFormField
           label="Key prefix"
-          hint="Used in card keys (e.g. CO-1). Auto-derived from slug; edit if you want."
+          hint="Used in card keys (e.g. CO-1)"
         >
           <UInput v-model="form.keyPrefix" placeholder="CO" />
         </UFormField>
@@ -114,7 +114,12 @@ async function submit() {
           label="Cancel"
           @click="open = false"
         />
-        <UButton color="primary" label="Create" @click="submit" />
+        <UButton
+          color="primary"
+          icon="i-lucide-plus"
+          label="Create"
+          @click="submit"
+        />
       </div>
     </template>
   </UModal>
