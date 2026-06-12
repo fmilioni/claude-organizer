@@ -93,14 +93,19 @@ export async function removeBlocker(
   return listBlockedBy(db, blockedCardId)
 }
 
-/** For each card id, how many of its blockers are still not `done`. */
+/**
+ * For each card id, how many of its blockers are still pending — neither `done`
+ * nor `review`. A blocker in `review` counts as satisfied: its work is built and
+ * only awaits final validation, so it no longer blocks dependents (an autopilot
+ * run leaves cards in `review`, never `done`, and would otherwise stall).
+ */
 export async function pendingBlockerCounts(db: Database, cardIds: string[]) {
   const map = new Map<string, number>()
   if (cardIds.length === 0) return map
   const rows = await db
     .select({
       blockedCardId: schema.cardBlockers.blockedCardId,
-      pending: sql<number>`count(*) filter (where ${schema.cards.status} <> 'done')::int`
+      pending: sql<number>`count(*) filter (where ${schema.cards.status} not in ('done', 'review'))::int`
     })
     .from(schema.cardBlockers)
     .innerJoin(
