@@ -7,6 +7,8 @@ const store = useProjectStore()
 const { currentProject, currentProjectId } = storeToRefs(store)
 const api = useApi()
 const toast = useToast()
+const route = useRoute()
+const router = useRouter()
 
 useHead({ title: 'Docs' })
 
@@ -60,6 +62,7 @@ const searched = ref(false)
 
 // A monotonic ticket discards out-of-order responses (same guard as search.vue).
 let ticket = 0
+let selectTicket = 0
 let searchTimer: ReturnType<typeof setTimeout> | undefined
 
 async function runDocSearch(value: string, projectId: string) {
@@ -96,9 +99,11 @@ watch(term, (value) => {
   searchTimer = setTimeout(() => void runDocSearch(value, projectId), 250)
 })
 
-// Switching project must not leave another project's results on screen.
+// Switching project must not leave another project's results — or a doc id from
+// the old project hanging in the URL — on screen.
 watch(currentProjectId, () => {
   search.value = ''
+  clearSelection()
 })
 
 onBeforeUnmount(() => {
@@ -141,10 +146,42 @@ async function previewDoc(d: DocSummary) {
   }
 }
 
-async function selectDoc(id: string) {
-  selectedId.value = id
-  current.value = await api<Doc>(`/docs/${id}`)
+function clearSelection() {
+  selectedId.value = null
+  current.value = null
+  if (route.query.doc) router.replace({ query: {} })
 }
+
+async function selectDoc(id: string) {
+  const mine = ++selectTicket
+  try {
+    const doc = await api<Doc>(`/docs/${id}`)
+    if (mine !== selectTicket) return
+    selectedId.value = id
+    current.value = doc
+  } catch {
+    // Missing/archived id: land on /docs with no selection rather than erroring.
+    if (mine === selectTicket) clearSelection()
+    return
+  }
+  if (route.query.doc !== id) router.replace({ query: { doc: id } })
+}
+
+// Deep-link: `/docs?doc=<id>` pre-selects the doc (on mount and on internal-href
+// navigation). selectDoc re-syncs the query only when it differs, so no loop.
+watch(
+  () => route.query.doc,
+  (value) => {
+    const id = Array.isArray(value) ? value[0] : value
+    if (id) {
+      if (id !== selectedId.value) void selectDoc(id)
+    } else if (selectedId.value) {
+      selectedId.value = null
+      current.value = null
+    }
+  },
+  { immediate: true }
+)
 
 useProjectData(currentProjectId, loadDocs, {
   onEvent: (event) => {
@@ -157,15 +194,13 @@ useProjectData(currentProjectId, loadDocs, {
             current.value = d
           })
           .catch(() => {
-            selectedId.value = null
-            current.value = null
+            clearSelection()
           })
       }
     } else if (event.type === 'doc.deleted') {
       loadDocs()
       if (event.docId === selectedId.value) {
-        selectedId.value = null
-        current.value = null
+        clearSelection()
       }
     }
   }
@@ -251,8 +286,7 @@ const currentDescendantCount = computed(() => {
 })
 
 async function onDocRemoved() {
-  selectedId.value = null
-  current.value = null
+  clearSelection()
   await loadDocs()
 }
 </script>
