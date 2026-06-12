@@ -43,6 +43,8 @@ Two things specific to execution:
 
 ## The lifecycle — every card, every time, in order
 
+> **Driven by the autopilot?** If the orchestrator's prompt says you're in **runner mode**, read _Runner mode — when the autopilot orchestrator drives_ (below) **first**: you do the build but skip the review gate, the commit, and the status/`done` moves, and you **return** a structured result instead of asking the user or closing the card.
+
 ### 1. Re-read the board, then move the card to `in_progress`
 
 - **Re-read before you start.** Don't trust an earlier read or your memory — between cards the user may have re-prioritized, pulled in work, or left a comment. Re-query the active sprint and the sprint-less `todo`/`backlog` cards, and check `list_unread_comments`, so you act on the **current** state.
@@ -126,6 +128,24 @@ Before committing, ask once: **did a decision, a standardization, or long-lived 
 If this is the **last child of a story**, the **story-level review gate** fires **before** the story closes: an additional `review`-skill pass over the **whole story** (≈ one PR, `git diff <base>...HEAD`), scoped to what a single task can't see — the **story's acceptance criteria**, **duplication across tasks**, **coherence of the PR**; it does not re-review each task line-by-line (the per-task gates already did). Only then move the history to `done` too (see _History status_).
 
 At this story boundary — and before advancing to the next card/story or ending the session — re-check the inbox **fresh**: call **`list_inbox` (pending)** again (don't trust the orientation snapshot — the user may have dropped demands while you worked). If it surfaces pending demands the work didn't cover, **stop and ask** whether to review/plan them now (a decision gate — they may **reshape the upcoming stories**). The criterion and wording live in the **`claude-organizer`** skill (_Inbox_).
+
+## Runner mode — when the autopilot orchestrator drives
+
+The **`autopilot`** skill runs a card by dispatching a subagent that invokes this skill. A subagent hits two hard limits the normal lifecycle assumes away: it **cannot spawn another subagent** (so it can't fire the review gate) and **cannot talk to the user** (`AskUserQuestion` is unavailable to it). So **only when the orchestrator says it is driving** (it states so explicitly in the task prompt — never infer runner mode on your own), you do the **build** and the orchestrator owns the **board lifecycle around you**. Concretely:
+
+- **You do:** move to `in_progress` is already handled by the orchestrator's scope claim — go straight to reading **this card's comments** (step 2) and the **relevant docs** (step 3), **implement clean** (step 4), and **self-review your own diff** (step 4). Record genuine **signal** as comments (step 5), and **capture durable knowledge in the docs** (step 9) — you can call the doc/comment MCP tools; only subagent-spawn and `AskUserQuestion` are off-limits.
+- **You do NOT:** spawn the review gate (step 7), let the user review the diff (step 8), commit and attach the diff (step 10), or do the `review`/`done` status moves — including step 6's move to `review` with its test-plan comment and worktree-diff attach — or release the claim. The orchestrator runs the reviewer as a **sibling** subagent, applies fixes, commits on the run's single branch, attaches the diff, and moves the card to `review`. Driving any of that yourself collides with the orchestrator.
+- **You never ask — you stop and return.** The instant you hit a decision or ambiguity the card doesn't settle (the _Never assume_ rule still holds — you just can't resolve it via the user yourself), **halt** and **return** it. The orchestrator takes it to the user and re-dispatches you with the answer.
+
+**Return contract** — your final message **is** the orchestrator's input (structured data, not prose for a human). Return exactly one of:
+
+- `{ status: "needs_decision", decision, options, recommendation }` — you hit an unsettled choice. State it, the worked options with trade-offs, and your recommendation (same bar as the _Never assume_ method). You will be re-dispatched with the user's answer.
+- `{ status: "ready_for_review", summary, files, testPlan }` — built and self-reviewed up to the pre-review point, nothing left to decide. `summary` is what you changed and why; `files` the touched paths; `testPlan` how to validate it (what to open, do, expect) — the orchestrator posts it as the card's test-plan comment when it moves the card to `review`.
+- `{ status: "blocked", reason }` — you cannot proceed (a missing dependency, a broken precondition).
+
+Keep this contract in sync with the **`autopilot`** skill, which consumes it.
+
+**Outside runner mode — a normal, user-driven run — this section does not apply:** you own the full lifecycle above, commit after the user confirms, and close the card yourself.
 
 ## Diff-capture scripts — they ship inside this skill
 
