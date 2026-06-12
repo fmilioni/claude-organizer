@@ -4,14 +4,15 @@
 
 ## Skills
 
-Four skills drive the work (packaged in `plugins/claude-organizer`):
+Five skills drive the work (packaged in `plugins/claude-organizer`):
 
 - **`claude-organizer`** — how to operate the board: orient at the start of a session, keep statuses honest, comment with signal, docs.
 - **`plan`** — turn a new demand into sprints/histories/tasks (auto-triggers when you describe something to build).
 - **`implement`** — execute a card that already exists, through a mandatory lifecycle (in_progress → read comments → implement → review → commit → done). Auto-triggers when you start building a specific card.
 - **`review`** — mandatory review gate before work closes (per-task + story-level), run by a fresh subagent: checks acceptance criteria and hunts for reuse/dead-code/comment improvements. Fired by `implement` at task/story completion.
+- **`autopilot`** — run the board autonomously: a lean orchestrator dispatches a fresh subagent per card (the `implementer` agent → `reviewer` → fixes) so a long run doesn't degrade, stops to ask the user on every decision, commits one-per-card on a single run branch, and leaves cards in `review` for final validation. User-triggered only.
 
-The "never assume — resolve open decisions" doctrine is carried **inline** in each skill that uses it (`plan` and `implement`), so each skill is self-contained.
+The "never assume — resolve open decisions" doctrine is carried **inline** in each skill that uses it (`plan`, `implement` and `autopilot`), so each skill is self-contained.
 
 Let the skills drive. **What** to do (active sprint, cards, backlog, comments, docs) is the source of truth and lives **in the MCP**, not here — query it via `mcp__claude-organizer__*`. Don't duplicate state into this file.
 
