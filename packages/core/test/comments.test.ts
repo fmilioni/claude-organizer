@@ -4,58 +4,90 @@ import {
   addComment,
   createCard,
   listComments,
-  listUnreadCommentsForProject,
-  markCommentsAsRead
+  listUnhandledCommentsForProject,
+  markCommentsHandled
 } from '../src/index'
 import { freshProject, useTestDb } from './helpers'
 
 const ctx = useTestDb()
 
-describe('comment read tracking by AI', () => {
-  it('a user comment starts unread and shows up in the project\'s unread list', async () => {
+describe('comment AI status', () => {
+  it('a user comment is born unread and an AI comment is born handled', async () => {
     const project = await freshProject(ctx.db)
     const card = await createCard(ctx.db, { projectId: project.id, title: 'c' })
 
-    const comment = await addComment(ctx.db, {
+    const userComment = await addComment(ctx.db, {
       cardId: card.id,
       author: 'user',
       bodyMd: 'please check this'
     })
-    expect(comment.readByAi).toBe(false)
+    expect(userComment.aiStatus).toBe('unread')
 
-    const unread = await listUnreadCommentsForProject(ctx.db, project.id)
-    expect(unread.map(u => u.id)).toContain(comment.id)
-  })
-
-  it('listComments with markAsRead clears the unread flag for user comments', async () => {
-    const project = await freshProject(ctx.db)
-    const card = await createCard(ctx.db, { projectId: project.id, title: 'c' })
-    await addComment(ctx.db, {
-      cardId: card.id,
-      author: 'user',
-      bodyMd: 'first'
-    })
-
-    await listComments(ctx.db, card.id, { markAsRead: true })
-
-    const unread = await listUnreadCommentsForProject(ctx.db, project.id)
-    expect(unread).toHaveLength(0)
-  })
-
-  it('AI-authored comments are never counted as unread-by-AI', async () => {
-    const project = await freshProject(ctx.db)
-    const card = await createCard(ctx.db, { projectId: project.id, title: 'c' })
-    await addComment(ctx.db, {
+    const aiComment = await addComment(ctx.db, {
       cardId: card.id,
       author: 'ai',
       bodyMd: 'progress note'
     })
+    expect(aiComment.aiStatus).toBe('handled')
 
-    const unread = await listUnreadCommentsForProject(ctx.db, project.id)
-    expect(unread).toHaveLength(0)
+    const unhandled = await listUnhandledCommentsForProject(ctx.db, project.id)
+    expect(unhandled.map(u => u.id)).toContain(userComment.id)
+    expect(unhandled.map(u => u.id)).not.toContain(aiComment.id)
   })
 
-  it('markCommentsAsRead marks the given comments and returns the count', async () => {
+  it('listComments with advanceToRead moves unread → read without demoting handled or re-promoting read', async () => {
+    const project = await freshProject(ctx.db)
+    const card = await createCard(ctx.db, { projectId: project.id, title: 'c' })
+
+    const unread = await addComment(ctx.db, {
+      cardId: card.id,
+      author: 'user',
+      bodyMd: 'still unread'
+    })
+    const alreadyRead = await addComment(ctx.db, {
+      cardId: card.id,
+      author: 'user',
+      bodyMd: 'already read'
+    })
+    const handled = await addComment(ctx.db, {
+      cardId: card.id,
+      author: 'user',
+      bodyMd: 'already handled'
+    })
+
+    await listComments(ctx.db, card.id, { advanceToRead: true })
+    await markCommentsHandled(ctx.db, [handled.id])
+    // `alreadyRead` is now `read` (advanced above); `handled` is `handled`.
+
+    const advanced = await listComments(ctx.db, card.id, { advanceToRead: true })
+    // The advancing call must return the just-written state, not the pre-update rows.
+    expect(new Map(advanced.map(r => [r.id, r.aiStatus])).get(unread.id)).toBe('read')
+
+    const rows = await listComments(ctx.db, card.id)
+    const byId = new Map(rows.map(r => [r.id, r.aiStatus]))
+    expect(byId.get(unread.id)).toBe('read')
+    expect(byId.get(alreadyRead.id)).toBe('read')
+    expect(byId.get(handled.id)).toBe('handled')
+  })
+
+  it('listComments without advanceToRead changes nothing', async () => {
+    const project = await freshProject(ctx.db)
+    const card = await createCard(ctx.db, { projectId: project.id, title: 'c' })
+    const comment = await addComment(ctx.db, {
+      cardId: card.id,
+      author: 'user',
+      bodyMd: 'leave me alone'
+    })
+
+    await listComments(ctx.db, card.id)
+
+    const [row] = await listComments(ctx.db, card.id)
+    expect(row?.aiStatus).toBe('unread')
+    const unhandled = await listUnhandledCommentsForProject(ctx.db, project.id)
+    expect(unhandled.map(u => u.id)).toContain(comment.id)
+  })
+
+  it('markCommentsHandled drives any state to handled and returns the count', async () => {
     const project = await freshProject(ctx.db)
     const card = await createCard(ctx.db, { projectId: project.id, title: 'c' })
     const c1 = await addComment(ctx.db, {
@@ -68,9 +100,55 @@ describe('comment read tracking by AI', () => {
       author: 'user',
       bodyMd: 'two'
     })
+    // Move c1 to `read` first to prove handled wins from any prior state.
+    await listComments(ctx.db, card.id, { advanceToRead: true })
 
-    const count = await markCommentsAsRead(ctx.db, [c1.id, c2.id])
+    const count = await markCommentsHandled(ctx.db, [c1.id, c2.id])
     expect(count).toBe(2)
-    expect(await listUnreadCommentsForProject(ctx.db, project.id)).toHaveLength(0)
+
+    const rows = await listComments(ctx.db, card.id)
+    const byId = new Map(rows.map(r => [r.id, r.aiStatus]))
+    expect(byId.get(c1.id)).toBe('handled')
+    expect(byId.get(c2.id)).toBe('handled')
+    expect(await listUnhandledCommentsForProject(ctx.db, project.id)).toHaveLength(0)
+  })
+
+  it('listUnhandledCommentsForProject returns unread + read and excludes handled and AI comments', async () => {
+    const project = await freshProject(ctx.db)
+    const card = await createCard(ctx.db, { projectId: project.id, title: 'c' })
+
+    const willRead = await addComment(ctx.db, {
+      cardId: card.id,
+      author: 'user',
+      bodyMd: 'will be read'
+    })
+    const willHandle = await addComment(ctx.db, {
+      cardId: card.id,
+      author: 'user',
+      bodyMd: 'will be handled'
+    })
+
+    // Advance the two existing user comments to `read`, then handle one of them.
+    await listComments(ctx.db, card.id, { advanceToRead: true })
+    await markCommentsHandled(ctx.db, [willHandle.id])
+
+    // Add a fresh user comment (stays `unread`) and an AI comment (born `handled`).
+    const stillUnread = await addComment(ctx.db, {
+      cardId: card.id,
+      author: 'user',
+      bodyMd: 'unread one'
+    })
+    await addComment(ctx.db, {
+      cardId: card.id,
+      author: 'ai',
+      bodyMd: 'ai note'
+    })
+
+    const unhandled = await listUnhandledCommentsForProject(ctx.db, project.id)
+    const ids = unhandled.map(u => u.id)
+    expect(ids).toContain(willRead.id)
+    expect(ids).toContain(stillUnread.id)
+    expect(ids).not.toContain(willHandle.id)
+    expect(unhandled).toHaveLength(2)
   })
 })

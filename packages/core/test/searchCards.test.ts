@@ -65,7 +65,7 @@ describe('searchCards', () => {
     const [comment] = await ctx.db.query.comments.findMany({
       where: (c, { eq }) => eq(c.cardId, card!.id)
     })
-    expect(comment?.readByAi).toBe(false)
+    expect(comment?.aiStatus).toBe('unread')
   })
 
   it('finds a card by typo via trigram where tsvector alone would not', async () => {

@@ -10,6 +10,7 @@ export type CoEvent
     | { type: 'comment.updated', projectId: string, cardId: string, commentId: string }
     | { type: 'comment.deleted', projectId: string, cardId: string, commentId: string }
     | { type: 'comment.read', projectId: string, cardId: string }
+    | { type: 'comment.handled', projectId: string, cardId: string }
     | { type: 'commit.changed', projectId: string, cardId: string, commitId: string }
     | { type: 'sprint.changed', projectId: string, sprintId: string }
     | { type: 'sprint.deleted', projectId: string, sprintId: string }
