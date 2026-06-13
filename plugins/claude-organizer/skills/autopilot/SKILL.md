@@ -59,7 +59,7 @@ Before writing a single line, walk the scope's cards **in execution order** and 
 For each ready card, in series:
 
 1. **Mark `in_progress`, then dispatch the implementer.** First `set_card_status(<id>, "in_progress")` — the claim is **advisory and does not move status**, so the orchestrator owns this transition; a card must never jump `todo`→`review` without passing through `in_progress`. Then spawn the **`claude-organizer:implementer`** agent (`Agent` tool, `subagent_type: "claude-organizer:implementer"`) — the agent form of the `implement` skill, mirroring `reviewer`. Its mandate (invoke `implement` in runner mode, build only, never commit/spawn/ask/move-status, return the structured contract) is baked into the agent, so just pass it the **card key** and any run context (the branch, settled decisions). It edits the working tree and returns one of the runner-mode contract results (below). **You don't read its diff** — you act on its return.
-2. **Handle the return:**
+2. **Handle the return** (comment read-state transitions here follow the "Comment read-state" note in the Comments section — reading a thread advances `unread → read`, and `mark_comments_handled` once the run acts on a comment):
    - **`needs_decision`** → take it to the user (`AskUserQuestion`): the decision, the worked options, your recommendation. **Record the answer as a comment** on the card (and the story when it matters). Then **re-dispatch the implementer** with the answer. (Default policy is **stop and ask** — never decide a card's open question silently.)
    - **`blocked`** → record why as a comment, leave the card as-is (don't force it), and move on to the next ready card; note it for the final summary.
    - **`ready_for_review`** → proceed to review.
@@ -115,6 +115,8 @@ The implementer's final message is structured data you consume (keep this in exa
 ## Comments — signal only
 
 Comment on **task and story** cards, but only with **signal** (the same discipline as the `claude-organizer` skill): **what was decided for the user and why**, deviations from what the card asked, what was deferred or pushed to the inbox. Never narrate the plan or write what's deducible from the card's state. Noise on a dozen cards is a dozen times the noise.
+
+**Comment read-state — the run handles comments the same way `implement` does.** Comments carry the three-state AI read-status (`unread → read → handled`). Reading a card's thread via `list_comments(cardId)` over MCP **advances its `unread` user comments to `read`**; the dispatched implementer does this as it picks each card up, and so does the orchestrator whenever it reads a thread. But `read` is not the end-state — **a comment the run acted on must be marked `handled`** via `mark_comments_handled([...commentIds])`: when the user answers a decision and you fold it in, when the implementer addresses a card's feedback, when a finding is resolved. **Never leave a comment the run dealt with stuck in `read`** — that's the unhandled queue lying about what's actually been done. The session-start scan `list_unhandled_comments(projectId)` returns `unread` + `read` and does not advance state, so anything left in `read` resurfaces until handled.
 
 ## Never assume — the orchestrator is the only voice to the user
 

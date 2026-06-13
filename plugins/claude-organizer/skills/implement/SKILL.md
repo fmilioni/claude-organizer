@@ -47,7 +47,7 @@ Two things specific to execution:
 
 ### 1. Re-read the board, then move the card to `in_progress`
 
-- **Re-read before you start.** Don't trust an earlier read or your memory — between cards the user may have re-prioritized, pulled in work, or left a comment. Re-query the active sprint and the sprint-less `todo`/`backlog` cards, and check `list_unread_comments`, so you act on the **current** state.
+- **Re-read before you start.** Don't trust an earlier read or your memory — between cards the user may have re-prioritized, pulled in work, or left a comment. Re-query the active sprint and the sprint-less `todo`/`backlog` cards, and check `list_unhandled_comments`, so you act on the **current** state.
 - **`set_card_status(id, "in_progress")` the moment you pick the card up** — before writing a line of code, even for a one-line change. A card being worked while it still reads `todo` is the board lying.
 - **Reserve the work** — `claim_task(<key>, <sessionToken>, <label>)` (advisory — see _Reserving the card_). **When the card belongs to a story, claim the parent story's key**, not just this child: claiming a story cascades the reservation to **all** its `todo` children, so the rest of the story can't be picked up by another session while you work it. (A standalone card claims only itself.) A **conflict** (held by another session) → **stop and ask** before taking it over; don't just start.
 - If it's a sub-task, move its **history** to `in_progress` now too (see _History status_).
@@ -60,7 +60,7 @@ This is the step most often skipped, and skipping it is where the work goes wron
 - **Re-read even if you read them earlier** — something **new** may have landed since: a correction, a constraint, a scope change posted after the briefing or while you were on another card.
 - Reading the **history's** comments does **not** cover its children, and a sibling task having none does **not** mean this one does. Comments are **per-card**.
 - **Comments are where settled decisions live** — the answer to a question you'd otherwise ask may already be here. Read them so you don't re-ask, and don't assume past what they say.
-- **`list_comments` is read-only — it doesn't mark anything.** Once you've **addressed** the user's comments on this card (not just read them), mark them with **`mark_comments_read([...commentIds])`** so they leave the unread queue — do it as you take the card up, not while merely browsing.
+- **Reading the thread advances state.** Calling `list_comments(cardId)` over MCP **advances this card's `unread` user comments to `read`** — the act of reading is recorded; you've seen them. It does not mark them `handled`. Then, once you've **actually addressed** a comment (not just read it), call **`mark_comments_handled([...commentIds])`** so it leaves the unhandled queue for good — handle each as you act on it, never leave a comment stuck in `read` once you've dealt with it.
 
 ### 3. Read the relevant docs
 
@@ -195,7 +195,7 @@ A **history** (a parent card with sub-tasks) is a container; its status tracks i
 Per card, in order — no step skipped. **Standing rule: never assume — any ambiguity or decision the card doesn't settle goes to the user before you build; for a story, clear all of them up front.**
 
 1. Re-read the board → `claim_task` (a sub-task → claim the parent story; conflict → ask, then take-over) → `in_progress` (history too, if a sub-task).
-2. `list_comments(cardId)` (read-only) — even if read before; `mark_comments_read` once you've addressed them.
+2. `list_comments(cardId)` — even if read before; reading advances `unread → read`, then `mark_comments_handled` once you've actually addressed them.
 3. Read the relevant docs.
 4. Implement — clean code, no needless comments; hit a doubt → stop and ask; then self-review your own diff with fresh eyes before handing off (doesn't replace the gate).
 5. Comment the signal.

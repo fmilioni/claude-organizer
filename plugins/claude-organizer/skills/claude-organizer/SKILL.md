@@ -23,7 +23,7 @@ Do this sequence _before_ exploring the codebase or making changes:
 
 1. **`list_projects`** — find the project whose `slug` matches the repo you're working in, and grab its `projectId`. Every other tool takes an explicit `projectId`.
 2. **`get_active_sprint(projectId)`** — what's being worked on right now.
-3. **`list_unread_comments(projectId)`** — feedback the user left that you haven't seen yet. Read it and address it first; it's often a correction or a new priority.
+3. **`list_unhandled_comments(projectId)`** — feedback the user left that you haven't acted on yet (`unread` + `read`). Read it and address it first; it's often a correction or a new priority. The scan itself doesn't advance state.
 4. **`list_cards`** — the cards in flight. Read **what's on the board now**, not just the active sprint:
    - `list_cards(projectId, sprintId=<active sprint>)` — the active sprint's cards.
    - `list_cards(projectId, backlogOnly=true)` — sprint-less cards. Those in a board status (`todo`…`done`) are **standalone cards on the board**; those in the `backlog` status are the **backlog**.
@@ -51,7 +51,7 @@ The board grows; an unfiltered read burns context (a bare `list_cards` on a matu
 - **Filter, don't dump.** Prefer a filtered `list_cards` (the focused filters above) over the broad listing — reach for the unfiltered panorama only when you genuinely need it.
 - **Have a key? Go straight to it.** With a `CO-N` in hand, `get_card_by_key` (or `get_card` by id) instead of listing to find it; for a handful of known keys, `get_cards` fetches them in one call.
 - **Searching the past?** `search_cards` (cards + comments) and `search_docs` are **hybrid semantic search** — lexical full-text **fused with embedding similarity** (RRF), so they match by **meaning**, not just the exact words. A **conceptual / natural-language query** ("how auth tokens get refreshed") finds the right card/doc even when its wording differs, and synonyms/typos still hit (it degrades to plain lexical search when embeddings aren't available) — so describe what you're after, don't burn turns guessing the one exact keyword. Ranked, with a snippet; far better than scanning sprint by sprint.
-- **Order of discovery — which tool answers which question:** architecture/decisions → `search_docs`; a prior card or its comments → `search_cards`; unread user feedback → `list_unread_comments` (session start). Pick the tool before you start listing.
+- **Order of discovery — which tool answers which question:** architecture/decisions → `search_docs`; a prior card or its comments → `search_cards`; unhandled user feedback → `list_unhandled_comments` (session start). Pick the tool before you start listing.
 - **Don't over-read.** `get_card` / `list_comments` only for the cards you'll actually touch — don't walk the whole board "just to be safe".
 
 ## Multiple hosts — one server per host, never mix
@@ -105,7 +105,12 @@ A comment exists to change what the **next reader** (a memoryless future session
 
 Learn the _criterion_ (signal vs. noise; deducible vs. new) — don't follow a fixed blacklist. "typecheck passed" is just one example of the concept. This criterion applies to **every** comment you write — including the **test plan** the `implement` skill makes you post when a card goes to `review`.
 
-User comments arrive flagged unread. **Reading is read-only — it never marks anything.** Both `list_unread_comments` and `list_comments(cardId)` list comments **without** touching the unread flags, so scanning history to find a past decision never silently clears the user's unread. Marking read is a **separate, explicit** step: `mark_comments_read([...commentIds])`, done only when you've actually addressed the comments while working the card. Check unread comments at session start. **When you pick a card up to develop, `list_comments(cardId)` is mandatory before implementing** — the `implement` skill enforces this (every card, every time, even if read before, because new context may have landed). Reading the history's comments does **not** cover its children.
+**Comments carry a three-state AI read-status — `unread → read → handled`.** A user comment is born `unread` (the AI has never seen it); an AI comment is born `handled` (the AI's own words never count as pending). Two transitions move it forward:
+
+- **`unread → read` is automatic when you read the card's thread via `list_comments(cardId)`** — reading over MCP **advances** that card's `unread` user comments to `read`. (It never demotes a `handled` comment and never promotes `read → handled`.) Opening the card in the **web** UI does **not** advance state — only the MCP read path does. So scanning a thread to find a past decision does mark its unread comments as `read`; that's intended — you *did* read them.
+- **`→ handled` is explicit, via `mark_comments_handled([...commentIds])`** — call it only when you've **actually acted** on the comment (fixed the bug, planned it, folded the decision in), not merely read it. This is the step that takes a comment out of the unhandled queue for good.
+
+The session-start scan **`list_unhandled_comments(projectId)`** returns everything not yet handled (`unread` + `read`) and **does not** advance state — so a comment you read in one session but didn't act on still resurfaces in the next until you handle it. Check it at session start. **When you pick a card up to develop, `list_comments(cardId)` is mandatory before implementing** — the `implement` skill enforces this (every card, every time, even if read before, because new context may have landed). Reading the history's comments does **not** cover its children.
 
 **Author each paragraph or bullet as one continuous line — never hard-wrap (manual line breaks) mid-paragraph.** Soft-wrapping is the renderer's job, not the author's, and this holds for **every authored body alike — card/task descriptions, comments and docs**. Legitimate markdown structure is not hard-wrap and stays: headings, one list item per line, table rows, fenced code blocks, and blank-line-separated paragraphs — the rule forbids only the artificial break *inside* a single paragraph or bullet.
 
