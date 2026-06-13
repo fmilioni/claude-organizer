@@ -22,6 +22,10 @@ const model = defineModel<string>({ default: '' })
 const toast = useToast()
 const { uploadImage, resolveDisplaySrc } = useAttachments()
 
+// Default to source mode when a table is present — the structured editor has no `table` node and drops it on save.
+const sourceMode = ref(containsMarkdownTable(model.value))
+const hasTable = computed(() => containsMarkdownTable(model.value))
+
 // Minimal structural shapes for the ProseMirror view the paste/drop handlers get.
 // Methods (not arrow props) so param checks stay bivariant — the real EditorView
 // then satisfies these without pulling ProseMirror types into the web package.
@@ -148,11 +152,50 @@ const toolbarItems: EditorToolbarItem[][] = [
     { kind: 'horizontalRule', icon: 'i-lucide-minus' }
   ]
 ]
+
+function toggleSource() {
+  // Going back to the structured editor with a table present drops it on save — warn but don't block (the table may be intentional to remove).
+  if (sourceMode.value && hasTable.value) {
+    toast.add({
+      title: 'Table not supported in the structured editor',
+      description: 'It will be lost on save. Stay in source mode to keep it.',
+      color: 'warning'
+    })
+  }
+  sourceMode.value = !sourceMode.value
+}
 </script>
 
 <template>
   <div class="border border-default rounded-md overflow-hidden">
+    <template v-if="sourceMode">
+      <div class="flex items-center justify-between gap-2 border-b border-default bg-elevated/30 px-1 py-0.5">
+        <span class="pl-2 text-xs text-muted">Markdown source</span>
+        <UTooltip text="Switch to the rich editor">
+          <UButton
+            icon="i-lucide-pencil"
+            size="sm"
+            color="neutral"
+            variant="ghost"
+            aria-label="Switch to the rich editor"
+            @click="toggleSource"
+          />
+        </UTooltip>
+      </div>
+      <UTextarea
+        v-model="model"
+        :rows="8"
+        autoresize
+        :autofocus="autofocus"
+        :placeholder="placeholder"
+        class="w-full"
+        :ui="{ base: 'font-mono text-sm rounded-none border-0 ring-0 focus-visible:ring-0' }"
+        :style="{ minHeight }"
+      />
+    </template>
+
     <UEditor
+      v-else
       v-slot="{ editor }"
       v-model="model"
       content-type="markdown"
@@ -162,11 +205,24 @@ const toolbarItems: EditorToolbarItem[][] = [
       :style="{ minHeight }"
       :ui="{ base: `px-3! py-2 [&_[data-type=horizontalRule]]:my-4! [&_[data-type=horizontalRule]]:py-0! [&_[data-type=horizontalRule]_hr]:my-0 ${PROSE}` }"
     >
-      <UEditorToolbar
-        :editor="editor"
-        :items="toolbarItems"
-        class="border-b border-default bg-elevated/30"
-      />
+      <div class="flex items-center border-b border-default bg-elevated/30">
+        <UEditorToolbar
+          :editor="editor"
+          :items="toolbarItems"
+          class="flex-1"
+        />
+        <UTooltip text="Edit raw markdown (source)">
+          <UButton
+            icon="i-lucide-file-code-2"
+            size="sm"
+            color="neutral"
+            variant="ghost"
+            aria-label="Edit raw markdown (source)"
+            class="mr-1 shrink-0"
+            @click="toggleSource"
+          />
+        </UTooltip>
+      </div>
     </UEditor>
   </div>
 </template>
