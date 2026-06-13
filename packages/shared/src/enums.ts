@@ -22,6 +22,9 @@ export type SprintStatus = (typeof SPRINT_STATUSES)[number]
 export const COMMENT_AUTHORS = ['ai', 'user'] as const
 export type CommentAuthor = (typeof COMMENT_AUTHORS)[number]
 
+export const COMMENT_AI_STATUSES = ['unread', 'read', 'handled'] as const
+export type CommentAiStatus = (typeof COMMENT_AI_STATUSES)[number]
+
 export const DOC_KINDS = ['module', 'adr', 'guide', 'note'] as const
 export type DocKind = (typeof DOC_KINDS)[number]
 

@@ -18,6 +18,12 @@ export const cardStatusEnum = pgEnum('card_status', [
 
 export const commentAuthorEnum = pgEnum('comment_author', ['ai', 'user'])
 
+export const commentAiStatusEnum = pgEnum('comment_ai_status', [
+  'unread',
+  'read',
+  'handled'
+])
+
 export const docKindEnum = pgEnum('doc_kind', [
   'module',
   'adr',

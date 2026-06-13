@@ -499,7 +499,7 @@ async function restoreAsNew(db: Database, data: BackupData): Promise<string[]> {
       }
     }
 
-    for (const cm of rows<CommentRow>('comments')) {
+    for (const cm of rows<CommentRow & { readByAi?: boolean }>('comments')) {
       const id = createId('cmt')
       CM[cm.id] = id
       await tx.insert(schema.comments).values({
@@ -507,7 +507,8 @@ async function restoreAsNew(db: Database, data: BackupData): Promise<string[]> {
         cardId: C[cm.cardId]!,
         author: cm.author,
         bodyMd: cm.bodyMd,
-        readByAi: cm.readByAi,
+        // Pre-CO-343 backups carry the legacy `readByAi` boolean, not `aiStatus`.
+        aiStatus: cm.aiStatus ?? (cm.readByAi ? 'handled' : 'unread'),
         createdAt: new Date(cm.createdAt)
       })
     }

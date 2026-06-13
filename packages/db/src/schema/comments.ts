@@ -1,6 +1,5 @@
 import { relations, sql } from 'drizzle-orm'
 import {
-  boolean,
   index,
   pgTable,
   text,
@@ -10,7 +9,7 @@ import {
 import { users } from './auth'
 import { cards } from './cards'
 import { tsvector } from './columns'
-import { commentAuthorEnum } from './enums'
+import { commentAiStatusEnum, commentAuthorEnum } from './enums'
 
 export const comments = pgTable(
   'comments',
@@ -22,7 +21,7 @@ export const comments = pgTable(
     author: commentAuthorEnum('author').notNull(),
     userId: text('user_id').references(() => users.id, { onDelete: 'set null' }),
     bodyMd: text('body_md').notNull(),
-    readByAi: boolean('read_by_ai').notNull().default(false),
+    aiStatus: commentAiStatusEnum('ai_status').notNull().default('unread'),
     bodyTsv: tsvector('body_tsv').generatedAlwaysAs(
       sql`to_tsvector('simple', coalesce(body_md, ''))`
     ),
@@ -32,7 +31,7 @@ export const comments = pgTable(
   },
   t => [
     index('comments_card_idx').on(t.cardId),
-    index('comments_unread_idx').on(t.readByAi, t.author),
+    index('comments_unread_idx').on(t.aiStatus, t.author),
     index('comments_body_tsv_idx').using('gin', t.bodyTsv)
   ]
 )

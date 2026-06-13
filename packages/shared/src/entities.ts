@@ -1,5 +1,6 @@
 import type {
   CardStatus,
+  CommentAiStatus,
   CommentAuthor,
   DocKind,
   IntakeStatus,
@@ -57,7 +58,7 @@ export interface CommentRow {
   author: CommentAuthor
   userId: string | null
   bodyMd: string
-  readByAi: boolean
+  aiStatus: CommentAiStatus
   createdAt: string
 }
 
