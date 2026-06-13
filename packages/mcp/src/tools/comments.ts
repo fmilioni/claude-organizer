@@ -5,8 +5,8 @@ import {
   addComment,
   deleteComment,
   listComments,
-  listUnreadCommentsForProject,
-  markCommentsAsRead,
+  listUnhandledCommentsForProject,
+  markCommentsHandled,
   updateComment
 } from '@claude-organizer/core'
 import type { Database } from '@claude-organizer/db'
@@ -19,14 +19,18 @@ export function registerCommentTools(server: McpServer, db: Database) {
     'list_comments',
     {
       description:
-        'List comments of a card. Read-only: it never marks anything as read, so scanning history is safe and never clears the user\'s unread flags. When you actually pick the card up to work it, mark the user comments you\'ve addressed with mark_comments_read. Pages with limit/offset; response is { comments, hasMore, offset }.',
+        'List comments of a card. Reading the thread advances the user\'s unread comments to `read` (but not to `handled` — that\'s mark_comments_handled, which you call once you\'ve actually acted on a comment). Pages with limit/offset; response is { comments, hasMore, offset }.',
       inputSchema: {
         cardId: z.string(),
         ...pageInputs
       }
     },
     async ({ cardId, limit, offset }) => {
-      const rows = await listComments(db, cardId, { limit: limit + 1, offset })
+      const rows = await listComments(db, cardId, {
+        advanceToRead: true,
+        limit: limit + 1,
+        offset
+      })
       // Images referenced in each comment's body, via the link index; one batch
       // query for the page (not the limit+1 probe row), grouped per comment.
       const byComment = await attachmentsByItem(
@@ -43,14 +47,14 @@ export function registerCommentTools(server: McpServer, db: Database) {
   )
 
   server.registerTool(
-    'list_unread_comments',
+    'list_unhandled_comments',
     {
       description:
-        'List all user comments not yet read by the AI for a project. Does NOT mark them as read. Pages with limit/offset; response is { comments, hasMore, offset }.',
+        'List all user comments not yet handled by the AI for a project (both `unread` and `read` — everything you haven\'t closed out with mark_comments_handled). Pages with limit/offset; response is { comments, hasMore, offset }.',
       inputSchema: { projectId: z.string(), ...pageInputs }
     },
     async ({ projectId, limit, offset }) => {
-      const rows = await listUnreadCommentsForProject(
+      const rows = await listUnhandledCommentsForProject(
         db,
         projectId,
         limit + 1,
@@ -84,13 +88,14 @@ export function registerCommentTools(server: McpServer, db: Database) {
   )
 
   server.registerTool(
-    'mark_comments_read',
+    'mark_comments_handled',
     {
-      description: 'Mark a list of comments as read by the AI.',
+      description:
+        'Mark a list of comments as handled — use once you have actually acted on the comment (addressed the request, applied the fix, answered the question), not merely read it.',
       inputSchema: { commentIds: z.array(z.string()).min(1) }
     },
     async ({ commentIds }) => {
-      const updated = await markCommentsAsRead(db, commentIds)
+      const updated = await markCommentsHandled(db, commentIds)
       return asJson({ updated })
     }
   )

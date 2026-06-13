@@ -110,7 +110,7 @@ function isAdminOnly(method: string, url: string | undefined): boolean {
 
 // Resolves the project(s) a request touches, so access can be checked before the
 // handler runs. Returns null when no project can be resolved (treated as deny).
-// Multiple ids only for /comments/read, whose payload may span projects.
+// Multiple ids only for /comments/handled, whose payload may span projects.
 async function resolveProjectIds(
   db: Database,
   req: FastifyRequest
@@ -132,7 +132,7 @@ async function resolveProjectIds(
       return req.method === 'POST'
         ? one((body.projectId as string) ?? null)
         : one(query.projectId ?? null)
-    case '/comments/unread':
+    case '/comments/unhandled':
       return one(query.projectId ?? null)
     case '/attachments':
       // Upload carries the file in the multipart body (unparsed at this hook),
@@ -188,7 +188,7 @@ async function resolveProjectIds(
       return entity('intakeItem', params.id!)
     case '/comments/:id':
       return entity('comment', params.id!)
-    case '/comments/read':
+    case '/comments/handled':
       return resolveCommentsProjectIds(db, (body.commentIds as string[]) ?? [])
     default:
       return null

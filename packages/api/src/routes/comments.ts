@@ -5,8 +5,8 @@ import {
   addComment,
   deleteComment,
   listComments,
-  listUnreadCommentsForProject,
-  markCommentsAsRead,
+  listUnhandledCommentsForProject,
+  markCommentsHandled,
   updateComment
 } from '@claude-organizer/core'
 import type { Database } from '@claude-organizer/db'
@@ -19,8 +19,8 @@ const addCommentBody = z.object({
   bodyMd: z.string().min(1),
   author: z.enum(COMMENT_AUTHORS).optional()
 })
-const unreadQuery = z.object({ projectId: projectIdQuery })
-const markReadBody = z.object({ commentIds: z.array(z.string()) })
+const unhandledQuery = z.object({ projectId: projectIdQuery })
+const markHandledBody = z.object({ commentIds: z.array(z.string()) })
 const updateCommentBody = z.object({ bodyMd: z.string().min(1) })
 
 export function registerCommentRoutes(app: FastifyInstance, db: Database) {
@@ -28,7 +28,7 @@ export function registerCommentRoutes(app: FastifyInstance, db: Database) {
     '/cards/:cardId/comments',
     async (req) => {
       const { markAsRead } = listCommentsQuery.parse(req.query)
-      return listComments(db, req.params.cardId, { markAsRead })
+      return listComments(db, req.params.cardId, { advanceToRead: markAsRead })
     }
   )
 
@@ -46,14 +46,14 @@ export function registerCommentRoutes(app: FastifyInstance, db: Database) {
     }
   )
 
-  app.get('/comments/unread', async (req) => {
-    const { projectId } = unreadQuery.parse(req.query)
-    return listUnreadCommentsForProject(db, projectId)
+  app.get('/comments/unhandled', async (req) => {
+    const { projectId } = unhandledQuery.parse(req.query)
+    return listUnhandledCommentsForProject(db, projectId)
   })
 
-  app.post('/comments/read', async (req) => {
-    const { commentIds } = markReadBody.parse(req.body)
-    const updated = await markCommentsAsRead(db, commentIds)
+  app.post('/comments/handled', async (req) => {
+    const { commentIds } = markHandledBody.parse(req.body)
+    const updated = await markCommentsHandled(db, commentIds)
     return { updated }
   })
 

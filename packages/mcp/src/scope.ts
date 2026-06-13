@@ -85,7 +85,7 @@ async function resolveToolProjectIds(
     case 'create_tag':
     case 'list_docs':
     case 'search_docs':
-    case 'list_unread_comments':
+    case 'list_unhandled_comments':
     case 'create_inbox':
     case 'list_inbox':
     case 'update_project_key_prefix':
@@ -173,7 +173,7 @@ async function resolveToolProjectIds(
     case 'delete_comment':
       return entity('comment', str(input.id))
 
-    case 'mark_comments_read':
+    case 'mark_comments_handled':
       return resolveCommentsProjectIds(
         db,
         ((input.commentIds as string[] | undefined) ?? []).filter(Boolean)
