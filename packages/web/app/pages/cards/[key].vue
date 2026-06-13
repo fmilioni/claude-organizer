@@ -38,7 +38,7 @@ async function fetchCard(): Promise<Card | null> {
 
 async function fetchComments(cardId: string) {
   return api<Comment[]>(`/cards/${cardId}/comments`, {
-    query: { markAsRead: 'false' }
+    query: { advanceToRead: 'false' }
   })
 }
 
@@ -104,7 +104,8 @@ useProjectData(() => card.value?.projectId ?? null, loadCard, {
       (event.type === 'comment.added'
         || event.type === 'comment.updated'
         || event.type === 'comment.deleted'
-        || event.type === 'comment.read')
+        || event.type === 'comment.read'
+        || event.type === 'comment.handled')
       && event.cardId === card.value.id
     ) {
       refreshComments()
@@ -332,6 +333,19 @@ const meta = computed(() =>
 function authorLabel(c: Comment) {
   if (c.author === 'ai') return 'Claude'
   return c.authorName ?? 'User'
+}
+
+// AI-read state badge — only user comments carry one (ai comments are born
+// `handled`, never a pending state).
+const aiStatusBadge = {
+  unread: { label: 'unread by AI', color: 'warning', ring: 'ring-1 ring-warning/60' },
+  read: { label: 'read by AI', color: 'neutral', ring: '' },
+  handled: { label: 'handled by AI', color: 'success', ring: '' }
+} as const
+
+function commentBadge(c: Comment) {
+  if (c.author !== 'user') return null
+  return aiStatusBadge[c.aiStatus]
 }
 
 function commentInitials(name: string | null | undefined) {
@@ -786,23 +800,19 @@ const providerIcon = computed(() =>
                 v-for="c in comments"
                 :key="c.id"
                 class="border border-default rounded-md p-3"
-                :class="
-                  c.author === 'user' && !c.readByAi
-                    ? 'ring-1 ring-warning/60'
-                    : ''
-                "
+                :class="commentBadge(c)?.ring"
               >
                 <div class="flex items-center justify-between gap-2 mb-1.5">
                   <div class="flex items-center gap-2">
                     <UAvatar v-bind="commentAvatar(c)" size="xs" />
                     <span class="text-sm font-medium">{{ authorLabel(c) }}</span>
                     <UBadge
-                      v-if="c.author === 'user' && !c.readByAi"
+                      v-if="commentBadge(c)"
                       size="xs"
-                      color="warning"
+                      :color="commentBadge(c)!.color"
                       variant="subtle"
                     >
-                      unread by AI
+                      {{ commentBadge(c)!.label }}
                     </UBadge>
                   </div>
                   <div class="flex items-center gap-1.5 shrink-0">

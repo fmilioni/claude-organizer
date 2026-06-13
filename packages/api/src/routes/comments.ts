@@ -14,7 +14,7 @@ import { COMMENT_AUTHORS } from '@claude-organizer/shared'
 
 import { projectIdQuery, queryBool } from '../lib/query'
 
-const listCommentsQuery = z.object({ markAsRead: queryBool })
+const listCommentsQuery = z.object({ advanceToRead: queryBool })
 const addCommentBody = z.object({
   bodyMd: z.string().min(1),
   author: z.enum(COMMENT_AUTHORS).optional()
@@ -27,8 +27,8 @@ export function registerCommentRoutes(app: FastifyInstance, db: Database) {
   app.get<{ Params: { cardId: string } }>(
     '/cards/:cardId/comments',
     async (req) => {
-      const { markAsRead } = listCommentsQuery.parse(req.query)
-      return listComments(db, req.params.cardId, { advanceToRead: markAsRead })
+      const { advanceToRead } = listCommentsQuery.parse(req.query)
+      return listComments(db, req.params.cardId, { advanceToRead })
     }
   )
 
