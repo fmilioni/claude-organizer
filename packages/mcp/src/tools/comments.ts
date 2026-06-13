@@ -50,16 +50,15 @@ export function registerCommentTools(server: McpServer, db: Database) {
     'list_unhandled_comments',
     {
       description:
-        'List all user comments not yet handled by the AI for a project (both `unread` and `read` — everything you haven\'t closed out with mark_comments_handled). Pages with limit/offset; response is { comments, hasMore, offset }.',
+        'List all user comments not yet handled by the AI for a project (both `unread` and `read` — everything you haven\'t closed out with mark_comments_handled). The scan advances the returned `unread` comments to `read` (but not to `handled` — that\'s mark_comments_handled, which you call once you\'ve actually acted on a comment); already-`read` and `handled` comments are untouched, and the queue still returns `unread` + `read`. Pages with limit/offset; response is { comments, hasMore, offset }.',
       inputSchema: { projectId: z.string(), ...pageInputs }
     },
     async ({ projectId, limit, offset }) => {
-      const rows = await listUnhandledCommentsForProject(
-        db,
-        projectId,
-        limit + 1,
+      const rows = await listUnhandledCommentsForProject(db, projectId, {
+        advanceToRead: true,
+        limit: limit + 1,
         offset
-      )
+      })
       return asJson(pageEnvelope('comments', rows, limit, offset))
     }
   )

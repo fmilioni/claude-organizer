@@ -151,4 +151,81 @@ describe('comment AI status', () => {
     expect(ids).not.toContain(willHandle.id)
     expect(unhandled).toHaveLength(2)
   })
+
+  it('listUnhandledCommentsForProject with advanceToRead moves unread → read, reflects it in the returned rows, and still returns unread + read', async () => {
+    const project = await freshProject(ctx.db)
+    const card = await createCard(ctx.db, { projectId: project.id, title: 'c' })
+
+    const alreadyRead = await addComment(ctx.db, {
+      cardId: card.id,
+      author: 'user',
+      bodyMd: 'already read'
+    })
+    // Advance this one to `read` up front, then add a fresh `unread` one.
+    await listComments(ctx.db, card.id, { advanceToRead: true })
+    const stillUnread = await addComment(ctx.db, {
+      cardId: card.id,
+      author: 'user',
+      bodyMd: 'unread one'
+    })
+
+    const advanced = await listUnhandledCommentsForProject(ctx.db, project.id, {
+      advanceToRead: true
+    })
+    // The advancing call returns the just-written state, not the pre-update rows.
+    const byId = new Map(advanced.map(r => [r.id, r.aiStatus]))
+    expect(byId.get(stillUnread.id)).toBe('read')
+    expect(byId.get(alreadyRead.id)).toBe('read')
+    // Still returns both (unread + read) — nothing dropped from the queue.
+    expect(advanced).toHaveLength(2)
+
+    // Persisted: both are `read` on the next read, and the scan still returns them.
+    const after = await listUnhandledCommentsForProject(ctx.db, project.id)
+    expect(after.map(u => u.id).sort()).toEqual([alreadyRead.id, stillUnread.id].sort())
+  })
+
+  it('listUnhandledCommentsForProject without advanceToRead leaves unread comments unread', async () => {
+    const project = await freshProject(ctx.db)
+    const card = await createCard(ctx.db, { projectId: project.id, title: 'c' })
+    const comment = await addComment(ctx.db, {
+      cardId: card.id,
+      author: 'user',
+      bodyMd: 'leave me alone'
+    })
+
+    const scanned = await listUnhandledCommentsForProject(ctx.db, project.id)
+    expect(scanned.find(r => r.id === comment.id)?.aiStatus).toBe('unread')
+
+    const rows = await listComments(ctx.db, card.id)
+    expect(rows.find(r => r.id === comment.id)?.aiStatus).toBe('unread')
+  })
+
+  it('listUnhandledCommentsForProject with advanceToRead never demotes a handled comment', async () => {
+    const project = await freshProject(ctx.db)
+    const card = await createCard(ctx.db, { projectId: project.id, title: 'c' })
+    const handled = await addComment(ctx.db, {
+      cardId: card.id,
+      author: 'user',
+      bodyMd: 'handled one'
+    })
+    await markCommentsHandled(ctx.db, [handled.id])
+    const unread = await addComment(ctx.db, {
+      cardId: card.id,
+      author: 'user',
+      bodyMd: 'unread one'
+    })
+
+    // The scan never surfaces a handled comment, so it cannot demote it; the
+    // unread one advances and the handled one stays handled.
+    const scanned = await listUnhandledCommentsForProject(ctx.db, project.id, {
+      advanceToRead: true
+    })
+    expect(scanned.map(u => u.id)).not.toContain(handled.id)
+    expect(scanned.find(r => r.id === unread.id)?.aiStatus).toBe('read')
+
+    const rows = await listComments(ctx.db, card.id)
+    const byId = new Map(rows.map(r => [r.id, r.aiStatus]))
+    expect(byId.get(handled.id)).toBe('handled')
+    expect(byId.get(unread.id)).toBe('read')
+  })
 })
