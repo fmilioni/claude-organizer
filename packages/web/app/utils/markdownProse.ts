@@ -29,5 +29,12 @@ export const PROSE = [
   '[&_code]:bg-muted [&_code]:border-0! [&_code]:text-highlighted [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:rounded-md [&_code]:text-sm [&_code]:font-mono [&_code]:font-medium [&_code]:inline-block',
   // Block + auto inline-margin: an image narrower than the container centers; a
   // full-width one stays put. Mirrors the editor theme so preview and editor match.
-  '[&_img]:block [&_img]:max-w-full [&_img]:rounded-md [&_img]:mx-auto'
+  '[&_img]:block [&_img]:max-w-full [&_img]:rounded-md [&_img]:mx-auto',
+  // GFM tables: `display:block` makes the <table> its own scroll container, so a
+  // wide table scrolls horizontally instead of stretching/squeezing the layout
+  // (marked emits a bare <table>, no wrapper). `w-max` shrinks to content yet
+  // `max-w-full` keeps it inside the container until it actually overflows.
+  '[&_table]:my-4 [&_table]:block [&_table]:w-max [&_table]:max-w-full [&_table]:overflow-x-auto [&_table]:border-collapse [&_table]:text-sm',
+  '[&_:is(th,td)]:border [&_:is(th,td)]:border-default [&_:is(th,td)]:px-3 [&_:is(th,td)]:py-1.5 [&_:is(th,td)]:text-start [&_:is(th,td)]:align-top',
+  '[&_thead]:bg-muted [&_th]:font-semibold [&_th]:text-highlighted'
 ].join(' ')
