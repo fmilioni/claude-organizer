@@ -97,9 +97,9 @@ watchEffect(() => {
 
 const embeddingStatus = ref<EmbeddingRuntimeStatus | null>(null)
 const applyingEmbedding = ref(false)
-let statusTimer: ReturnType<typeof setTimeout> | null = null
-// Guards the async poll chain: a reschedule/refetch resolving after the page
-// unmounts must not run (onUnmounted already cleared the timer once).
+// Guards the async poll: a refetch resolving after the page unmounts must not
+// mutate state (useIntervalFn stops firing on dispose, but an in-flight call
+// could still land).
 let pollingMounted = true
 
 const embeddingBusy = computed(
@@ -118,26 +118,29 @@ const canApplyEmbedding = computed(
   () => pendingChange.value && !embeddingBusy.value
 )
 
-async function refreshEmbeddingStatus() {
+const { pause: stopPolling, resume: startPolling, isActive: polling }
+  = useIntervalFn(pollEmbeddingStatus, 1500, { immediate: false })
+
+async function pollEmbeddingStatus() {
   let status: EmbeddingRuntimeStatus
   try {
     status = await api<EmbeddingRuntimeStatus>('/admin/embedding')
   } catch {
-    // Transient poll failure: keep the last frame and retry, instead of breaking
-    // the chain and freezing the UI mid-backfill.
-    if (pollingMounted && embeddingBusy.value) {
-      statusTimer = setTimeout(refreshEmbeddingStatus, 1500)
-    }
+    // Transient poll failure: keep the last frame and retry on the next tick,
+    // unless the work already finished — stop then so the UI doesn't spin.
+    if (!embeddingBusy.value) stopPolling()
     return
   }
   if (!pollingMounted) return
   embeddingStatus.value = status
-  if (embeddingBusy.value) {
-    statusTimer = setTimeout(refreshEmbeddingStatus, 1500)
-  } else {
-    statusTimer = null
-    capabilities.value = await fetchCapabilities()
-  }
+  if (embeddingBusy.value) return
+  stopPolling()
+  capabilities.value = await fetchCapabilities()
+}
+
+async function refreshEmbeddingStatus() {
+  await pollEmbeddingStatus()
+  if (pollingMounted && embeddingBusy.value && !polling.value) startPolling()
 }
 
 async function applyEmbedding() {
@@ -149,7 +152,7 @@ async function applyEmbedding() {
       body: { model: selectedModel.value, dtype: selectedDtype.value }
     })
     if (embeddingBusy.value) {
-      if (!statusTimer) statusTimer = setTimeout(refreshEmbeddingStatus, 1500)
+      if (!polling.value) startPolling()
     } else {
       capabilities.value = await fetchCapabilities()
     }
@@ -166,7 +169,7 @@ async function applyEmbedding() {
 
 onUnmounted(() => {
   pollingMounted = false
-  if (statusTimer) clearTimeout(statusTimer)
+  stopPolling()
 })
 </script>
 

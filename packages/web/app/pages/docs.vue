@@ -65,9 +65,11 @@ const searched = ref(false)
 // A monotonic ticket discards out-of-order responses (same guard as search.vue).
 let ticket = 0
 let selectTicket = 0
-let searchTimer: ReturnType<typeof setTimeout> | undefined
 
 async function runDocSearch(value: string, projectId: string) {
+  // A debounced call can't be cancelled, so drop it if the term moved on before
+  // it fired.
+  if (value !== term.value) return
   const mine = ++ticket
   searching.value = true
   try {
@@ -87,8 +89,12 @@ async function runDocSearch(value: string, projectId: string) {
   }
 }
 
+const debouncedDocSearch = useDebounceFn(
+  (value: string, projectId: string) => void runDocSearch(value, projectId),
+  250
+)
+
 watch(term, (value) => {
-  if (searchTimer) clearTimeout(searchTimer)
   const projectId = currentProjectId.value
   if (!value || !projectId) {
     ticket++
@@ -98,7 +104,7 @@ watch(term, (value) => {
     return
   }
   searching.value = true
-  searchTimer = setTimeout(() => void runDocSearch(value, projectId), 250)
+  void debouncedDocSearch(value, projectId)
 })
 
 // Switching project must not leave another project's results — or a doc id from
@@ -106,10 +112,6 @@ watch(term, (value) => {
 watch(currentProjectId, () => {
   search.value = ''
   clearSelection()
-})
-
-onBeforeUnmount(() => {
-  if (searchTimer) clearTimeout(searchTimer)
 })
 
 async function loadDocs() {

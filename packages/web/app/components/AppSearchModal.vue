@@ -16,10 +16,10 @@ const term = computed(() => searchTerm.value.trim())
 
 // A monotonic ticket discards out-of-order responses (same guard as the /search page).
 let ticket = 0
-let timer: ReturnType<typeof setTimeout> | undefined
+
+const debouncedSearch = useDebounceFn((value: string) => void runSearch(value), 250)
 
 watch(searchTerm, () => {
-  if (timer) clearTimeout(timer)
   const value = term.value
   if (!value) {
     ticket++
@@ -28,10 +28,13 @@ watch(searchTerm, () => {
     return
   }
   loading.value = true
-  timer = setTimeout(() => void runSearch(value), 250)
+  void debouncedSearch(value)
 })
 
 async function runSearch(value: string) {
+  // A debounced call can't be cancelled, so drop it if the term moved on (e.g.
+  // the user cleared the input) before it fired.
+  if (value !== term.value) return
   const projectId = store.currentProjectId
   if (!projectId) {
     loading.value = false
@@ -106,10 +109,6 @@ const groups = computed<CommandPaletteGroup<CommandPaletteItem>[]>(() => {
   }
 
   return list
-})
-
-onBeforeUnmount(() => {
-  if (timer) clearTimeout(timer)
 })
 </script>
 

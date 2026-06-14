@@ -61,8 +61,6 @@ export function useAutoSave<T extends { id: string }, K extends string>(
 
   const saving = ref(false)
   const justSaved = ref(false)
-  let savedTimer: ReturnType<typeof setTimeout> | null = null
-  let debounceTimer: ReturnType<typeof setTimeout> | null = null
 
   const read = (source: T | null | undefined, key: string) =>
     display((source as Record<string, unknown> | null | undefined)?.[key])
@@ -86,6 +84,14 @@ export function useAutoSave<T extends { id: string }, K extends string>(
     { immediate: true }
   )
 
+  const { start: restartSavedIndicator } = useTimeoutFn(
+    () => {
+      justSaved.value = false
+    },
+    savedMs,
+    { immediate: false }
+  )
+
   async function save(body: Record<string, unknown>) {
     const target = entity.value
     if (!target) return
@@ -97,10 +103,7 @@ export function useAutoSave<T extends { id: string }, K extends string>(
       })
       options.onSaved?.(updated)
       justSaved.value = true
-      if (savedTimer) clearTimeout(savedTimer)
-      savedTimer = setTimeout(() => {
-        justSaved.value = false
-      }, savedMs)
+      restartSavedIndicator()
     } finally {
       saving.value = false
     }
@@ -123,27 +126,31 @@ export function useAutoSave<T extends { id: string }, K extends string>(
     return Object.keys(body).length > 0 ? body : null
   }
 
-  function scheduleSave() {
-    if (debounceTimer) clearTimeout(debounceTimer)
-    debounceTimer = setTimeout(() => {
-      const body = buildDirty()
-      if (body) void save(body)
-    }, debounceMs)
+  function saveDirty() {
+    const body = buildDirty()
+    if (body) void save(body)
   }
+
+  // A flush bumps the generation so a debounced call already queued (it can't be
+  // cancelled — useDebounceFn exposes no cancel) resolves as a no-op instead of
+  // firing a redundant save after the immediate one.
+  let generation = 0
+  const scheduleSave = useDebounceFn((gen: number) => {
+    if (gen !== generation) return
+    saveDirty()
+  }, debounceMs)
 
   // Persist any pending edit immediately, skipping the debounce — for when the
   // editor is dismissed (blur/click-outside) before the timer fires. `save`
   // captures the entity synchronously, so the caller may detach it right after.
   function flush() {
-    if (debounceTimer) {
-      clearTimeout(debounceTimer)
-      debounceTimer = null
-    }
-    const body = buildDirty()
-    if (body) void save(body)
+    generation++
+    saveDirty()
   }
 
-  watch(() => configs.map(({ key }) => editing[key]), scheduleSave)
+  watch(() => configs.map(({ key }) => editing[key]), () => {
+    void scheduleSave(generation)
+  })
 
   return {
     editing: editing as Record<K, string>,

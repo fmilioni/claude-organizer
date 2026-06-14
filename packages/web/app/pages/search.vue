@@ -19,13 +19,8 @@ const term = computed(() => query.value.trim())
 
 // A monotonic ticket discards out-of-order responses (same guard as the search modal).
 let ticket = 0
-let timer: ReturnType<typeof setTimeout> | undefined
 
 async function runSearch() {
-  if (timer) {
-    clearTimeout(timer)
-    timer = undefined
-  }
   const value = term.value
   const projectId = currentProjectId.value
   if (!value || !projectId) {
@@ -58,10 +53,11 @@ async function runSearch() {
 // so a deep-linked /search?q=… paints as soon as the project resolves.
 useProjectData(currentProjectId, runSearch, { watch: [currentProjectId] })
 
+const debouncedSearch = useDebounceFn(() => void runSearch(), 250)
+
 // Typing: keep the URL live in sync, debounce the search.
 watch(term, (value) => {
   void router.replace({ query: value ? { q: value } : {} })
-  if (timer) clearTimeout(timer)
   if (!value) {
     ticket++
     results.value = []
@@ -70,7 +66,7 @@ watch(term, (value) => {
     return
   }
   loading.value = true
-  timer = setTimeout(() => void runSearch(), 250)
+  void debouncedSearch()
 })
 
 // Header Enter navigates here with ?q=…; while the page is already mounted that
@@ -78,10 +74,6 @@ watch(term, (value) => {
 watch(() => route.query.q, (q) => {
   const next = typeof q === 'string' ? q : ''
   if (next !== query.value) query.value = next
-})
-
-onBeforeUnmount(() => {
-  if (timer) clearTimeout(timer)
 })
 </script>
 
