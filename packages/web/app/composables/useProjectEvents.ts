@@ -1,4 +1,4 @@
-import { type MaybeRefOrGetter, onScopeDispose, toValue, watch } from 'vue'
+import { type MaybeRefOrGetter, toValue } from 'vue'
 
 import type { CoSocketMessage } from '@claude-organizer/shared'
 
@@ -12,56 +12,23 @@ export function useProjectEvents(
 
   const config = useRuntimeConfig()
   const apiUrl = config.public.apiUrl as string
-  let socket: WebSocket | null = null
-  let reconnectTimer: ReturnType<typeof setTimeout> | null = null
-  let manualClose = false
 
-  function close() {
-    manualClose = true
-    if (reconnectTimer) {
-      clearTimeout(reconnectTimer)
-      reconnectTimer = null
-    }
-    if (socket) {
-      socket.close()
-      socket = null
-    }
+  const url = () => {
+    const id = toValue(projectId)
+    if (!id) return undefined
+    return apiUrl.replace(/^http/, 'ws') + `/ws/projects/${id}`
   }
 
-  function connect(id: string) {
-    manualClose = false
-    const wsUrl = apiUrl.replace(/^http/, 'ws') + `/ws/projects/${id}`
-    socket = new WebSocket(wsUrl)
-
-    socket.addEventListener('message', (e) => {
+  useWebSocket(url, {
+    autoReconnect: { delay: 2000 },
+    onMessage: (_ws, e) => {
+      let message: CoSocketMessage | undefined
       try {
-        const event = JSON.parse(e.data) as CoSocketMessage
-        handler(event)
+        message = JSON.parse(e.data) as CoSocketMessage
       } catch {
-        // ignore malformed
+        return
       }
-    })
-
-    socket.addEventListener('close', () => {
-      socket = null
-      if (manualClose) return
-      if (reconnectTimer) clearTimeout(reconnectTimer)
-      reconnectTimer = setTimeout(() => connect(id), 2000)
-    })
-
-    socket.addEventListener('error', () => {
-      socket?.close()
-    })
-  }
-
-  watch(
-    () => toValue(projectId),
-    (id) => {
-      close()
-      if (id) connect(id)
-    },
-    { immediate: true }
-  )
-
-  onScopeDispose(() => close())
+      handler(message)
+    }
+  })
 }
