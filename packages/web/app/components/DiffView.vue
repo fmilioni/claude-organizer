@@ -7,7 +7,83 @@
 // (lockfiles/truncated/binary) surface as a muted note on the file block.
 import { diffWordsWithSpace } from 'diff'
 
-const props = defineProps<{ diff: string }>()
+import { diffFileSignatures } from '~/utils/diffFiles'
+
+const props = defineProps<{ diff: string, cardId: string, sha: string }>()
+
+const { isViewed, setViewed, reconcile } = useViewedFiles()
+
+// Same split/path logic as `files`, so signatures align by index — index i's
+// hash fingerprints file i's diff and keys its persisted "viewed" flag.
+const signatures = computed(() => diffFileSignatures(props.diff))
+
+// UI collapse is the viewed flag by default, but the header click can override
+// it per render so a viewed file can be re-opened without losing the mark. Reset
+// on diff change — overrides are index-keyed and would mis-apply to a file that
+// shifted position when the same instance gets a new diff.
+const collapseOverride = ref<Record<number, boolean>>({})
+
+watch(
+  signatures,
+  (sigs) => {
+    reconcile(props.cardId, props.sha, sigs)
+    collapseOverride.value = {}
+  },
+  { immediate: true }
+)
+
+function fileViewed(i: number): boolean {
+  const sig = signatures.value[i]
+  return sig ? isViewed(props.cardId, props.sha, sig.path, sig.hash) : false
+}
+
+function isCollapsed(i: number): boolean {
+  return collapseOverride.value[i] ?? fileViewed(i)
+}
+
+const headerEls: (HTMLElement | null)[] = []
+
+function scrollParent(el: HTMLElement): HTMLElement | null {
+  let p = el.parentElement
+  while (p) {
+    const oy = getComputedStyle(p).overflowY
+    if ((oy === 'auto' || oy === 'scroll') && p.scrollHeight > p.clientHeight) {
+      return p
+    }
+    p = p.parentElement
+  }
+  return null
+}
+
+// Collapsing/expanding a file changes its height, so the pinned header would
+// jump as content reflows. Keep the toggled file's header at the same viewport
+// Y by compensating the scroll for how far it moved after the DOM settles.
+async function preserveHeaderPosition(i: number, mutate: () => void) {
+  const el = headerEls[i]
+  const before = el?.getBoundingClientRect().top ?? 0
+  mutate()
+  await nextTick()
+  if (!el) return
+  const delta = el.getBoundingClientRect().top - before
+  if (!delta) return
+  const sp = scrollParent(el)
+  if (sp) sp.scrollTop += delta
+  else window.scrollBy(0, delta)
+}
+
+function toggleCollapse(i: number) {
+  preserveHeaderPosition(i, () => {
+    collapseOverride.value[i] = !isCollapsed(i)
+  })
+}
+function toggleViewed(i: number, viewed: boolean) {
+  const sig = signatures.value[i]
+  if (!sig) return
+  preserveHeaderPosition(i, () => {
+    setViewed(props.cardId, props.sha, sig.path, sig.hash, viewed)
+    collapseOverride.value[i] = viewed
+  })
+}
 
 type LineKind = 'add' | 'del' | 'context' | 'hunk'
 interface Seg {
@@ -188,13 +264,27 @@ function hunkContext(text: string): string {
     <div
       v-for="(file, fi) in files"
       :key="fi"
-      class="rounded-md border border-default overflow-hidden"
+      class="rounded-md border border-default"
     >
+      <!-- -top-6 tucks the pinned header under the sticky navbar (cancels the
+        panel body's top padding) so scrolled code hides behind it, not above. -->
       <div
-        class="flex items-center justify-between gap-3 px-3 py-1.5 bg-elevated border-b border-default"
+        :ref="(el) => { headerEls[fi] = el as HTMLElement | null }"
+        class="sticky -top-6 z-10 flex items-center justify-between gap-3 px-3 py-1.5 bg-elevated border-b border-default rounded-t-md"
+        :class="{ 'border-b-0 rounded-b-md': isCollapsed(fi) }"
       >
-        <span class="font-mono text-xs break-all">{{ file.path }}</span>
-        <span class="flex items-center gap-1.5 shrink-0 font-mono text-xs">
+        <button
+          type="button"
+          class="flex items-center gap-2 min-w-0 text-left cursor-pointer"
+          @click="toggleCollapse(fi)"
+        >
+          <UIcon
+            :name="isCollapsed(fi) ? 'i-lucide-chevron-right' : 'i-lucide-chevron-down'"
+            class="shrink-0 text-muted size-3.5"
+          />
+          <span class="font-mono text-xs break-all">{{ file.path }}</span>
+        </button>
+        <span class="flex items-center gap-2 shrink-0 font-mono text-xs">
           <span
             v-if="file.additions"
             class="text-success bg-success/10 rounded px-1"
@@ -203,46 +293,58 @@ function hunkContext(text: string): string {
             v-if="file.deletions"
             class="text-error bg-error/10 rounded px-1"
           >-{{ file.deletions }}</span>
+          <UCheckbox
+            :model-value="fileViewed(fi)"
+            label="Viewed"
+            size="sm"
+            :ui="{ label: 'text-muted' }"
+            @update:model-value="toggleViewed(fi, $event === true)"
+          />
         </span>
       </div>
 
-      <div v-if="file.lines.length" class="text-xs font-mono leading-relaxed">
-        <template v-for="(line, li) in file.lines" :key="li">
-          <div
-            v-if="line.kind === 'hunk'"
-            class="px-3 py-0.5 bg-elevated/40 text-muted text-[11px] truncate border-t border-default first:border-t-0"
-            v-text="hunkContext(line.text)"
-          />
-          <div v-else class="flex" :class="rowClass[line.kind]">
-            <span
-              class="shrink-0 w-9 px-1 text-right text-muted/40 select-none tabular-nums"
-            >{{ line.oldNo ?? "" }}</span>
-            <span
-              class="shrink-0 w-9 px-1 text-right text-muted/40 select-none tabular-nums border-r border-default"
-            >{{ line.newNo ?? "" }}</span>
-            <span
-              v-if="line.segs"
-              class="flex-1 min-w-0 whitespace-pre-wrap break-all pl-2 pr-3"
-            ><span
-              v-for="(seg, si) in line.segs"
-              :key="si"
-              :class="seg.changed ? segClass[line.kind as 'add' | 'del'] : undefined"
-              v-text="seg.text"
-            /></span>
-            <span
-              v-else
-              class="flex-1 min-w-0 whitespace-pre-wrap break-all pl-2 pr-3"
-              v-text="line.text || ' '"
+      <div v-if="!isCollapsed(fi)" class="overflow-hidden rounded-b-md">
+        <div
+          v-if="file.lines.length"
+          class="text-xs font-mono leading-relaxed"
+        >
+          <template v-for="(line, li) in file.lines" :key="li">
+            <div
+              v-if="line.kind === 'hunk'"
+              class="px-3 py-0.5 bg-elevated/40 text-muted text-[11px] truncate border-t border-default first:border-t-0"
+              v-text="hunkContext(line.text)"
             />
-          </div>
-        </template>
-      </div>
+            <div v-else class="flex" :class="rowClass[line.kind]">
+              <span
+                class="shrink-0 w-9 px-1 text-right text-muted/40 select-none tabular-nums"
+              >{{ line.oldNo ?? "" }}</span>
+              <span
+                class="shrink-0 w-9 px-1 text-right text-muted/40 select-none tabular-nums border-r border-default"
+              >{{ line.newNo ?? "" }}</span>
+              <span
+                v-if="line.segs"
+                class="flex-1 min-w-0 whitespace-pre-wrap break-all pl-2 pr-3"
+              ><span
+                v-for="(seg, si) in line.segs"
+                :key="si"
+                :class="seg.changed ? segClass[line.kind as 'add' | 'del'] : undefined"
+                v-text="seg.text"
+              /></span>
+              <span
+                v-else
+                class="flex-1 min-w-0 whitespace-pre-wrap break-all pl-2 pr-3"
+                v-text="line.text || ' '"
+              />
+            </div>
+          </template>
+        </div>
 
-      <div
-        v-if="file.note"
-        class="px-3 py-1.5 text-xs text-muted italic"
-        v-text="file.note"
-      />
+        <div
+          v-if="file.note"
+          class="px-3 py-1.5 text-xs text-muted italic"
+          v-text="file.note"
+        />
+      </div>
     </div>
   </div>
 </template>

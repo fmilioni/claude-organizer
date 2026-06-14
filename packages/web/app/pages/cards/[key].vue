@@ -7,6 +7,7 @@ import type { CardCommit } from '~/types/cardCommit'
 import type { Comment } from '~/types/comment'
 import type { Sprint } from '~/types/sprint'
 import type { Tag } from '~/types/tag'
+import { diffFileSignatures } from '~/utils/diffFiles'
 
 const route = useRoute()
 const router = useRouter()
@@ -417,6 +418,18 @@ const commitStats = computed(() =>
   Object.fromEntries(commits.value.map(c => [c.id, parseStat(c.stat)]))
 )
 
+const { countViewed } = useViewedFiles()
+const commitFiles = computed(() =>
+  Object.fromEntries(
+    commits.value.map(c => [c.id, diffFileSignatures(c.diff ?? '')])
+  )
+)
+function viewedCount(c: CardCommit) {
+  return card.value
+    ? countViewed(card.value.id, c.sha, commitFiles.value[c.id] ?? [])
+    : 0
+}
+
 const projectStore = useProjectStore()
 const cardProject = computed(
   () => projectStore.projects.find(p => p.id === card.value?.projectId) ?? null
@@ -571,12 +584,13 @@ const providerIcon = computed(() =>
               <li
                 v-for="c in commits"
                 :key="c.id"
-                class="border border-default rounded-md overflow-hidden"
+                class="border border-default rounded-md"
               >
                 <div
                   role="button"
                   tabindex="0"
-                  class="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-elevated/50 transition cursor-pointer"
+                  class="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-elevated/50 transition cursor-pointer rounded-t-md"
+                  :class="{ 'rounded-b-md': !expandedCommits.has(c.id) }"
                   @click="toggleCommit(c.id)"
                   @keydown.enter.prevent="toggleCommit(c.id)"
                   @keydown.space.prevent="toggleCommit(c.id)"
@@ -613,6 +627,12 @@ const providerIcon = computed(() =>
                     {{ commitSubject(c.message) }}
                   </span>
                   <span class="hidden sm:flex items-center gap-1.5 shrink-0 font-mono text-xs">
+                    <span
+                      v-if="commitFiles[c.id]?.length"
+                      class="text-muted/70"
+                    >
+                      {{ viewedCount(c) }} of {{ commitFiles[c.id]?.length }} viewed
+                    </span>
                     <span v-if="commitStats[c.id]?.files" class="text-muted/70">
                       {{ commitStats[c.id]?.files }} {{ commitStats[c.id]?.files === 1 ? "file" : "files" }}
                     </span>
@@ -636,7 +656,12 @@ const providerIcon = computed(() =>
                   v-if="expandedCommits.has(c.id)"
                   class="border-t border-default p-3"
                 >
-                  <DiffView v-if="c.diff" :diff="c.diff" />
+                  <DiffView
+                    v-if="c.diff"
+                    :diff="c.diff"
+                    :card-id="card.id"
+                    :sha="c.sha"
+                  />
                   <p v-else-if="isWorking(c.sha)" class="text-xs text-muted italic">
                     Working-tree diff not stored. Re-run attach-worktree-diff to
                     see the uncommitted changes.
