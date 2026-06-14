@@ -1,5 +1,3 @@
-import { reactive } from 'vue'
-
 import type { DiffFileSignature } from '~/utils/diffFiles'
 
 // Per-browser "viewed" state for diff files (no backend; works auth on or off).
@@ -31,44 +29,25 @@ function without(
   return next
 }
 
-const state = reactive<Store>({ cards: {} })
-let loaded = false
+let store: ReturnType<typeof useLocalStorage<Store>> | undefined
 
-function load() {
-  if (loaded || !import.meta.client) return
-  loaded = true
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (raw) {
-      const parsed = JSON.parse(raw) as Store
-      if (parsed && typeof parsed === 'object' && parsed.cards) {
-        state.cards = parsed.cards
-      }
-    }
-  } catch {
-    // Corrupt/unavailable storage — start empty rather than break the page.
-  }
+function useStore() {
+  store ??= useLocalStorage<Store>(STORAGE_KEY, { cards: {} })
+  return store
 }
 
-function persist() {
-  if (!import.meta.client) return
+function prune(state: Store) {
   const ids = Object.keys(state.cards)
-  if (ids.length > MAX_CARDS) {
-    const keep = ids
-      .sort((a, b) => (state.cards[a]!.t) - (state.cards[b]!.t))
-      .slice(ids.length - MAX_CARDS)
-    const next: Record<string, CardEntry> = {}
-    for (const id of keep) next[id] = state.cards[id]!
-    state.cards = next
-  }
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
-  } catch {
-    // Quota or disabled storage — keep the in-memory state, just don't persist.
-  }
+  if (ids.length <= MAX_CARDS) return
+  const keep = ids
+    .sort((a, b) => (state.cards[a]!.t) - (state.cards[b]!.t))
+    .slice(ids.length - MAX_CARDS)
+  const next: Record<string, CardEntry> = {}
+  for (const id of keep) next[id] = state.cards[id]!
+  state.cards = next
 }
 
-function touch(cardId: string): CardEntry {
+function touch(state: Store, cardId: string): CardEntry {
   const entry = state.cards[cardId] ?? { t: 0, files: {} }
   entry.t = import.meta.client ? Date.now() : 0
   state.cards[cardId] = entry
@@ -76,10 +55,10 @@ function touch(cardId: string): CardEntry {
 }
 
 export function useViewedFiles() {
-  load()
+  const state = useStore()
 
   function isViewed(cardId: string, sha: string, path: string, hash: string) {
-    return state.cards[cardId]?.files[fileKey(sha, path)] === hash
+    return state.value.cards[cardId]?.files[fileKey(sha, path)] === hash
   }
 
   function setViewed(
@@ -89,11 +68,11 @@ export function useViewedFiles() {
     hash: string,
     viewed: boolean
   ) {
-    const entry = touch(cardId)
+    const entry = touch(state.value, cardId)
     const key = fileKey(sha, path)
     if (viewed) entry.files[key] = hash
     else entry.files = without(entry.files, k => k === key)
-    persist()
+    prune(state.value)
   }
 
   function countViewed(cardId: string, sha: string, sigs: DiffFileSignature[]) {
@@ -106,7 +85,7 @@ export function useViewedFiles() {
   // Drop entries for this commit whose file no longer exists in the diff or whose
   // content changed — keeps a card's stored set from accumulating dead files.
   function reconcile(cardId: string, sha: string, sigs: DiffFileSignature[]) {
-    const entry = state.cards[cardId]
+    const entry = state.value.cards[cardId]
     if (!entry) return
     const live = new Map(sigs.map(s => [s.path, s.hash]))
     const stale = (key: string) =>
@@ -114,7 +93,6 @@ export function useViewedFiles() {
       && live.get(key.slice(sha.length + 1)) !== entry.files[key]
     if (Object.keys(entry.files).some(stale)) {
       entry.files = without(entry.files, stale)
-      persist()
     }
   }
 

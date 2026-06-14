@@ -45,19 +45,11 @@ function stopEdit() {
   editing.value = false
   emit('edit-stop')
 }
-function onOutside(e: MouseEvent) {
-  if (root.value && !root.value.contains(e.target as Node)) {
-    stopEdit()
-  }
-}
 // The markdown editor has a toolbar (and link popovers), so @blur is unreliable;
 // fall back to click-outside — same behavior the card description had inline.
-watch(editing, (active) => {
-  if (props.type !== 'markdown') return
-  if (active) document.addEventListener('mousedown', onOutside)
-  else document.removeEventListener('mousedown', onOutside)
+onClickOutside(root, () => {
+  if (props.type === 'markdown' && editing.value) stopEdit()
 })
-onBeforeUnmount(() => document.removeEventListener('mousedown', onOutside))
 </script>
 
 <template>

@@ -27,6 +27,8 @@ const treeWidth = useCookie<number>('organizer.docsTreeWidth', {
 let resizing = false
 let startX = 0
 let startWidth = 0
+let stopMove: (() => void) | undefined
+let stopUp: (() => void) | undefined
 
 function onResizeMove(e: MouseEvent) {
   if (!resizing) return
@@ -35,8 +37,8 @@ function onResizeMove(e: MouseEvent) {
 }
 function stopResize() {
   resizing = false
-  window.removeEventListener('mousemove', onResizeMove)
-  window.removeEventListener('mouseup', stopResize)
+  stopMove?.()
+  stopUp?.()
   document.body.style.userSelect = ''
 }
 function startResize(e: MouseEvent) {
@@ -44,8 +46,8 @@ function startResize(e: MouseEvent) {
   startX = e.clientX
   startWidth = treeWidth.value
   document.body.style.userSelect = 'none'
-  window.addEventListener('mousemove', onResizeMove)
-  window.addEventListener('mouseup', stopResize)
+  stopMove = useEventListener(window, 'mousemove', onResizeMove)
+  stopUp = useEventListener(window, 'mouseup', stopResize)
   e.preventDefault()
 }
 onScopeDispose(stopResize)
