@@ -1,4 +1,4 @@
-import { Marked } from 'marked'
+import { Marked, type Tokens } from 'marked'
 
 // One Marked instance per key prefix, memoized. Each instance has an inline
 // extension that turns card keys (e.g. CO-40) into internal links. marked never
@@ -6,8 +6,45 @@ import { Marked } from 'marked'
 // literal — satisfying the "don't link inside code" requirement for free.
 const cache = new Map<string, Marked>()
 
+// Replicate the safeguards marked's default `link` renderer applies, since
+// overriding `link` drops them — without these a `"` in href/title would break
+// out of the attribute into the v-html sink.
+const ESCAPE_RE = /[<>"']|&(?!(#\d{1,7}|#[Xx][a-fA-F0-9]{1,6}|\w+);)/g
+const ESCAPE_MAP: Record<string, string> = {
+  '&': '&amp;',
+  '<': '&lt;',
+  '>': '&gt;',
+  '"': '&quot;',
+  '\'': '&#39;'
+}
+function escapeHtml(value: string): string {
+  return value.replace(ESCAPE_RE, c => ESCAPE_MAP[c] ?? c)
+}
+function cleanUrl(href: string): string | null {
+  try {
+    return encodeURI(href).replace(/%25/g, '%')
+  } catch {
+    return null
+  }
+}
+
 function build(keyPrefix: string | null): Marked {
   const m = new Marked({ breaks: true, gfm: true })
+  m.use({
+    renderer: {
+      link(token: Tokens.Link) {
+        const text = this.parser.parseInline(token.tokens)
+        const href = cleanUrl(token.href)
+        if (href === null) return text
+        const title = token.title ? ` title="${escapeHtml(token.title)}"` : ''
+        // Only real markdown links reach here (card keys use their own renderer
+        // below), so external = href that isn't an in-app `/...` path → new tab,
+        // keeping the SPA from being navigated away.
+        const attrs = href.startsWith('/') ? '' : ' target="_blank" rel="noopener noreferrer"'
+        return `<a href="${href}"${title}${attrs}>${text}</a>`
+      }
+    }
+  })
   if (keyPrefix) {
     const startRe = new RegExp(`${keyPrefix}-\\d`)
     const tokenRe = new RegExp(`^${keyPrefix}-\\d+\\b`)
