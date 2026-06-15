@@ -16,7 +16,7 @@ This skill governs the **execution of a card that already exists** on the board 
 <HARD-GATE>
 Every step in **The lifecycle** below is **MANDATORY and ORDERED**, for **every** card — trivial or not. You do **not** skip a step, reorder it, or fold it away because it "seems unnecessary", you "already did it earlier" (this session, the parent history, a sibling task), the card is "too small", or you judged it faster to go straight to code.
 
-Skipping a step — not flipping status, not re-reading this card's comments, **skipping the per-task review gate before commit**, committing before the user reviews, not attaching the commit, not moving to `done` after validation — is a **defect**, not an optimization. When in doubt, do the step.
+Skipping a step — not flipping status, not re-reading this card's comments, **skipping the per-task review gate before commit**, committing before the user reviews, not attaching the commit, **moving a card to `done` without the user's explicit approval** — is a **defect**, not an optimization. When in doubt, do the step. (Leaving a card sitting in `review` is **not** a defect — it's the correct resting state until the user approves; the defect is advancing past it on your own.)
 </HARD-GATE>
 
 ## Never assume — ask the user
@@ -96,18 +96,19 @@ As you work, **`add_comment(cardId, …)`** for what carries **signal** — deci
 
 - **`set_card_status(id, "review")` the instant you stop and the user takes over** to validate. Status reflects **who holds the ball**, not whether a commit exists — so move it even though the commit lands only after the user confirms (steps 7–10).
 - On the **same move**, post **one** comment with the **test plan**: what to open, what to do, what to expect, and briefly what you already checked. Console scrollback is ephemeral; this comment is where the user (and a future session) sees how to validate what's in review. It follows the same signal-vs-noise rule as any comment.
-- Then **capture the working-tree diff onto the card** with this skill's bundled `attach-worktree-diff` script (see _Diff-capture scripts — they ship inside this skill_ for where it lives and how to run it). The diff goes straight to the API **outside your context** — don't read or paste it (step 10). This lets the user see what will land before any commit exists. (Token only when auth is on — see _Auth flag for diff capture_.)
+- Then **capture the working-tree diff onto the task you just moved to `review` — mandatory, every task, no exception.** Run this skill's bundled `attach-worktree-diff` script (see _Diff-capture scripts — they ship inside this skill_) **with that task's own key**. A card sitting in `review` with **no diff attached leaves the user blind — there is nothing to review** — so this attach is never optional, and you do **not** fold it onto the parent story instead: the diff goes on the **task the user opens to review**, not its history. The diff goes straight to the API **outside your context** — don't read or paste it. This lets the user see what will land before any commit exists. (Token only when auth is on — see _Auth flag for diff capture_.)
+  - **A story builds several tasks in one working tree.** The working-tree diff can't isolate one task from its siblings, so attach the **current working tree to each task** as you hand it off — every reviewed card carries the diff (the overlap is fine for a pre-commit preview); the **clean per-card diff** lands later at commit time via `attach-commit` (`git show <sha>`, step 10). **Never** leave a task in `review` without a diff because "it's already in the story's diff".
 - Then **wait for the user to validate**. Do **not** self-approve and do **not** jump ahead to commit or `done`.
 
 ### 7. Per-task review gate — a fresh subagent, **before commit** (mandatory — do not skip)
 
-With the behavior validated, run the **per-task review** via the **`review`** skill **before** committing — over the **working-tree diff** (`git diff`), so any fixes fold into the change and the card keeps **one clean commit**. It spawns a **fresh subagent** (objective eyes — you just wrote this code, so you're the worst judge of it) that checks **this task's acceptance criteria** and hunts for reuse / dead code / leftover comments. The `review` skill then **disposes of every finding** — cheap in-scope ones get fixed, the rest go to the user — and **you don't get to veto a finding because it's `low` or "not worth a cycle"**: severity ranks the list, it doesn't authorize dropping it (the full rule lives in the `review` skill). When fixes fold into the working tree, **re-run the `attach-worktree-diff` script** so the pending diff reflects the adjusted change.
+With the behavior validated **by the user**, run the **per-task review** via the **`review`** skill **before** committing — over the **working-tree diff** (`git diff`), so any fixes fold into the change and the card keeps **one clean commit**. It spawns a **fresh subagent** (objective eyes — you just wrote this code, so you're the worst judge of it) that checks **this task's acceptance criteria** and hunts for reuse / dead code / leftover comments. The `review` skill then **disposes of every finding** — cheap in-scope ones get fixed, the rest go to the user — and **you don't get to veto a finding because it's `low` or "not worth a cycle"**: severity ranks the list, it doesn't authorize dropping it (the full rule lives in the `review` skill). When fixes fold into the working tree, **re-run the `attach-worktree-diff` script** so the pending diff reflects the adjusted change.
 
 **This gate is the step most skipped — including on cards that are not remotely trivial. That is the exact defect this rule exists to stop.** For **any card with real logic**, the per-task review runs **every time, with no judgment call** — you do not get to decide the change "looks fine" and commit past it. The **only** exception is a change with **no real logic at all** (a one-liner, a rename, a config tweak, a pure copy move), and even then the skip is **not silent**: **record the skip and its reason as a comment on the card** so it's visible and auditable. When in doubt, review. For a **standalone** task (no parent), this per-task review *is* the whole review — there's no story layer above it.
 
 ### 8. Let the user review the diff
 
-With the behavior validated and the per-task review settled, wait for the user's go-ahead on the **actual diff** (not just the behavior) — don't commit on your own initiative.
+With the behavior validated **by the user** and the per-task review gate (a subagent — not the user) settled, wait for the user's go-ahead on the **actual diff** (not just the behavior) — don't commit on your own initiative.
 
 ### 9. Capture durable knowledge in the docs
 
@@ -120,9 +121,9 @@ Ask once: **did a decision, a standardization, or long-lived knowledge surface w
 - The diff is captured **outside your context on purpose** — **never read it or paste it into a comment** (it burns tokens and adds noise).
 - Attaching the real commit **clears the pending working-tree diff** automatically (the `__working__` sentinel row is dropped), so the card swaps from "uncommitted" to the committed diff with no manual cleanup on the happy path.
 
-### 11. Move to `done` — **always**, only after the user confirms
+### 11. Move to `done` — only on the user's explicit approval
 
-**`set_card_status(id, "done")`** once the user has confirmed it works. Don't leave a validated card sitting in `review`, and never mark `done` before validation.
+A card leaves `review` for `done` **only when the user says something affirmative** — and any affirmative signal counts: "looks good", "approved", "you can merge", "go ahead", "ship it", "ok to close". **`set_card_status(id, "done")`** only then. What does **not** authorize `done`: the per-task review gate passing, the build "working", green typecheck/lint, or your own judgment that it's fine — none of those is the user speaking, so none of them moves the card. Until the user says something, the card **stays in `review`**, and that is the correct resting state, not a defect to resolve by advancing on your own. Never mark `done` on your own initiative.
 
 If this is the **last child of a story**, the **story-level review gate** fires **before** the story closes: an additional `review`-skill pass over the **whole story** (≈ one PR, `git diff <base>...HEAD`), scoped to what a single task can't see — the **story's acceptance criteria**, **duplication across tasks**, **coherence of the PR**; it does not re-review each task line-by-line (the per-task gates already did). Only then move the history to `done` too (see _History status_).
 
@@ -167,12 +168,16 @@ The diff-capture scripts (`attach-worktree-diff`, `attach-commit`) need a card-s
 
 ## Git flow — agree before you start
 
-Before implementing a story (or the first card of a batch), get the git flow straight — **don't assume**:
+Before implementing — a single card, a story, or a sprint's cards — get the git flow straight **before writing any code**. **Don't impose a methodology, and don't assume one:**
 
-- If the repo's `CLAUDE.md` already defines a flow, follow it.
-- Otherwise, on `main`/`master`, **ask the user how to proceed**: a branch + PR? a branch merged later? commit straight on the current branch? **Mirror what the user already does.**
+- **If the repo's `CLAUDE.md` already defines a flow, follow it — don't ask.** (Its commit/PR/branch rules count as the answer.)
+- **Otherwise, ask the user explicitly how to work** — every time, not only on `main`/`master` — with ready-made options (the never-assume method: concrete options + a recommendation), scaled to what you're about to run:
+  - **a single card** → its **own branch** (e.g. branch + PR) **or** commit **straight onto the current branch / `main` / `master`**.
+  - **a story** → **one branch for the whole story** (a single PR) **or** commits **straight onto the current branch / `main` / `master`**.
+  - **a sprint** → the same choice at sprint scale — one run branch, or straight commits.
+- **Factor in worktrees and parallel work** when it fits: distinct scopes the user wants in parallel may mean **several branches or worktrees** instead of one — use judgment and offer it. **Mirror what the user already does.**
 
-A batch of several cards may mean **several branches** — warn the user you'll need to **switch branches** between cards, and don't pile unrelated work onto one branch. Watch for **conflicts**: don't run far ahead in parallel if the work will collide; sequence dependent cards with the **blockers** system (a card `blocked by` another) so the order is explicit.
+If the agreed flow uses branches, a batch of several cards may mean **several branches** — warn the user you'll need to **switch branches** between cards, and don't pile unrelated work onto one branch. Watch for **conflicts**: don't run far ahead in parallel if the work will collide; sequence dependent cards with the **blockers** system (a card `blocked by` another) so the order is explicit.
 
 **Isolating work in a worktree?** Use the standard location **`.claude/worktrees/<branch>`**, not an ad-hoc `../<name>`: the path is fixed, so don't ask where to put it. Three steps, in order:
 
@@ -204,9 +209,9 @@ Per card, in order — no step skipped. **Standing rule: never assume — any am
 3. Read the relevant docs.
 4. Implement — clean code, no needless comments; hit a doubt → stop and ask; then self-review your own diff with fresh eyes before handing off (doesn't replace the gate).
 5. Comment the signal.
-6. `review` status + test-plan comment + `attach-worktree-diff` → wait for validation.
+6. `review` status + test-plan comment + `attach-worktree-diff` **on the task's own key (mandatory — every task, even within a story; never folded onto the parent)** → wait for validation.
 7. Per-task review gate (fresh subagent) — **mandatory for any card with real logic**; the only skip is a no-logic change, and even then record the skip + reason on the card → every finding fixed or surfaced, never dropped on severity → fixes fold in → re-run `attach-worktree-diff`.
 8. Let the user review the diff.
 9. Capture durable knowledge in the docs.
 10. Commit (one per card, key in message) → `attach-commit`.
-11. `done` after the user confirms — story's last child → story-level review gate first, then close the history; re-check the inbox fresh at the boundary.
+11. `done` **only on the user's explicit approval** (any affirmative — "approved", "you can merge", "go ahead"; never the review gate / "it works" / your own judgment); until then it stays in `review`. Story's last child → story-level review gate first, then close the history; re-check the inbox fresh at the boundary.

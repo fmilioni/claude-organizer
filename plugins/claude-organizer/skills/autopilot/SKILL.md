@@ -1,6 +1,6 @@
 ---
 name: autopilot
-description: Use to run the claude-organizer board AUTONOMOUSLY — a whole sprint, a story, or a set of cards hands-off ("autopilot", "run the sprint by yourself", "just work the board", "run the cards without me babysitting"). A LEAN orchestrator dispatches a fresh subagent per card (implementer → reviewer → fixes) so a long run never degrades, STOPS to ask the user on every new decision, commits one-per-card on the run branch(es), and leaves each card in `review` (never `done`) for the user's final validation — by default it does NOT open a PR or merge. To plan a fuzzy demand use `plan`; to execute ONE card interactively use `implement`. Trigger only when the user explicitly opts into an autonomous multi-card run.
+description: Use to run the claude-organizer board AUTONOMOUSLY — a whole sprint, a story, or a set of cards hands-off ("autopilot", "run the sprint by yourself", "just work the board", "run the cards without me babysitting"). A LEAN orchestrator dispatches a fresh subagent per card (implementer → reviewer → fixes) so a long run never degrades, STOPS to ask the user on every new decision, commits one-per-card on the agreed target (a run branch, or straight on the current branch), and leaves each card in `review` (never `done`) for the user's final validation — by default it does NOT open a PR or merge. To plan a fuzzy demand use `plan`; to execute ONE card interactively use `implement`. Trigger only when the user explicitly opts into an autonomous multi-card run.
 ---
 
 # Autopilot — running the board autonomously
@@ -36,11 +36,11 @@ Decide what the run covers — **ask the user if it isn't obvious**:
 
 Order is always by the **blocking graph**: a card is **ready** when every blocker is in `review` or `done` — `review` counts as satisfied, so a run flows through a dependency chain without anything reaching `done`. **Run cards one at a time, in series** — parallelism is out of scope for now.
 
-### B. Choose the git strategy, then open the branch(es)
+### B. Agree the git flow, then open any branch(es)
 
-Before opening anything, judge whether the run's cards form **one coherent theme** or **scopes too distinct to share a single PR** (e.g. "login system" and "PDF export" have nothing to do with each other). Judge by area/tags/story themes — it's judgment, not a rigid rule. Then confirm the git flow with the user:
+Before opening anything, **don't impose a methodology**. If the repo's `CLAUDE.md` already defines a git flow, **follow it — don't ask**. Otherwise, **confirm the git flow with the user explicitly** (the never-assume method: concrete options + a recommendation). First judge whether the run's cards form **one coherent theme** or **scopes too distinct to share a single PR** (e.g. "login system" and "PDF export" have nothing to do with each other) — judge by area/tags/story themes, it's judgment, not a rigid rule. Then offer how to work:
 
-- **One coherent scope** (the common case) → **one branch for the whole run** (e.g. `autopilot/<sprint-or-topic>`); every card commits onto it, one commit per card.
+- **One coherent scope** (the common case) → **one branch for the whole run** (e.g. `autopilot/<sprint-or-topic>`, one commit per card onto it) **or**, if the user prefers, **commits straight onto the current branch / `main` / `master`** (still one commit per card). Don't default to a branch silently — offer both.
 - **Distinct scopes** → **stop and ask** how to split, with worked options + a recommendation (the never-assume method): **one PR** (everything on one branch — when the coupling justifies it); **stacked PRs** (one branch atop another — when the scopes depend in sequence); **separate PRs off `main`** (build one, return to `main`, build the next — when they're independent); or **separate worktrees** (one per scope/story — when the user wants them in parallel / distinct sessions; the orchestrator itself still runs one series, the worktrees being a hand-off for the user to drive separately). Recommend the split that best fits the coupling you detected.
 
 Either way you do **not** open a PR and do **not** merge here — that's the run's close (section G), only on the user's say-so; the run otherwise ends on the branch(es) for the user to validate.
@@ -68,13 +68,13 @@ For each ready card, in series:
 4. **Fix loop** — for findings that **fit the card's scope**, dispatch the **`claude-organizer:implementer`** agent again in **fix mode** (pass it the findings to apply — a fix is just another runner-mode build); then **re-review** with a fresh reviewer **unless the fix was trivial** (a one-liner / rename / comment deletion — same trivial-skip judgment the `review` skill uses). Repeat until no in-scope findings remain.
    - **Severity is not a filter — it's an order.** `low` findings get fixed like any other; "no in-scope findings remain" means **none left**, not "none above `low`". You do **not** get to decide a finding "isn't worth a cycle" and commit past it — you are the orchestrator that drove the build, so that veto is exactly the writing-session bias the fresh reviewer exists to defeat. An in-scope finding leaves the card only by being **fixed** or by being **too big** (next bullet) — never by being deemed too minor.
    - A finding that is **too big to fix now** — it spans **many files, many systems, or a module unrelated to what this card touches** — is **not forced**. Record it in the **inbox** (`create_inbox`) as a demand to plan later, **and** add it to the run's **decision/findings ledger** for the final summary. Never silently drop it.
-5. **Commit** — on the run branch, **one commit per card**, message in English referencing the key (e.g. `feat(scope): … (CO-N)`), then attach the diff with the bundled `attach-commit` script (mint `issue_commit_token(<CO-N>)` when auth is on — see the `implement` skill's _Auth flag_ / _Diff-capture scripts_ sections for the exact invocation; this skill reuses those bundled scripts).
+5. **Commit** — on the agreed target (the run branch, or straight onto the current branch / `main` / `master` per section B), **one commit per card**, message in English referencing the key (e.g. `feat(scope): … (CO-N)`), then attach the diff with the bundled `attach-commit` script (mint `issue_commit_token(<CO-N>)` when auth is on — see the `implement` skill's _Auth flag_ / _Diff-capture scripts_ sections for the exact invocation; this skill reuses those bundled scripts).
 6. **Move the card to `review`** (never `done` — final validation is the user's) and `release_task` — the commit and its diff attach already happened in step 5, so this step is the status move plus the board writes the agent couldn't do: the **test-plan comment** the implementer returned in `ready_for_review.testPlan`, any **signal `comments`** it returned, and any **durable knowledge** it surfaced (`docs`) — for each, decide whether it updates an existing doc or creates a new one (search the docs first) before `write_doc` — so the user knows how to validate and the run's signal/knowledge actually lands on the board.
 7. **Story boundary** — when a card is the **last child** of its story to reach `review`, dispatch a **story-level review** (reviewer agent, story scope: the whole branch diff, cross-cutting concerns) and **re-check the inbox fresh** (`list_inbox` pending) — a demand may have landed mid-run that reshapes what's left; if so, stop and ask the user.
 
 ### F. End of the run — the self-auditing summary
 
-Stop on the branch: N commits, every card in `review`, nothing merged. Then write a **complete, self-auditing summary** for the user that lists **explicitly**:
+Stop where the agreed flow lands (the run branch, or the current branch): N commits, every card in `review`, nothing merged. Then write a **complete, self-auditing summary** for the user that lists **explicitly**:
 
 - **(a) Every decision the user made** during the run, and what each settled.
 - **(b) Every review finding that was NOT fixed** — each with why (deferred / too-big), and the too-big ones pointing at the **inbox items** you created. **"It was only `low`" is not a valid why.**
@@ -84,16 +84,16 @@ This summary exists to **expose what was left behind, not hide it** — the know
 
 ### G. Closing the run — PR, merge, and the move to `done` (only when the user asks)
 
-The run **stops at `review` by default** (section F): no PR, no merge, the user validates. But the user often continues — *"open the PR and merge it"*. That hand-off has a tail the autopilot has dropped before: **after a merge, the merged cards must move from `review` to `done`.** Forgetting it is the known failure mode.
+The run **stops at `review` by default** (section F): no PR, no merge, the cards wait for the user. A card leaves `review` for `done` **only on an affirmative signal from the user** — and any affirmative counts: "approved", "you can merge", "go ahead", "close them". The user often continues with exactly that — *"open the PR and merge it"* — and that hand-off has a tail the autopilot has dropped before: **after that go-ahead, the cards it covers must move from `review` to `done`.** Forgetting it is the known failure mode.
 
-When the user asks to open a PR and/or merge:
+When the user gives that go-ahead (typically: open a PR and/or merge):
 
 1. **Open the PR / merge by the repo's governance.** Follow the git/merge rules the repo's `CLAUDE.md` defines (branch protection, who may override, the exact merge command). **Don't invent an override** (`--admin` and the like) on your own initiative — that's the user's explicit, per-merge call, per the repo's rules. With distinct scopes (section B), this is one PR per branch.
-2. **After the merge confirms, move every merged card `review` → `done`.** The user's merge request **is** the confirmation — do **not** re-ask card by card. `set_card_status(<id>, "done")` for each card that landed in the merge; closing a `done` card also auto-releases its claim.
+2. **After the merge confirms, move every merged card `review` → `done`.** The user's instruction to merge/approve **is** the affirmative signal that authorizes the move — so do **not** re-ask card by card. `set_card_status(<id>, "done")` for each card that landed in the merge; closing a `done` card also auto-releases its claim.
 3. **Don't skip the gates the close implies.** If a story's **story-level review** never ran (its last child only reached `review` at run's end), run it before closing that story; move each **history** to `done` only once all its children are `done`; and **re-check the inbox fresh** (`list_inbox` pending) at the boundary, surfacing anything the run didn't cover.
 
 <HARD-GATE>
-**After a merge, cards do not stay in `review`.** Moving every merged card to `done` is mandatory — it is the step this skill has dropped before. "The run leaves cards in `review`" is the **default-stop** behavior (no PR/merge); the instant the user takes you through a merge, `done` is owed on every card that merged (and the histories they complete). Never end a merge with a merged card still sitting in `review`.
+**After the user approves a merge, the cards it covers do not stay in `review`.** Moving every merged card to `done` is mandatory — it is the step this skill has dropped before. But the trigger is the **user's affirmative signal** (the merge/approval request), never the merge mechanics on their own: absent any word from the user, the run **stays at `review`** (the default-stop, section F), and a card never reaches `done` on the orchestrator's own initiative. The instant the user takes you through a merge, `done` is owed on every card that merged (and the histories they complete). Never end a user-approved merge with a merged card still sitting in `review`.
 </HARD-GATE>
 
 ## The run TODO — a Claude Code checklist that mirrors the run
@@ -129,4 +129,4 @@ Claims persist on purpose (a CTRL-C keeps them). A resumed autopilot **re-orient
 
 ## The shape in one line
 
-scope → **git strategy** (one PR / stacked / separate off `main` / worktrees) → branch(es) → claim all → chained decisions → build run TODO → **per card:** implementer (runner-mode) → decision? ask + record → reviewer → fix-loop (too-big → inbox) → commit on branch → `review` + release → **story end:** story review + inbox recheck → **run end:** self-auditing summary (default-stop at `review`, no PR/merge) → **user asks to merge:** PR/merge per repo governance → **move merged cards to `done`** + worktree cleanup.
+scope → **git strategy** (one PR / stacked / separate off `main` / worktrees / straight commits) → branch(es) if any → claim all → chained decisions → build run TODO → **per card:** implementer (runner-mode) → decision? ask + record → reviewer → fix-loop (too-big → inbox) → commit on branch → `review` + release → **story end:** story review + inbox recheck → **run end:** self-auditing summary (default-stop at `review`, no PR/merge) → **user asks to merge:** PR/merge per repo governance → **move merged cards to `done`** + worktree cleanup.
