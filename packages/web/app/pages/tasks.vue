@@ -91,6 +91,18 @@ const sortedDone = computed(() =>
   )
 )
 
+const selectedTagIds = ref<string[]>([])
+
+function filterByTags(list: Card[]): Card[] {
+  if (!selectedTagIds.value.length) return list
+  const sel = new Set(selectedTagIds.value)
+  return list.filter(c => c.tags?.some(t => sel.has(t.id)))
+}
+
+const filteredBacklog = computed(() => filterByTags(backlogCards.value))
+const filteredDone = computed(() => filterByTags(sortedDone.value))
+const filteredArchived = computed(() => filterByTags(archivedCards.value))
+
 async function promoteToBoard(cardId: string) {
   await api(`/cards/${cardId}`, {
     method: 'PATCH',
@@ -160,6 +172,14 @@ const isEmpty = computed(
     && !doneCards.value.length
     && !archivedCards.value.length
 )
+
+const noFilterMatches = computed(
+  () =>
+    selectedTagIds.value.length > 0
+    && !filteredBacklog.value.length
+    && !filteredDone.value.length
+    && !filteredArchived.value.length
+)
 </script>
 
 <template>
@@ -171,8 +191,12 @@ const isEmpty = computed(
           <UIcon name="i-lucide-list-todo" class="text-primary" />
         </template>
         <template #right>
+          <BoardTagFilter
+            v-model="selectedTagIds"
+            :project-id="currentProjectId"
+          />
           <UBadge variant="subtle">
-            {{ backlogCards.length }} backlog
+            {{ filteredBacklog.length }} backlog
           </UBadge>
         </template>
       </UDashboardNavbar>
@@ -187,16 +211,19 @@ const isEmpty = computed(
         <div v-if="isEmpty" class="text-center text-muted py-12">
           No sprint-less tasks yet.
         </div>
+        <div v-else-if="noFilterMatches" class="text-center text-muted py-12">
+          No tasks match the selected tags.
+        </div>
 
-        <section v-if="backlogCards.length" class="space-y-2">
+        <section v-if="filteredBacklog.length" class="space-y-2">
           <h2 class="text-xs font-semibold uppercase tracking-wide text-muted flex items-center gap-2">
             <UIcon name="i-lucide-inbox" class="size-4" />
             Backlog
-            <span class="text-muted/70 font-normal normal-case">{{ backlogCards.length }}</span>
+            <span class="text-muted/70 font-normal normal-case">{{ filteredBacklog.length }}</span>
           </h2>
           <CardDraggableList
             :status="'backlog'"
-            :cards="backlogCards"
+            :cards="filteredBacklog"
             group-by-story
             :parent-titles="parentTitles"
             list-class="flex flex-col"
@@ -225,13 +252,13 @@ const isEmpty = computed(
         </section>
 
         <ArchivedDisclosure
-          :count="doneCards.length"
+          :count="filteredDone.length"
           label="Done"
           icon="i-lucide-check-check"
         >
           <div class="space-y-2">
             <CardTile
-              v-for="card in sortedDone"
+              v-for="card in filteredDone"
               :key="card.id"
               :card="card"
               show-parent-key
@@ -259,10 +286,10 @@ const isEmpty = computed(
           </div>
         </ArchivedDisclosure>
 
-        <ArchivedDisclosure :count="archivedCards.length" label="Archived">
+        <ArchivedDisclosure :count="filteredArchived.length" label="Archived">
           <div class="space-y-2">
             <CardTile
-              v-for="card in archivedCards"
+              v-for="card in filteredArchived"
               :key="card.id"
               :card="card"
               show-parent-key
