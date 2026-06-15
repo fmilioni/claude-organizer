@@ -67,32 +67,9 @@ function onAdd(event: { data: Card }) {
       <div
         v-for="card in localList"
         :key="card.id"
-        class="cursor-grab active:cursor-grabbing min-w-0 shrink-0 bg-default border border-default rounded-md px-2.5 py-2 hover:border-primary/40 transition"
+        class="cursor-grab active:cursor-grabbing min-w-0 shrink-0"
       >
-        <div class="flex items-start justify-between gap-2 min-w-0">
-          <NuxtLink
-            :to="`/cards/${card.key}`"
-            class="text-sm leading-snug wrap-break-word min-w-0 hover:underline decoration-primary/40 underline-offset-2"
-            @mousedown.stop
-          >
-            <span class="font-mono font-bold text-default mr-1.5">{{ card.key }}</span>
-            <span class="font-medium">{{ card.title }}</span>
-          </NuxtLink>
-          <UBadge
-            v-if="card.priority > 0"
-            size="xs"
-            variant="soft"
-            class="shrink-0"
-          >
-            P{{ card.priority }}
-          </UBadge>
-        </div>
-        <p
-          v-if="card.summary"
-          class="text-xs text-muted leading-snug line-clamp-3 mt-1"
-        >
-          {{ card.summary }}
-        </p>
+        <CardTile :card="card" show-parent-key />
       </div>
     </VueDraggable>
   </div>
