@@ -112,7 +112,7 @@ Local Docker is the default — nothing to do: the bundled plugin already regist
 claude mcp add --transport http -s user claude-organizer-remote https://mcp.<domain>/mcp
 ```
 
-Each server gets its own tool prefix (here `mcp__claude-organizer-remote__*`), OAuth session and projects; the skills pick the one whose project matches the repo and never mix them. `-s user` makes it available across all repos — to bind **a single project** to a specific server instead, scope it to the repo with `-s project` (a shared `.mcp.json` committed in the repo) or `-s local` (only you, only this repo).
+Each server gets its own tool prefix (the bundled plugin board is `mcp__plugin_claude-organizer_claude-organizer__*`; this added one is `mcp__claude-organizer-remote__*`), OAuth session and projects; the skills pick the one whose project matches the repo and never mix them. `-s user` makes it available across all repos — to bind **a single project** to a specific server instead, scope it to the repo with `-s project` (a shared `.mcp.json` committed in the repo) or `-s local` (only you, only this repo). A remote **primary** board needs no named server at all — just point the bundled entry at it with `CO_MCP_URL`.
 
 ## Usage
 

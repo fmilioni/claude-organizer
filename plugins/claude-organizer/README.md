@@ -26,7 +26,7 @@ Distribution (marketplace, from this repo):
 
 > **There is no `--plugin` flag.** Use `--plugin-dir` (dev) or the marketplace (distribution).
 
-Installing the plugin registers the `claude-organizer` MCP automatically (bundled `.mcp.json`, HTTP transport) — the `mcp__claude-organizer__*` tools appear with no `claude mcp add`. If you enable it mid-session, run `/reload-plugins`.
+Installing the plugin registers the `claude-organizer` MCP automatically (bundled `.mcp.json`, HTTP transport) — its tools appear with no `claude mcp add`, named `mcp__plugin_claude-organizer_claude-organizer__*` (a plugin-bundled server is `mcp__plugin_<pluginName>_<serverName>__<tool>`). If you enable it mid-session, run `/reload-plugins`.
 
 ## The MCP server
 
@@ -49,4 +49,4 @@ CO_MCP_URL=https://mcp.example.com/mcp claude
 claude mcp add --transport http -s user claude-organizer-second https://mcp.company.com/mcp
 ```
 
-(`-s user` makes it available in every repo, like the bundled entry; omit it to scope it to the current directory — `local`.) Both run side by side: each gets its own tool prefix (`mcp__claude-organizer__*` and `mcp__claude-organizer-second__*`), its own OAuth session (when auth is on, the flow runs per host — no token to paste), and its own set of projects. The skills treat each server as one host and never mix their projects — pick the server whose project matches the repo you're in.
+(`-s user` makes it available in every repo, like the bundled entry; omit it to scope it to the current directory — `local`.) Both run side by side: each gets its own tool prefix (the bundled plugin board is `mcp__plugin_claude-organizer_claude-organizer__*`; the added one is `mcp__claude-organizer-second__*`), its own OAuth session (when auth is on, the flow runs per host — no token to paste), and its own set of projects. The skills treat each server as one host and never mix their projects — pick the server whose project matches the repo you're in.

@@ -75,4 +75,4 @@ Always run `pnpm typecheck` **and** `pnpm lint` from the **repo root** (the `-r`
 
 ## After restarting Claude Code
 
-The `claude-organizer` MCP loads automatically (however you registered it — user scope, project scope, or the bundled plugin); Postgres must be UP. If a new MCP tool doesn't show up, the process started with the old code — restart Claude Code again.
+The `claude-organizer` MCP loads automatically from the **bundled plugin** (its `.mcp.json`) — that's the primary board; point it at a remote host by exporting `CO_MCP_URL`. Postgres must be UP. If a new MCP tool doesn't show up, the process started with the old code — restart Claude Code again.

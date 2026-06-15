@@ -16,7 +16,7 @@ This skill governs the **execution of a card that already exists** on the board 
 <HARD-GATE>
 Every step in **The lifecycle** below is **MANDATORY and ORDERED**, for **every** card — trivial or not. You do **not** skip a step, reorder it, or fold it away because it "seems unnecessary", you "already did it earlier" (this session, the parent history, a sibling task), the card is "too small", or you judged it faster to go straight to code.
 
-The board is only honest if **every** card walks the **full** lifecycle in lockstep with the real work. Skipping a step — not flipping status, not re-reading this card's comments, **skipping the per-task review gate before commit**, committing before the user reviews, not attaching the commit, not moving to `done` after validation — is a **defect**, not an optimization. When in doubt, do the step.
+Skipping a step — not flipping status, not re-reading this card's comments, **skipping the per-task review gate before commit**, committing before the user reviews, not attaching the commit, not moving to `done` after validation — is a **defect**, not an optimization. When in doubt, do the step.
 </HARD-GATE>
 
 ## Never assume — ask the user
@@ -28,7 +28,7 @@ Execution constantly hits things the card didn't fully nail down. **Never assume
 
 The **method**:
 
-- **Ambiguity → a direct question** (open-ended where that fits). **Decision → ready-made options**, never "what do you think?": each option concrete and worked out, with its **trade-offs**. Mark the one you recommend with a **recommended marker** in the option's **title/label**, written in the **same language as the question** (the user's language — e.g. `(Recommended)` in English, `(Recomendado)` in pt-BR) — not buried in its description — and list it **first** (the marker goes in the title; the *why* may go in the description). That serves both the user who takes the recommendation and the one who knows enough to choose differently. This is what `AskUserQuestion` expects: recommended option first, marked in its label.
+- **Ambiguity → a direct question** (open-ended where that fits). **Decision → ready-made options**, never "what do you think?": each option concrete and worked out, with its **trade-offs**. Mark the recommended option in its label (the *why* may go in the description), list it first, in the user's language (e.g. `(Recommended)`, `(Recomendado)`) — what `AskUserQuestion` expects. That serves both the user who takes the recommendation and the one who knows enough to choose differently.
 - **One topic per message**; prefer multiple-choice via the `AskUserQuestion` tool.
 - **Unknowns chain** — settle the earlier one first; it narrows the next.
 - **Research when knowledge alone won't yield good options**, then present what you found.
@@ -56,8 +56,7 @@ Two things specific to execution:
 
 This is the step most often skipped, and skipping it is where the work goes wrong.
 
-- Call **`list_comments(cardId)` before implementing, every card, every time** — including each sub-task of a history.
-- **Re-read even if you read them earlier** — something **new** may have landed since: a correction, a constraint, a scope change posted after the briefing or while you were on another card.
+- Call **`list_comments(cardId)` before implementing, every card, every time** — including each sub-task of a history — **even if you read them earlier**: something **new** may have landed since (a correction, a constraint, a scope change posted after the briefing or while you were on another card).
 - Reading the **history's** comments does **not** cover its children, and a sibling task having none does **not** mean this one does. Comments are **per-card**.
 - **Comments are where settled decisions live** — the answer to a question you'd otherwise ask may already be here. Read them so you don't re-ask, and don't assume past what they say.
 - **Reading the thread advances state.** Calling `list_comments(cardId)` over MCP **advances this card's `unread` user comments to `read`** — the act of reading is recorded; you've seen them. It does not mark them `handled`. Then, once you've **actually addressed** a comment (not just read it), call **`mark_comments_handled([...commentIds])`** so it leaves the unhandled queue for good — handle each as you act on it, never leave a comment stuck in `read` once you've dealt with it.
@@ -80,14 +79,14 @@ Build the card, following the repo's `CLAUDE.md` and the agreed git flow (see _G
 
 This is the **source** of the clean-code rule; the review gate (step 7) only catches what slips through — a safety net, not where cleanup is born.
 
-**Self-review before you hand off.** Before you treat the card as built, read your **own diff back with fresh eyes**. You're the worst judge of code you just wrote — but an honest quick pass still catches the easy misses, and that's far cheaper than spending the review gate on them. Check:
+**Self-review before you hand off.** Before you treat the card as built, read your **own diff back with fresh eyes**. This doesn't make you a fair judge of your own code (that's the gate's job — step 7), but an honest quick pass catches the easy misses, far cheaper than spending the gate on them. Check:
 
 - **Acceptance criteria** — does the change meet **every** criterion the card states, not just the headline one?
 - **YAGNI / discipline** — did you build **only** what was asked — nothing speculative or extra — following the codebase's existing patterns?
 - **Quality** — do names say what things do; is the code clean; did you leave a comment the gate will only flag?
 - **Verification** — do your checks actually exercise the **behavior**, not just a happy-path smoke?
 
-Fix what you find **inline**, now. This does **not** replace the per-task review gate (step 7) — the fresh subagent stays mandatory because your confidence is exactly what it exists to test; the self-review just keeps the obvious from reaching it.
+Fix what you find **inline**, now. This does **not** replace the per-task review gate (step 7) — the self-review just keeps the obvious from reaching it.
 
 ### 5. Record signal as comments
 
@@ -97,22 +96,22 @@ As you work, **`add_comment(cardId, …)`** for what carries **signal** — deci
 
 - **`set_card_status(id, "review")` the instant you stop and the user takes over** to validate. Status reflects **who holds the ball**, not whether a commit exists — so move it even though the commit lands only after the user confirms (steps 7–10).
 - On the **same move**, post **one** comment with the **test plan**: what to open, what to do, what to expect, and briefly what you already checked. Console scrollback is ephemeral; this comment is where the user (and a future session) sees how to validate what's in review. It follows the same signal-vs-noise rule as any comment.
-- Then **capture the working-tree diff onto the card** with this skill's bundled `attach-worktree-diff` script (see _Diff-capture scripts — they ship inside this skill_ for where it lives and how to run it). The diff goes straight to the API **outside your context** — **never read or paste it**. This lets the user see what will land before any commit exists. (Token only when auth is on — see _Auth flag for diff capture_.)
+- Then **capture the working-tree diff onto the card** with this skill's bundled `attach-worktree-diff` script (see _Diff-capture scripts — they ship inside this skill_ for where it lives and how to run it). The diff goes straight to the API **outside your context** — don't read or paste it (step 10). This lets the user see what will land before any commit exists. (Token only when auth is on — see _Auth flag for diff capture_.)
 - Then **wait for the user to validate**. Do **not** self-approve and do **not** jump ahead to commit or `done`.
 
 ### 7. Per-task review gate — a fresh subagent, **before commit** (mandatory — do not skip)
 
 With the behavior validated, run the **per-task review** via the **`review`** skill **before** committing — over the **working-tree diff** (`git diff`), so any fixes fold into the change and the card keeps **one clean commit**. It spawns a **fresh subagent** (objective eyes — you just wrote this code, so you're the worst judge of it) that checks **this task's acceptance criteria** and hunts for reuse / dead code / leftover comments. The `review` skill then **disposes of every finding** — cheap in-scope ones get fixed, the rest go to the user — and **you don't get to veto a finding because it's `low` or "not worth a cycle"**: severity ranks the list, it doesn't authorize dropping it (the full rule lives in the `review` skill). When fixes fold into the working tree, **re-run the `attach-worktree-diff` script** so the pending diff reflects the adjusted change.
 
-**This gate is the step most skipped — including on cards that are not remotely trivial. That is the exact defect this rule exists to stop.** For **any card with real logic**, the per-task review runs **every time, with no judgment call** — you do not get to decide the change "looks fine" and commit past it; your confidence in code you just wrote is precisely what the fresh subagent exists to test. The **only** exception is a change with **no real logic at all** (a one-liner, a rename, a config tweak, a pure copy move), and even then the skip is **not silent**: **record the skip and its reason as a comment on the card** so it's visible and auditable. When in doubt, review. For a **standalone** task (no parent), this per-task review *is* the whole review — there's no story layer above it.
+**This gate is the step most skipped — including on cards that are not remotely trivial. That is the exact defect this rule exists to stop.** For **any card with real logic**, the per-task review runs **every time, with no judgment call** — you do not get to decide the change "looks fine" and commit past it. The **only** exception is a change with **no real logic at all** (a one-liner, a rename, a config tweak, a pure copy move), and even then the skip is **not silent**: **record the skip and its reason as a comment on the card** so it's visible and auditable. When in doubt, review. For a **standalone** task (no parent), this per-task review *is* the whole review — there's no story layer above it.
 
-### 8. Let the user review the diff — **before** committing
+### 8. Let the user review the diff
 
-Once the behavior is validated and the per-task review is settled, **let the user review the diff first**. Don't commit on your own initiative; wait for the user's go-ahead on the actual changes.
+With the behavior validated and the per-task review settled, wait for the user's go-ahead on the **actual diff** (not just the behavior) — don't commit on your own initiative.
 
-### 9. Capture durable knowledge in the docs — before you close
+### 9. Capture durable knowledge in the docs
 
-Before committing, ask once: **did a decision, a standardization, or long-lived knowledge surface while building this card?** If so, **write or update the doc now** — an `adr` for a decision (with the _why_), the matching `guide`/`module` for a new or changed convention, a `module`/`note` for a durable gotcha. Prefer **updating** an existing doc over creating a second; **skip** the ephemeral or deducible (no doc spam). The full criterion lives in the **`claude-organizer`** skill (_Docs_). Docs live in the MCP, not in git, so this is independent of the commit below.
+Ask once: **did a decision, a standardization, or long-lived knowledge surface while building this card?** If so, **write or update the doc now** — an `adr` for a decision (with the _why_), the matching `guide`/`module` for a new or changed convention, a `module`/`note` for a durable gotcha. Prefer **updating** an existing doc over creating a second; **skip** the ephemeral or deducible (no doc spam). The full criterion lives in the **`claude-organizer`** skill (_Docs_). Docs live in the MCP, not in git, so this is independent of the commit below.
 
 ### 10. Commit, then attach the commit's diff to the card — **always**
 
@@ -133,14 +132,14 @@ At this story boundary — and before advancing to the next card/story or ending
 
 The **`autopilot`** skill runs a card by dispatching a subagent that invokes this skill. A subagent hits two hard limits the normal lifecycle assumes away: it **cannot spawn another subagent** (so it can't fire the review gate) and **cannot talk to the user** (`AskUserQuestion` is unavailable to it). So **only when the orchestrator says it is driving** (it states so explicitly in the task prompt — never infer runner mode on your own), you do the **build** and the orchestrator owns the **board lifecycle around you**. Concretely:
 
-- **You do:** the orchestrator has already moved the card to `in_progress` and claimed it (the claim is advisory and doesn't move status, so the orchestrator owns that transition) — go straight to reading **this card's comments** (step 2) and the **relevant docs** (step 3), **implement clean** (step 4), and **self-review your own diff** (step 4). Record genuine **signal** as comments (step 5), and **capture durable knowledge in the docs** (step 9) — you can call the doc/comment MCP tools; only subagent-spawn and `AskUserQuestion` are off-limits.
-- **You do NOT:** spawn the review gate (step 7), let the user review the diff (step 8), commit and attach the diff (step 10), or do the `review`/`done` status moves — including step 6's move to `review` with its test-plan comment and worktree-diff attach — or release the claim. The orchestrator runs the reviewer as a **sibling** subagent, applies fixes, commits on the run's single branch, attaches the diff, and moves the card to `review`. Driving any of that yourself collides with the orchestrator.
+- **You do:** the orchestrator has already moved the card to `in_progress` and claimed it (the claim is advisory and doesn't move status, so the orchestrator owns that transition). You have **no board (claude-organizer MCP) tools** — the orchestrator **curates** the card, the **relevant comment info** (step 2) and the **relevant docs** (step 3) into your prompt; work from that, don't fetch the board. **Implement clean** (step 4), and **self-review your own diff** (step 4). Off-limits to you: spawning subagents, `AskUserQuestion`, and every board read/write. So capture signal (step 5) and durable doc knowledge (step 9) but **return them as data** (`comments`/`docs`); the orchestrator writes them.
+- **You do NOT:** read or write the board (no comments, no docs, no status — you have no board tools), spawn the review gate (step 7), let the user review the diff (step 8), commit and attach the diff (step 10), or do the `review`/`done` status moves — including step 6's move to `review` with its test-plan comment and worktree-diff attach — or release the claim. The orchestrator runs the reviewer as a **sibling** subagent, posts your returned signal/docs, applies fixes, commits on the run's single branch, attaches the diff, and moves the card to `review`.
 - **You never ask — you stop and return.** The instant you hit a decision or ambiguity the card doesn't settle (the _Never assume_ rule still holds — you just can't resolve it via the user yourself), **halt** and **return** it. The orchestrator takes it to the user and re-dispatches you with the answer.
 
 **Return contract** — your final message **is** the orchestrator's input (structured data, not prose for a human). Return exactly one of:
 
 - `{ status: "needs_decision", decision, options, recommendation }` — you hit an unsettled choice. State it, the worked options with trade-offs, and your recommendation (same bar as the _Never assume_ method). You will be re-dispatched with the user's answer.
-- `{ status: "ready_for_review", summary, files, testPlan }` — built and self-reviewed up to the pre-review point, nothing left to decide. `summary` is what you changed and why; `files` the touched paths; `testPlan` how to validate it (what to open, do, expect) — the orchestrator posts it as the card's test-plan comment when it moves the card to `review`.
+- `{ status: "ready_for_review", summary, files, testPlan, comments, docs }` — built and self-reviewed up to the pre-review point, nothing left to decide. `summary` is what you changed and why; `files` the touched paths; `testPlan` how to validate it (what to open, do, expect) — the orchestrator posts it as the card's test-plan comment when it moves the card to `review`. `comments` is any **signal** to post on the card and `docs` any **durable knowledge** to record — written as plain content (what + why + the area/doc it concerns); the orchestrator files it into the docs. Both optional, since you can't write the board yourself.
 - `{ status: "blocked", reason }` — you cannot proceed (a missing dependency, a broken precondition).
 
 Keep this contract in sync with the **`autopilot`** skill, which consumes it.

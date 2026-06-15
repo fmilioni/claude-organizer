@@ -23,7 +23,7 @@ Do this sequence _before_ exploring the codebase or making changes:
 
 1. **`list_projects`** — find the project whose `slug` matches the repo you're working in, and grab its `projectId`. Every other tool takes an explicit `projectId`.
 2. **`get_active_sprint(projectId)`** — what's being worked on right now.
-3. **`list_unhandled_comments(projectId)`** — feedback the user left that you haven't acted on yet (`unread` + `read`). Read it and address it first; it's often a correction or a new priority. The scan **advances** the comments it returns `unread → read` (it exposes their full text, so you *have* read them) — but never to `handled`, so they keep resurfacing until you handle them.
+3. **`list_unhandled_comments(projectId)`** — feedback you haven't acted on yet (`unread` + `read`); address it first, it's often a correction or a new priority (mechanics in _Comments_).
 4. **`list_cards`** — the cards in flight. Read **what's on the board now**, not just the active sprint:
    - `list_cards(projectId, sprintId=<active sprint>)` — the active sprint's cards.
    - `list_cards(projectId, backlogOnly=true)` — sprint-less cards. Those in a board status (`todo`…`done`) are **standalone cards on the board**; those in the `backlog` status are the **backlog**.
@@ -50,13 +50,13 @@ The board grows; an unfiltered read burns context (a bare `list_cards` on a matu
 
 - **Filter, don't dump.** Prefer a filtered `list_cards` (the focused filters above) over the broad listing — reach for the unfiltered panorama only when you genuinely need it.
 - **Have a key? Go straight to it.** With a `CO-N` in hand, `get_card_by_key` (or `get_card` by id) instead of listing to find it; for a handful of known keys, `get_cards` fetches them in one call.
-- **Searching the past?** `search_cards` (cards + comments) and `search_docs` are **hybrid semantic search** — lexical full-text **fused with embedding similarity** (RRF), so they match by **meaning**, not just the exact words. A **conceptual / natural-language query** ("how auth tokens get refreshed") finds the right card/doc even when its wording differs, and synonyms/typos still hit (it degrades to plain lexical search when embeddings aren't available) — so describe what you're after, don't burn turns guessing the one exact keyword. Ranked, with a snippet; far better than scanning sprint by sprint.
+- **Searching the past?** `search_cards` (cards + comments) and `search_docs` match by **meaning** (hybrid lexical + embedding) — describe what you're after in natural language ("how auth tokens get refreshed"), synonyms/typos still hit, and it degrades to plain lexical when embeddings are down. Ranked, with a snippet; far better than scanning sprint by sprint.
 - **Order of discovery — which tool answers which question:** architecture/decisions → `search_docs`; a prior card or its comments → `search_cards`; unhandled user feedback → `list_unhandled_comments` (session start). Pick the tool before you start listing.
 - **Don't over-read.** `get_card` / `list_comments` only for the cards you'll actually touch — don't walk the whole board "just to be safe".
 
 ## Multiple hosts — one server per host, never mix
 
-You may have **more than one** organizer host connected at once — e.g. a **local** board and a **company** one. Each host is a **separate MCP server**, with its **own tool prefix** (`mcp__claude-organizer__*`, `mcp__claude-organizer-second__*`, …) and its **own set of projects** — they never share data.
+You may have **more than one** organizer host connected at once — e.g. a **local** board and a **company** one. Each host is a **separate MCP server**, with its **own tool prefix** (the primary board is the bundled plugin, `mcp__plugin_claude-organizer_claude-organizer__*`; an added host is `mcp__claude-organizer-second__*`, …) and its **own set of projects** — they never share data.
 
 - **One server = one host = its own projects.** Run the orientation (step 1, `list_projects`) **on the right server** and pick the one whose project `slug` matches the repo you're in. The tool prefix already tells you which host a call hits.
 - **Never mix hosts in a single operation.** Keep a card/sprint/doc/comment on the **same** server its project lives on — don't read from one host and write to another.
@@ -73,15 +73,15 @@ The inbox (`list_inbox`, pending) holds **raw demands** the user dropped without
 - User is **lost / asks what to do / what's next / asks for board status / is idle** → suggest planning the pending demands **right away** (plan first — it's the most useful next move).
 - **No pending demands → say nothing.** And don't re-offer every turn — suggest sparingly, not on a loop.
 
-**Re-check fresh at the end of work — never the orientation snapshot.** The inbox you read while orienting (step 7) goes stale: the user routinely drops demands **during** a long piece of work. So at every natural **end-of-work boundary** — finishing a story, **before advancing to the next story/sprint**, and **before ending the session** — call **`list_inbox` (pending) again, fresh**, and judge against *that*, not the snapshot. When the fresh check surfaces pending demands not covered by what you just did, treat it as a **decision gate**: **ask** the user whether to review/plan them now, noting that pending demands may **reshape the upcoming stories** — don't only mention them in passing or skip ahead. (The soft "offer once, sparingly" above is the normal-turn register; at a real end-of-work boundary it firms into this gate.) The `implement` skill enforces this same fresh re-check at its story boundaries.
+**Re-check fresh at the end of work — never the orientation snapshot.** The inbox you read while orienting (step 7) goes stale: the user routinely drops demands **during** a long piece of work. So at every natural **end-of-work boundary** — finishing a story, **before advancing to the next story/sprint**, and **before ending the session** — call **`list_inbox` (pending) again, fresh**, and judge against *that*, not the snapshot. When the fresh check surfaces pending demands not covered by what you just did, treat it as a **decision gate**: **ask** the user whether to review/plan them now, noting that pending demands may **reshape the upcoming stories** — don't only mention them in passing or skip ahead. The `implement` skill enforces this same fresh re-check at its story boundaries.
 
-Converting a demand into cards is the **`plan`** skill's job (it reads the inbox and marks each planned); here you only orient and suggest.
+Converting a demand into cards (creating cards → `plan`) is the **`plan`** skill's job (it reads the inbox and marks each planned); here you only orient and suggest.
 
 ## Before you analyze or act — read the tasks first, code second
 
 Whether you're **starting a single card** or **analyzing a group of them** (the backlog, a sprint, a set of tech-debt cards, "what's left to do?"), read what the board already knows _before_ you open the codebase: each card's full **description** (`get_card` / `get_card_by_key`) **and its comments** (`list_comments`), plus which **sprint** it sits in. `list_cards` returns only short summaries — never base an analysis on summaries alone.
 
-Comments routinely carry the decisive context: a card may be flagged _"consolidated into CO-31 — don't execute in isolation"_, already resolved, deferred, or superseded by another card. Skipping the comments and jumping to the code produces redundant or wrong conclusions (e.g. recommending work that's already planned elsewhere). **Order: tasks first (description + comments + sprint), then code only if still needed.**
+Comments routinely carry the decisive context: a card may be flagged _"consolidated into CO-31 — don't execute in isolation"_, already resolved, deferred, or superseded by another card. Skipping the comments and jumping to the code produces redundant or wrong conclusions (e.g. recommending work that's already planned elsewhere).
 
 The actual workflow rules for each phase live in those phase skills (the blockquote above), not here — switch to them instead of reconstructing the flow from memory. Everything below is about **operating** the board itself — comments, cards, docs — and applies across all phases.
 
@@ -110,13 +110,13 @@ Learn the _criterion_ (signal vs. noise; deducible vs. new) — don't follow a f
 - **`unread → read` is automatic when you read the card's thread via `list_comments(cardId)`** — reading over MCP **advances** that card's `unread` user comments to `read`. (It never demotes a `handled` comment and never promotes `read → handled`.) Opening the card in the **web** UI does **not** advance state — only the MCP read path does. So scanning a thread to find a past decision does mark its unread comments as `read`; that's intended — you *did* read them.
 - **`→ handled` is explicit, via `mark_comments_handled([...commentIds])`** — call it only when you've **actually acted** on the comment (fixed the bug, planned it, folded the decision in), not merely read it. This is the step that takes a comment out of the unhandled queue for good.
 
-The session-start scan **`list_unhandled_comments(projectId)`** returns everything not yet handled (`unread` + `read`) and **advances** the comments it returns `unread → read` (it exposes their full text, so you've read them) — but never to `handled`, so a comment you read in one session but didn't act on still resurfaces in the next until you handle it. Check it at session start. **When you pick a card up to develop, `list_comments(cardId)` is mandatory before implementing** — the `implement` skill enforces this (every card, every time, even if read before, because new context may have landed). Reading the history's comments does **not** cover its children.
+The session-start scan **`list_unhandled_comments(projectId)`** returns everything not yet handled (`unread` + `read`), advancing what it returns `unread → read` the same way — so a comment read but not acted on resurfaces next session until you handle it. **When you pick a card up to develop, `list_comments(cardId)` is mandatory before implementing** — the `implement` skill enforces this (every card, every time, even if read before, because new context may have landed). Reading the history's comments does **not** cover its children.
 
-**Author each paragraph or bullet as one continuous line — never hard-wrap (manual line breaks) mid-paragraph.** Soft-wrapping is the renderer's job, not the author's, and this holds for **every authored body alike — card/task descriptions, comments and docs**. Legitimate markdown structure is not hard-wrap and stays: headings, one list item per line, table rows, fenced code blocks, and blank-line-separated paragraphs — the rule forbids only the artificial break *inside* a single paragraph or bullet.
+**Author each paragraph or bullet as one continuous line — never hard-wrap (manual line breaks) mid-paragraph.** Soft-wrapping is the renderer's job, not the author's, and this holds for **every authored body alike — card/task descriptions, comments and docs**. Legitimate markdown structure stays: headings, one list item per line, table rows, fenced code blocks, and blank-line-separated paragraphs.
 
 ## Cards — field reference
 
-**To create cards, use the `plan` skill — not `create_card` from here.** This section is **only** a field reference (so you understand the shape of a card and can keep existing ones honest with `update_card`, status moves, tags, blockers); it is **not** a licence to mint new cards directly.
+**Creating cards → `plan`.** This section is **only** a field reference (so you understand the shape of a card and can keep existing ones honest with `update_card`, status moves, tags, blockers); it is **not** a licence to mint new cards directly.
 
 - **`summary`** — one line (~100 chars) describing _what_ the card is about. It's what shows on the board and in `list_cards`. **Required on creation:** `create_card` rejects a missing/blank/whitespace-only summary, so every new card is born with one.
 - **`descriptionMd`** — the spec: _behavior and intent_, acceptance criteria, decisions — **not** implementation code.
@@ -158,12 +158,10 @@ Writing a doc is a **default action, not a favor the user has to request**. Appl
 - A **standardization / convention** emerged or changed — a code/UI pattern, a naming or structural rule → update the matching `guide`/`module`.
 - **Long-lived knowledge** about a module/feature — how it works, what it depends on, a gotcha a future reader would trip on → the `module`/`note`.
 
-Rules of thumb:
+Rules of thumb (only ask the user in a real doubt, e.g. creating a brand-new doc _group_):
 
-- **Default to acting, not asking.** Recording is the normal path when the content is durable; only ask the user in a real doubt (e.g. creating a brand-new doc _group_).
 - **Always set `summary` when creating a doc — it's required, not just recommended.** A new doc (`write_doc` with no `id`) must be born with a one-line `summary`: `write_doc` **rejects a missing/blank/whitespace-only summary on creation** (on **update** — with `id` — it stays optional, so a partial edit never has to resend it). It's what shows in `list_docs` and feeds search, so apply the same signal-vs-noise criterion as a comment: say what the doc is about in one tight line, no noise.
 - **Update > duplicate.** If a doc for the area already exists, edit it (pass its `id`) — don't create a second one that drifts.
-- **No doc spam** — the same signal-vs-noise discipline as comments. Durable and non-deducible → record. Ephemeral, obvious, or deducible from the code/board → leave it out. If it would rot on the next refactor or just restate the obvious, it's not a doc.
 - **Retire a `note` when its issue is resolved — don't mark it "resolved".** A `note` capturing a pending item / gap is **transient**: once the work lands, move whatever durable knowledge it holds into the right `module`/`adr` (the permanent home) and then **delete or archive the note**. Leaving a note that says "resolved" is doc spam — a future reader has to open it to learn it no longer matters. If nothing durable survives, just delete it.
 
 ## Image attachments — describe for search, embed by reference, open on demand
