@@ -112,7 +112,7 @@ With the behavior validated **by the user** and the per-task review gate (a suba
 
 ### 9. Capture durable knowledge in the docs
 
-Ask once: **did a decision, a standardization, or long-lived knowledge surface while building this card?** If so, **write or update the doc now** — an `adr` for a decision (with the _why_), the matching `guide`/`module` for a new or changed convention, a `module`/`note` for a durable gotcha. Prefer **updating** an existing doc over creating a second; **skip** the ephemeral or deducible (no doc spam). The full criterion lives in the **`claude-organizer`** skill (_Docs_). Docs live in the MCP, not in git, so this is independent of the commit below.
+Ask once: **did a decision, a standardization, or long-lived knowledge surface while building this card?** If so, **write or update the doc now** — an `adr` for a decision (with the _why_), the matching `guide`/`module` for a new or changed convention, a `module`/`note` for a durable gotcha. Prefer **updating** an existing doc over creating a second; **skip** the ephemeral or deducible (no doc spam). When you reference another doc — here, in a comment, or in a card — link it as `[Doc title](/docs?doc=<id>)`, never a bare id or a plain-text title. The full criterion lives in the **`claude-organizer`** skill (_Docs_, incl. _Reference a doc as a link_). Docs live in the MCP, not in git, so this is independent of the commit below.
 
 ### 10. Commit, then attach the commit's diff to the card — **always**
 
