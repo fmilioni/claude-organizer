@@ -4,6 +4,7 @@ import { z } from 'zod'
 import {
   addTagToCard,
   createTag,
+  deleteTag,
   listTags,
   removeTagFromCard,
   updateTag
@@ -58,6 +59,19 @@ export function registerTagTools(server: McpServer, db: Database) {
       }
     },
     async input => asJson(await updateTag(db, input))
+  )
+
+  server.registerTool(
+    'delete_tag',
+    {
+      description:
+        'Delete a tag from the project (tag id, tag_xxx). Removes it from every card that has it. Returns the deleted tag, or { error: "not_found" } if no tag has that id.',
+      inputSchema: { id: z.string() }
+    },
+    async ({ id }) => {
+      const deleted = await deleteTag(db, id)
+      return asJson(deleted ?? { error: 'not_found' })
+    }
   )
 
   server.registerTool(
