@@ -14,6 +14,14 @@ import type { Database } from '@claude-organizer/db'
 import { attachmentsByItem } from '../attachments'
 import { asJson, pageEnvelope, pageInputs } from './index'
 
+// add/update/delete echoed the whole comment (with bodyMd) back; the agent wrote
+// the body, so a minimal ack confirms the write without re-bloating its context.
+type CommentAckRow = { id: string, cardId: string, createdAt: Date | string }
+function commentAck(comment: CommentAckRow | null | undefined) {
+  if (!comment) return null
+  return { id: comment.id, cardId: comment.cardId, createdAt: comment.createdAt }
+}
+
 export function registerCommentTools(server: McpServer, db: Database) {
   server.registerTool(
     'list_comments',
@@ -73,7 +81,7 @@ export function registerCommentTools(server: McpServer, db: Database) {
       }
     },
     async ({ cardId, bodyMd }) =>
-      asJson(await addComment(db, { cardId, bodyMd, author: 'ai' }))
+      asJson(commentAck(await addComment(db, { cardId, bodyMd, author: 'ai' })))
   )
 
   server.registerTool(
@@ -83,7 +91,8 @@ export function registerCommentTools(server: McpServer, db: Database) {
         'Edit the body (markdown) of an existing comment. Preserves author, timestamp and order. To remove a comment instead, use delete_comment.',
       inputSchema: { id: z.string(), bodyMd: z.string().min(1) }
     },
-    async ({ id, bodyMd }) => asJson(await updateComment(db, { id, bodyMd }))
+    async ({ id, bodyMd }) =>
+      asJson(commentAck(await updateComment(db, { id, bodyMd })))
   )
 
   server.registerTool(
@@ -105,6 +114,6 @@ export function registerCommentTools(server: McpServer, db: Database) {
       description: 'Delete a comment from a card by its id. Permanent.',
       inputSchema: { id: z.string() }
     },
-    async ({ id }) => asJson(await deleteComment(db, id))
+    async ({ id }) => asJson(commentAck(await deleteComment(db, id)))
   )
 }

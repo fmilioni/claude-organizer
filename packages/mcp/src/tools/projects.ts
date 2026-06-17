@@ -16,6 +16,29 @@ import type { Database } from '@claude-organizer/db'
 import { filterProjectsByScope, type McpScope } from '../scope'
 import { asJson, pageInputs } from './index'
 
+// Mutations echoed the whole project (with description) back; return a minimal
+// ack — use get_project / list_projects when the full project is needed.
+type ProjectAckRow = {
+  id: string
+  slug: string
+  keyPrefix: string
+  repoProvider: string | null
+  repoWebUrl: string | null
+}
+function projectAck(
+  p: ProjectAckRow | null | undefined,
+  ...extra: Array<'repoProvider' | 'repoWebUrl'>
+) {
+  if (!p) return null
+  const ack: Record<string, unknown> = {
+    id: p.id,
+    slug: p.slug,
+    keyPrefix: p.keyPrefix
+  }
+  for (const f of extra) ack[f] = p[f]
+  return ack
+}
+
 export function registerProjectTools(
   server: McpServer,
   db: Database,
@@ -85,7 +108,7 @@ export function registerProjectTools(
           .describe('Uppercase letters/digits, starting with a letter. Max 10 chars.')
       }
     },
-    async input => asJson(await createProject(db, input))
+    async input => asJson(projectAck(await createProject(db, input)))
   )
 
   server.registerTool(
@@ -103,7 +126,7 @@ export function registerProjectTools(
       }
     },
     async ({ projectId, newPrefix }) =>
-      asJson(await updateProjectKeyPrefix(db, projectId, newPrefix))
+      asJson(projectAck(await updateProjectKeyPrefix(db, projectId, newPrefix)))
   )
 
   server.registerTool(
@@ -113,7 +136,7 @@ export function registerProjectTools(
         'Archive a project (soft, reversible). It disappears from list_projects by default and can be restored.',
       inputSchema: { projectId: z.string() }
     },
-    async ({ projectId }) => asJson(await archiveProject(db, projectId))
+    async ({ projectId }) => asJson(projectAck(await archiveProject(db, projectId)))
   )
 
   server.registerTool(
@@ -122,7 +145,7 @@ export function registerProjectTools(
       description: 'Restore a previously archived project.',
       inputSchema: { projectId: z.string() }
     },
-    async ({ projectId }) => asJson(await restoreProject(db, projectId))
+    async ({ projectId }) => asJson(projectAck(await restoreProject(db, projectId)))
   )
 
   server.registerTool(
@@ -156,6 +179,12 @@ export function registerProjectTools(
       }
     },
     async ({ projectId, provider, repoWebUrl }) =>
-      asJson(await setProjectRepo(db, { projectId, provider, repoWebUrl }))
+      asJson(
+        projectAck(
+          await setProjectRepo(db, { projectId, provider, repoWebUrl }),
+          'repoProvider',
+          'repoWebUrl'
+        )
+      )
   )
 }

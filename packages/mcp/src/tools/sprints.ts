@@ -17,6 +17,14 @@ import type { Database } from '@claude-organizer/db'
 
 import { asJson, pageEnvelope, pageInputs } from './index'
 
+// Mutations echoed the whole sprint (with goal) back; return a minimal ack — use
+// list_sprints / get_active_sprint when the full sprint is needed.
+type SprintAckRow = { id: string, name: string, status: string }
+function sprintAck(s: SprintAckRow | null | undefined) {
+  if (!s) return null
+  return { id: s.id, name: s.name, status: s.status }
+}
+
 export function registerSprintTools(server: McpServer, db: Database) {
   server.registerTool(
     'list_sprints',
@@ -72,11 +80,13 @@ export function registerSprintTools(server: McpServer, db: Database) {
     },
     async input =>
       asJson(
-        await createSprint(db, {
-          ...input,
-          startsAt: input.startsAt ? new Date(input.startsAt) : undefined,
-          endsAt: input.endsAt ? new Date(input.endsAt) : undefined
-        })
+        sprintAck(
+          await createSprint(db, {
+            ...input,
+            startsAt: input.startsAt ? new Date(input.startsAt) : undefined,
+            endsAt: input.endsAt ? new Date(input.endsAt) : undefined
+          })
+        )
       )
   )
 
@@ -91,7 +101,7 @@ export function registerSprintTools(server: McpServer, db: Database) {
         goal: z.string().max(500).nullable().optional()
       }
     },
-    async input => asJson(await updateSprint(db, input))
+    async input => asJson(sprintAck(await updateSprint(db, input)))
   )
 
   server.registerTool(
@@ -101,7 +111,7 @@ export function registerSprintTools(server: McpServer, db: Database) {
         'Activate a sprint. Any currently active sprint in the same project is auto-completed.',
       inputSchema: { sprintId: z.string() }
     },
-    async ({ sprintId }) => asJson(await startSprint(db, sprintId))
+    async ({ sprintId }) => asJson(sprintAck(await startSprint(db, sprintId)))
   )
 
   server.registerTool(
@@ -110,7 +120,7 @@ export function registerSprintTools(server: McpServer, db: Database) {
       description: 'Mark a sprint as completed.',
       inputSchema: { sprintId: z.string() }
     },
-    async ({ sprintId }) => asJson(await completeSprint(db, sprintId))
+    async ({ sprintId }) => asJson(sprintAck(await completeSprint(db, sprintId)))
   )
 
   server.registerTool(
@@ -120,7 +130,7 @@ export function registerSprintTools(server: McpServer, db: Database) {
         'Reopen a completed (or archived) sprint back to `planned` so work can resume or missing cards can be added. Clears endsAt and unarchives it. Never activates — use start_sprint afterwards to make it active.',
       inputSchema: { sprintId: z.string() }
     },
-    async ({ sprintId }) => asJson(await reopenSprint(db, sprintId))
+    async ({ sprintId }) => asJson(sprintAck(await reopenSprint(db, sprintId)))
   )
 
   server.registerTool(
@@ -130,7 +140,7 @@ export function registerSprintTools(server: McpServer, db: Database) {
         'Archive a sprint (soft-delete): it disappears from normal listings but is kept and can be restored. Its cards travel with it (they are not individually marked). Shows up in list_sprints with archivedOnly=true.',
       inputSchema: { id: z.string() }
     },
-    async ({ id }) => asJson(await archiveSprint(db, id))
+    async ({ id }) => asJson(sprintAck(await archiveSprint(db, id)))
   )
 
   server.registerTool(
@@ -139,7 +149,7 @@ export function registerSprintTools(server: McpServer, db: Database) {
       description: 'Restore (unarchive) a previously archived sprint.',
       inputSchema: { id: z.string() }
     },
-    async ({ id }) => asJson(await restoreSprint(db, id))
+    async ({ id }) => asJson(sprintAck(await restoreSprint(db, id)))
   )
 
   server.registerTool(

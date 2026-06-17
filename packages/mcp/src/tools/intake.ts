@@ -14,6 +14,14 @@ import type { Database } from '@claude-organizer/db'
 import { attachmentsByItem } from '../attachments'
 import { asJson, pageEnvelope, pageInputs } from './index'
 
+// Mutations echoed the whole item (with bodyMd) back; return a minimal ack — the
+// agent has the demand text; use list_inbox when the full item is needed.
+type IntakeAckRow = { id: string, status: string, plannedCardKeys: string | null }
+function intakeAck(item: IntakeAckRow | null | undefined) {
+  if (!item) return null
+  return { id: item.id, status: item.status, plannedCardKeys: item.plannedCardKeys }
+}
+
 export function registerIntakeTools(server: McpServer, db: Database) {
   server.registerTool(
     'create_inbox',
@@ -26,7 +34,7 @@ export function registerIntakeTools(server: McpServer, db: Database) {
       }
     },
     async ({ projectId, bodyMd }) =>
-      asJson(await createIntakeItem(db, { projectId, bodyMd }))
+      asJson(intakeAck(await createIntakeItem(db, { projectId, bodyMd })))
   )
 
   server.registerTool(
@@ -70,7 +78,8 @@ export function registerIntakeTools(server: McpServer, db: Database) {
         cardKeys: z.array(z.string()).min(1)
       }
     },
-    async ({ id, cardKeys }) => asJson(await markIntakePlanned(db, id, cardKeys))
+    async ({ id, cardKeys }) =>
+      asJson(intakeAck(await markIntakePlanned(db, id, cardKeys)))
   )
 
   server.registerTool(
@@ -82,7 +91,7 @@ export function registerIntakeTools(server: McpServer, db: Database) {
         id: z.string()
       }
     },
-    async ({ id }) => asJson(await archiveIntakeItem(db, id))
+    async ({ id }) => asJson(intakeAck(await archiveIntakeItem(db, id)))
   )
 
   server.registerTool(
@@ -94,6 +103,6 @@ export function registerIntakeTools(server: McpServer, db: Database) {
         id: z.string()
       }
     },
-    async ({ id }) => asJson(await destroyIntakeItem(db, id))
+    async ({ id }) => asJson(intakeAck(await destroyIntakeItem(db, id)))
   )
 }

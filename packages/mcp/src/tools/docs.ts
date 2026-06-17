@@ -18,6 +18,29 @@ import { asJson, pageEnvelope, pageInputs } from './index'
 
 const docKind = z.enum(['module', 'adr', 'guide', 'note'])
 
+// Trivial doc mutations return a minimal ack, not the full doc: echoing the whole
+// bodyMd back only bloats the agent's context (it already has what it sent). Use
+// read_doc when the full doc is actually needed.
+type DocAckRow = {
+  id: string
+  title: string
+  kind: string
+  parentId: string | null
+}
+function docAck(
+  doc: DocAckRow | null | undefined,
+  ...extra: Array<'parentId'>
+) {
+  if (!doc) return null
+  const ack: Record<string, unknown> = {
+    id: doc.id,
+    title: doc.title,
+    kind: doc.kind
+  }
+  for (const f of extra) ack[f] = doc[f]
+  return ack
+}
+
 export function registerDocTools(server: McpServer, db: Database) {
   server.registerTool(
     'list_docs',
@@ -114,14 +137,16 @@ export function registerDocTools(server: McpServer, db: Database) {
     async (input) => {
       if (input.id) {
         return asJson(
-          await updateDoc(db, {
-            id: input.id,
-            title: input.title,
-            summary: input.summary,
-            bodyMd: input.bodyMd,
-            kind: input.kind,
-            parentId: input.parentId
-          })
+          docAck(
+            await updateDoc(db, {
+              id: input.id,
+              title: input.title,
+              summary: input.summary,
+              bodyMd: input.bodyMd,
+              kind: input.kind,
+              parentId: input.parentId
+            })
+          )
         )
       }
       if (!input.projectId || !input.title) {
@@ -134,14 +159,17 @@ export function registerDocTools(server: McpServer, db: Database) {
         )
       }
       return asJson(
-        await createDoc(db, {
-          projectId: input.projectId,
-          parentId: input.parentId,
-          title: input.title,
-          summary,
-          bodyMd: input.bodyMd,
-          kind: input.kind
-        })
+        docAck(
+          await createDoc(db, {
+            projectId: input.projectId,
+            parentId: input.parentId,
+            title: input.title,
+            summary,
+            bodyMd: input.bodyMd,
+            kind: input.kind
+          }),
+          'parentId'
+        )
       )
     }
   )
@@ -153,7 +181,7 @@ export function registerDocTools(server: McpServer, db: Database) {
         'Archive a doc (soft-delete): it (and its subtree) disappears from list_docs but is kept and can be restored. Shows up with archivedOnly=true.',
       inputSchema: { id: z.string() }
     },
-    async ({ id }) => asJson(await archiveDoc(db, id))
+    async ({ id }) => asJson(docAck(await archiveDoc(db, id)))
   )
 
   server.registerTool(
@@ -162,7 +190,7 @@ export function registerDocTools(server: McpServer, db: Database) {
       description: 'Restore (unarchive) a previously archived doc.',
       inputSchema: { id: z.string() }
     },
-    async ({ id }) => asJson(await restoreDoc(db, id))
+    async ({ id }) => asJson(docAck(await restoreDoc(db, id)))
   )
 
   server.registerTool(

@@ -36,11 +36,13 @@ export function registerTools(
 }
 
 export function asJson(value: unknown) {
+  // Compact (no indent): the agent parses JSON regardless of whitespace, and
+  // pretty-printing inflated every response's tokens for nothing.
   return {
     content: [
       {
         type: 'text' as const,
-        text: JSON.stringify(value, null, 2)
+        text: JSON.stringify(value)
       }
     ]
   }

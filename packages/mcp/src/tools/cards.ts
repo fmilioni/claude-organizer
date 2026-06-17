@@ -58,6 +58,40 @@ async function withCommitsAndAttachments(
   return { ...card, commits, attachments }
 }
 
+// Trivial card mutations return a minimal ack, not the full card: echoing the
+// whole descriptionMd back only bloats the agent's context (it already has what
+// it sent). Use get_card when the full card is actually needed.
+type CardAckRow = {
+  id: string
+  key: string
+  status: string
+  sprintId: string | null
+}
+function cardAck(
+  card: CardAckRow | null | undefined,
+  ...extra: Array<'sprintId'>
+) {
+  if (!card) return null
+  const ack: Record<string, unknown> = {
+    id: card.id,
+    key: card.key,
+    status: card.status
+  }
+  for (const f of extra) ack[f] = card[f]
+  return ack
+}
+
+// list/search rows are for SCANNING — drop the fields the agent doesn't need to
+// scan (projectId is redundant with the query; position/createdAt/updatedAt are
+// rarely used). KEEP `summary`: the short description is what lets the agent
+// decide whether a card is worth a full get_card. get_card has the dropped fields.
+const SCAN_DROP = new Set(['projectId', 'position', 'createdAt', 'updatedAt'])
+function slimCardRow(row: Record<string, unknown>) {
+  return Object.fromEntries(
+    Object.entries(row).filter(([k]) => !SCAN_DROP.has(k))
+  )
+}
+
 const cardStatus = z.enum([
   'backlog',
   'todo',
@@ -100,7 +134,7 @@ export function registerCardTools(server: McpServer, db: Database) {
     async ({ limit, offset, ...filters }) => {
       // Probe one past the page so `hasMore` is exact without a COUNT query.
       const rows = await listCards(db, { ...filters, limit: limit + 1, offset })
-      return asJson(pageEnvelope('cards', rows, limit, offset))
+      return asJson(pageEnvelope('cards', rows.map(slimCardRow), limit, offset))
     }
   )
 
@@ -135,7 +169,7 @@ export function registerCardTools(server: McpServer, db: Database) {
         limit: limit + 1,
         offset
       })
-      return asJson(pageEnvelope('cards', rows, limit, offset))
+      return asJson(pageEnvelope('cards', rows.map(slimCardRow), limit, offset))
     }
   )
 
@@ -226,10 +260,13 @@ export function registerCardTools(server: McpServer, db: Database) {
     },
     async input =>
       asJson(
-        await createCard(db, {
-          ...input,
-          dueDate: input.dueDate ? new Date(input.dueDate) : undefined
-        })
+        cardAck(
+          await createCard(db, {
+            ...input,
+            dueDate: input.dueDate ? new Date(input.dueDate) : undefined
+          }),
+          'sprintId'
+        )
       )
   )
 
@@ -254,15 +291,17 @@ export function registerCardTools(server: McpServer, db: Database) {
     },
     async input =>
       asJson(
-        await updateCard(db, {
-          ...input,
-          dueDate:
-            input.dueDate === null
-              ? null
-              : input.dueDate
-                ? new Date(input.dueDate)
-                : undefined
-        })
+        cardAck(
+          await updateCard(db, {
+            ...input,
+            dueDate:
+              input.dueDate === null
+                ? null
+                : input.dueDate
+                  ? new Date(input.dueDate)
+                  : undefined
+          })
+        )
       )
   )
 
@@ -272,7 +311,7 @@ export function registerCardTools(server: McpServer, db: Database) {
       description: 'Shortcut to change a card status.',
       inputSchema: { id: z.string(), status: cardStatus }
     },
-    async ({ id, status }) => asJson(await updateCard(db, { id, status }))
+    async ({ id, status }) => asJson(cardAck(await updateCard(db, { id, status })))
   )
 
   server.registerTool(
@@ -298,7 +337,7 @@ export function registerCardTools(server: McpServer, db: Database) {
       description: 'Remove a card from its current sprint (back to backlog).',
       inputSchema: { id: z.string() }
     },
-    async ({ id }) => asJson(await moveCardToBacklog(db, id))
+    async ({ id }) => asJson(cardAck(await moveCardToBacklog(db, id), 'sprintId'))
   )
 
   server.registerTool(
@@ -307,7 +346,8 @@ export function registerCardTools(server: McpServer, db: Database) {
       description: 'Move a card to a specific sprint.',
       inputSchema: { id: z.string(), sprintId: z.string() }
     },
-    async ({ id, sprintId }) => asJson(await moveCardToSprint(db, id, sprintId))
+    async ({ id, sprintId }) =>
+      asJson(cardAck(await moveCardToSprint(db, id, sprintId), 'sprintId'))
   )
 
   server.registerTool(
@@ -317,7 +357,7 @@ export function registerCardTools(server: McpServer, db: Database) {
         'Archive a card (soft-delete): it disappears from normal listings but is kept and can be restored. Shows up in list_cards with archivedOnly=true.',
       inputSchema: { id: z.string() }
     },
-    async ({ id }) => asJson(await archiveCard(db, id))
+    async ({ id }) => asJson(cardAck(await archiveCard(db, id)))
   )
 
   server.registerTool(
@@ -326,7 +366,7 @@ export function registerCardTools(server: McpServer, db: Database) {
       description: 'Restore (unarchive) a previously archived card.',
       inputSchema: { id: z.string() }
     },
-    async ({ id }) => asJson(await restoreCard(db, id))
+    async ({ id }) => asJson(cardAck(await restoreCard(db, id)))
   )
 
   server.registerTool(
