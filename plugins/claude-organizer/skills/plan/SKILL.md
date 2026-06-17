@@ -7,6 +7,8 @@ description: Use to turn a NEW demand — a feature, a change, a fix — into st
 
 Turn a demand into well-formed work through dialogue with the user, then materialize it as **cards in claude-organizer**. The artifact is the cards in the MCP — not a spec file. Execution happens afterwards, card by card, via the **`implement`** skill.
 
+> **Load the `claude-organizer` skill first.** If it hasn't been loaded in this conversation, invoke it (Skill tool) before anything below — it covers what the board is, the project binding, and the comment/doc conventions this skill relies on. If it's already loaded, just continue.
+
 **Hard rule:** do NOT write code, scaffold, or edit files until the user has approved the plan. Holds for every demand — "too simple to plan" is exactly where a wrong assumption gets baked in. The plan can be short, but you must present it and get approval.
 
 ## Flow
@@ -42,6 +44,7 @@ Don't let a decision live only in the chat — it's gone next session.
 
 - **Every decision the user settles goes into the originating card.** Fold each answer into the card it concerns — its **Decisions** section (or the story's body for a story-wide call) — *before* creating it, so the executor reads a card that's already decided. This is also how you save the user's decisions **upfront**: a choice settled during planning is baked into the card, not re-asked at execution time.
 - **A durable / architectural decision also becomes an `adr` doc.** When a choice has more than one defensible path and shapes how the system is built **beyond this one card** (a library/runtime, a data-model call, a naming/convention, a security/auth approach), write or update an `adr` (Context · Decision · Consequences, terse, with the *why*) under Decisions — not just the card. Prefer updating an existing doc over a duplicate; reference it as `[Doc title](/docs?doc=<id>)`. Card-local decisions stay only on the card; cross-cutting ones live in the docs so the next demand reuses them instead of re-deciding.
+- **Link each card to the spec that governs it.** When an existing ADR or module doc constrains the card, **cite it in the card** (`[Doc title](/docs?doc=<id>)`) — so the work is traceable to its spec and the executor reads the constraint instead of re-deriving (or violating) it.
 
 ## Writing a card
 

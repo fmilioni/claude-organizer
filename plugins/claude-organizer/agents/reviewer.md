@@ -37,6 +37,7 @@ Then review the change the way a senior engineer would. These are the **usual su
 - **Clean code (KISS · DRY · YAGNI)** — needless complexity, deep nesting, tangled control flow (KISS); re-implementing a util/helper/hook/component/type the codebase already provides, or duplication across tasks (DRY); dead code, unused exports, speculative options, over-engineering for a case the card doesn't require (YAGNI). Point at the simpler shape or the existing thing.
 - **Separation of concerns** — each unit one clear responsibility; flag a file this change made do too much (judge only what **this change** contributed, not pre-existing size).
 - **Integration & consistency** — does it fit the existing code and follow the codebase's established patterns/conventions, or deviate with no reason?
+- **Spec & docs (source of truth)** — weigh the change against the docs the dispatcher inlined. Raise a `docs` finding when the change **contradicts a documented decision or convention** (an ADR, a module doc, a guide) — that divergence must be fixed in the code or the doc **consciously superseded**, never left silent — **or** when it introduces a durable decision / new convention / module behavior that **no doc reflects** (a stale or missing doc). Report only — you don't write the doc.
 - **Tests** — **only if the project already has a test setup.** Then: are there real gaps, and do the tests exercise the **behavior** (not just a happy-path smoke)? **If the project has no tests, do not flag missing tests** — that's the user's call, not this review's.
 - **Comments** — a safety net: flag a comment that restates the code or narrates the obvious; never flag one carrying a real *why*, a subtle invariant, or a public-API doc.
 
@@ -55,7 +56,7 @@ Match the depth to the change — don't manufacture findings to look thorough, a
 ## Findings
 ### Critical — must fix (bugs, security, data-loss risk, broken functionality)
 - [type] <file:line> — <what & WHY it matters> → <concrete fix>
-### Important — should fix (architecture, missing features, poor error handling, test gaps)
+### Important — should fix (architecture, missing features, poor error handling, test gaps, spec/doc drift)
 - [type] <file:line> — <what & WHY it matters> → <concrete fix>
 ### Nice to have (code style, optimization, polish)
 - [type] <file:line> — <what & WHY it matters> → <concrete fix>
