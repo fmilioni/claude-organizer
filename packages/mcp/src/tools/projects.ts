@@ -115,7 +115,7 @@ export function registerProjectTools(
       description:
         'Change the keyPrefix of a project. Existing card keys are NOT renamed - only new cards use the new prefix.',
       inputSchema: {
-        projectId: z.string(),
+        id: z.string(),
         newPrefix: z
           .string()
           .min(1)
@@ -123,8 +123,8 @@ export function registerProjectTools(
           .regex(/^[A-Z][A-Z0-9]{0,9}$/)
       }
     },
-    async ({ projectId, newPrefix }) =>
-      asJson(projectAck(await updateProjectKeyPrefix(db, projectId, newPrefix)))
+    async ({ id, newPrefix }) =>
+      asJson(projectAck(await updateProjectKeyPrefix(db, id, newPrefix)))
   )
 
   server.registerTool(
@@ -132,18 +132,18 @@ export function registerProjectTools(
     {
       description:
         'Archive a project (soft, reversible). It disappears from list_projects by default and can be restored.',
-      inputSchema: { projectId: z.string() }
+      inputSchema: { id: z.string() }
     },
-    async ({ projectId }) => asJson(projectAck(await archiveProject(db, projectId)))
+    async ({ id }) => asJson(projectAck(await archiveProject(db, id)))
   )
 
   server.registerTool(
     'restore_project',
     {
       description: 'Restore a previously archived project.',
-      inputSchema: { projectId: z.string() }
+      inputSchema: { id: z.string() }
     },
-    async ({ projectId }) => asJson(projectAck(await restoreProject(db, projectId)))
+    async ({ id }) => asJson(projectAck(await restoreProject(db, id)))
   )
 
   server.registerTool(
@@ -152,14 +152,14 @@ export function registerProjectTools(
       description:
         'DESTRUCTIVE & IRREVERSIBLE: permanently delete a project and EVERYTHING under it (sprints, cards, docs, tags, comments). Requires `confirmSlug` to equal the project slug; otherwise nothing is deleted.',
       inputSchema: {
-        projectId: z.string(),
+        id: z.string(),
         confirmSlug: z
           .string()
           .describe('Must equal the project slug to confirm the deletion.')
       }
     },
-    async ({ projectId, confirmSlug }) =>
-      asJson(await destroyProject(db, projectId, confirmSlug))
+    async ({ id, confirmSlug }) =>
+      asJson(await destroyProject(db, id, confirmSlug))
   )
 
   server.registerTool(
@@ -168,7 +168,7 @@ export function registerProjectTools(
       description:
         'Set (or clear) the project\'s source repository so commit hashes link to the provider\'s commit page. Pass `provider` (github|gitlab) + `repoWebUrl` (e.g. https://github.com/owner/repo), or null on both to clear. The skill calls this after detecting the git remote.',
       inputSchema: {
-        projectId: z.string(),
+        id: z.string(),
         provider: z.enum(['github', 'gitlab']).nullable(),
         repoWebUrl: z
           .url()
@@ -176,10 +176,10 @@ export function registerProjectTools(
           .describe('Repo web base, e.g. https://github.com/owner/repo (no .git).')
       }
     },
-    async ({ projectId, provider, repoWebUrl }) =>
+    async ({ id, provider, repoWebUrl }) =>
       asJson(
         projectAck(
-          await setProjectRepo(db, { projectId, provider, repoWebUrl }),
+          await setProjectRepo(db, { projectId: id, provider, repoWebUrl }),
           'repoProvider',
           'repoWebUrl'
         )

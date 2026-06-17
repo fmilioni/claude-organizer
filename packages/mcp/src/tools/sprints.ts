@@ -107,18 +107,18 @@ export function registerSprintTools(server: McpServer, db: Database) {
     {
       description:
         'Activate a sprint. Any currently active sprint in the same project is auto-completed.',
-      inputSchema: { sprintId: z.string() }
+      inputSchema: { id: z.string() }
     },
-    async ({ sprintId }) => asJson(sprintAck(await startSprint(db, sprintId)))
+    async ({ id }) => asJson(sprintAck(await startSprint(db, id)))
   )
 
   server.registerTool(
     'complete_sprint',
     {
       description: 'Mark a sprint as completed.',
-      inputSchema: { sprintId: z.string() }
+      inputSchema: { id: z.string() }
     },
-    async ({ sprintId }) => asJson(sprintAck(await completeSprint(db, sprintId)))
+    async ({ id }) => asJson(sprintAck(await completeSprint(db, id)))
   )
 
   server.registerTool(
@@ -126,9 +126,9 @@ export function registerSprintTools(server: McpServer, db: Database) {
     {
       description:
         'Reopen a completed (or archived) sprint back to `planned` so work can resume or missing cards can be added. Clears endsAt and unarchives it. Never activates — use start_sprint afterwards to make it active.',
-      inputSchema: { sprintId: z.string() }
+      inputSchema: { id: z.string() }
     },
-    async ({ sprintId }) => asJson(sprintAck(await reopenSprint(db, sprintId)))
+    async ({ id }) => asJson(sprintAck(await reopenSprint(db, id)))
   )
 
   server.registerTool(
