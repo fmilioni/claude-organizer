@@ -232,7 +232,7 @@ export function registerCardTools(server: McpServer, db: Database) {
     'create_card',
     {
       description:
-        'Create a card in the backlog (default) or a specific sprint. A `summary` is REQUIRED (a blank/whitespace-only value is rejected): one short sentence (max ~120 chars) in natural language describing WHAT this card is about. Summary shows in the board preview and in list_cards results, so users and AI can scan many cards at once. Use `descriptionMd` for full markdown details, acceptance criteria, links, etc.',
+        'Create a card in the backlog (default) or a specific sprint. `summary` (one short sentence, what the card is about — shown on the board and in list_cards) and `descriptionMd` (the full markdown body — objective, expected behavior, acceptance criteria) are BOTH REQUIRED; a blank/whitespace-only value is rejected.',
       inputSchema: {
         projectId: z.string(),
         sprintId: z.string().optional(),
@@ -245,7 +245,13 @@ export function registerCardTools(server: McpServer, db: Database) {
           .describe(
             'One-sentence natural language summary (~80-120 chars). REQUIRED — shows on the board preview and in list_cards so cards can be scanned; a blank/whitespace-only value is rejected.'
           ),
-        descriptionMd: z.string().optional().describe('Full markdown description. Optional.'),
+        descriptionMd: z
+          .string()
+          .trim()
+          .min(1)
+          .describe(
+            'Full markdown body — objective, expected behavior, acceptance criteria. REQUIRED on creation; blank/whitespace is rejected.'
+          ),
         status: cardStatus.optional(),
         priority: z.number().int().min(0).max(10).optional(),
         dueDate: z.iso.datetime().optional(),

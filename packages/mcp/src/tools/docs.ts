@@ -114,7 +114,7 @@ export function registerDocTools(server: McpServer, db: Database) {
     'write_doc',
     {
       description:
-        'Create a new doc, or update an existing one if `id` is provided. Use `kind` to classify: module (a code domain/area), adr (architecture decision record), guide (how-to), note (anything else). `parentId` nests the doc under another. `summary` is a one-line description shown in lists/search — REQUIRED when creating (no `id`), optional on update.',
+        'Create a new doc, or update an existing one if `id` is provided. Use `kind` to classify: module (a code domain/area), adr (architecture decision record), guide (how-to), note (anything else). `parentId` nests the doc under another. `summary` (one-line description shown in lists/search) and `bodyMd` (the markdown content) are REQUIRED when creating (no `id`), optional on update.',
       inputSchema: {
         id: z.string().optional(),
         projectId: z.string().optional(),
@@ -156,6 +156,12 @@ export function registerDocTools(server: McpServer, db: Database) {
           'summary is required when creating a doc (no `id`): a one-line description shown in doc lists/search. It stays optional on update.'
         )
       }
+      const bodyMd = input.bodyMd?.trim()
+      if (!bodyMd) {
+        throw new Error(
+          'bodyMd is required when creating a doc (no `id`): the markdown content of the doc. It stays optional on update.'
+        )
+      }
       return asJson(
         docAck(
           await createDoc(db, {
@@ -163,7 +169,7 @@ export function registerDocTools(server: McpServer, db: Database) {
             parentId: input.parentId,
             title: input.title,
             summary,
-            bodyMd: input.bodyMd,
+            bodyMd,
             kind: input.kind
           }),
           'parentId'
