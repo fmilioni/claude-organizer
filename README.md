@@ -18,6 +18,9 @@ It ships as a **Claude Code plugin** (three skills + the MCP server), backed by 
 
 </div>
 
+> [!WARNING]
+> **Early stage — not yet stable.** Claude Organizer is under active development and not production-stable yet. Right now we're focused on **stabilizing the skills** (the `plan` / `implement` workflow the agent runs), so their behavior and the tool surface may still change between versions. Expect breaking changes — so keep the plugin's **auto-update off** (it's off by default for this marketplace; toggle it under `/plugin` → Marketplaces) and upgrade deliberately.
+
 ---
 
 ## Why
