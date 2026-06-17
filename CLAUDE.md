@@ -4,15 +4,13 @@
 
 ## Skills
 
-Five skills drive the work (packaged in `plugins/claude-organizer`):
+Three skills drive the work (packaged in `plugins/claude-organizer`):
 
-- **`claude-organizer`** — how to operate the board: orient at the start of a session, keep statuses honest, comment with signal, docs.
-- **`plan`** — turn a new demand into sprints/histories/tasks (auto-triggers when you describe something to build).
-- **`implement`** — execute a card that already exists, through a mandatory lifecycle (in_progress → read comments → implement → review → commit → done). Auto-triggers when you start building a specific card.
-- **`review`** — mandatory review gate before work closes (per-task + story-level), run by a fresh subagent: checks acceptance criteria and hunts for reuse/dead-code/comment improvements. Fired by `implement` at task/story completion.
-- **`autopilot`** — run the board autonomously: a lean orchestrator dispatches a fresh subagent per card (the `implementer` agent → `reviewer` → fixes) so a long run doesn't degrade, stops to ask the user on every decision, commits one-per-card on a single run branch, and leaves cards in `review` for final validation. User-triggered only.
+- **`claude-organizer`** — the entry point: what the board is, which skill to use, and how to bind the repo to its project (record `projectId` + the auth flag in `CLAUDE.md`).
+- **`plan`** — turn a new demand into sprints/histories/tasks (auto-triggers when you describe something to build). All card creation goes through here.
+- **`implement`** — execute existing cards through a mandatory per-card lifecycle (in_progress → implement → review → commit), single-card or as a multi-card run (story/sprint) in two modes — review each card, or run the whole batch autonomously. It fires a fresh-subagent review (the `reviewer` agent) before each card closes, and a story-level review when a story's last child finishes. Auto-triggers when you start building a specific card.
 
-The "never assume — resolve open decisions" doctrine is carried **inline** in each skill that uses it (`plan`, `implement` and `autopilot`), so each skill is self-contained.
+The review runs in a read-only **`reviewer`** subagent dispatched by `implement` (there is no separate review skill). The "never assume — resolve open decisions" doctrine is carried **inline** in `plan` and `implement`, so each skill is self-contained.
 
 Let the skills drive. **What** to do (active sprint, cards, backlog, comments, docs) is the source of truth and lives **in the MCP**, not here — query it via `mcp__claude-organizer__*`. Don't duplicate state into this file.
 

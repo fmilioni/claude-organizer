@@ -6,7 +6,7 @@
 
 Claude Organizer gives Claude Code a real project-management system — cards, sprints, comments and docs — as **queryable state over MCP**, instead of spec Markdown files that grow without bound and go stale. A clean Nuxt UI mirrors the same board for humans, in real time.
 
-It ships as a **Claude Code plugin** (five skills + the MCP server), backed by a pnpm monorepo you run with Docker — one command delivers the skills *and* registers the MCP, no `claude mcp add`.
+It ships as a **Claude Code plugin** (three skills + the MCP server), backed by a pnpm monorepo you run with Docker — one command delivers the skills *and* registers the MCP, no `claude mcp add`.
 
 <br/>
 
@@ -116,25 +116,23 @@ Each server gets its own tool prefix (the bundled plugin board is `mcp__plugin_c
 
 ## Usage
 
-**You drive everything through one skill** — the main `claude-organizer` command — and it routes to plan / implement / autopilot for you. No five entry points to learn:
+**You drive everything through one entry point** — the main `claude-organizer` command — and it routes to plan / implement for you:
 
 ```text
 /claude-organizer:claude-organizer plan github authentication
 /claude-organizer:claude-organizer implement task CO-123
-/claude-organizer:claude-organizer implement story CO-127 on autopilot
+/claude-organizer:claude-organizer run story CO-127 all at once
 ```
 
-Pass it your intent in plain language (any language) and it picks the right skill. The five skills behind it:
+Pass it your intent in plain language (any language) and it picks the right skill. The three skills behind it:
 
 | Skill | What it does | Triggers when… |
 | --- | --- | --- |
-| **`claude-organizer`** | Orient & operate the board: read the active sprint, unread comments, keep statuses honest, write docs. | the start of any session — *"let's continue", "what's next?"* |
+| **`claude-organizer`** | The entry point: what the board is, which skill to use, and binding the repo to its project (record `projectId` + auth flag in `CLAUDE.md`). | you reference the board — *"let's continue", "what's next?"* |
 | **`plan`** | Turn a fuzzy new demand into structured work (sprint → stories → tasks), get the design approved, then create the cards. | you describe something new to build, before it's broken down. |
-| **`implement`** | Execute one existing card through its lifecycle: `in_progress` → read comments → implement → review → commit → `done`. | you start/resume work on a specific card — *"work CO-42", "build it"*. |
-| **`review`** | A mandatory review gate (per-task + story-level), run by a fresh subagent: checks acceptance criteria, hunts bugs/security/reuse. | a task or story's last task just finished (fired by `implement`). |
-| **`autopilot`** | Run a whole story, sprint, or set of cards hands-off: a lean orchestrator dispatches a fresh subagent per card (implement → review → fixes), stops to ask you on every decision, commits one-per-card on a single branch, and leaves each card in `review`. | you explicitly opt into an autonomous multi-card run — *"run the sprint by yourself"*. |
+| **`implement`** | Execute existing cards through their lifecycle (`in_progress` → implement → review → commit), single-card or a multi-card run (story/sprint) in two modes — review each card, or run the whole batch autonomously. Fires a fresh-subagent review before each card closes. | you start/resume work on a specific card or ask to run a story/sprint — *"work CO-42", "run the sprint"*. |
 
-A fresh session has no memory, so it always reads the board before touching code: it picks the top card, moves it to `in_progress`, implements it, records decisions as comments, runs the review gate, then moves it to `review` for you. Autopilot does the same per card across a batch — but **stops to ask you on every real decision** and never merges (no PR), leaving each card in `review` for your final validation.
+For a multi-card run, `implement` asks how to drive it: **review each card** (stop for your validation between cards) or **run it all at once** (execute the batch autonomously). In both modes it commits one-per-card on the git flow you agree, runs the review gate (and a story-level review when a story's last child finishes), and leaves each card in `review` for your final validation — it never merges on its own (no PR unless you ask). The review itself runs in a read-only **`reviewer`** subagent dispatched by `implement`.
 
 ### Inbox
 

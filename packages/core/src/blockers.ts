@@ -96,8 +96,8 @@ export async function removeBlocker(
 /**
  * For each card id, how many of its blockers are still pending — neither `done`
  * nor `review`. A blocker in `review` counts as satisfied: its work is built and
- * only awaits final validation, so it no longer blocks dependents (an autopilot
- * run leaves cards in `review`, never `done`, and would otherwise stall).
+ * only awaits final validation, so it no longer blocks dependents (a batch run
+ * leaves cards in `review`, never `done`, and would otherwise stall).
  */
 export async function pendingBlockerCounts(db: Database, cardIds: string[]) {
   const map = new Map<string, number>()

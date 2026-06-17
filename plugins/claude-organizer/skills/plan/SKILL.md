@@ -1,139 +1,87 @@
 ---
 name: plan
-description: Use to turn a NEW fuzzy demand — a feature, a change, a fix — into structured work in claude-organizer (sprints, stories, tasks). Trigger whenever the user describes something new to build before it's broken down, asks to plan/organize the work, or asks to CREATE A CARD (or several) — card creation always runs through this skill, never a direct create_card call. A task that lives in an external tracker is also a planning input — re-map it into card(s) here, don't execute it. Even a single obvious card goes through here. This is PLANNING, not execution — do NOT write code here.
+description: Use to turn a NEW demand — a feature, a change, a fix — into structured work in claude-organizer (sprints, stories, tasks). Trigger whenever the user describes something new to build before it's broken down, asks to plan/organize work, or asks to CREATE A CARD — card creation ALWAYS runs through this skill, never a direct create_card. This is PLANNING, not execution — do NOT write code here.
 ---
 
-# Planning a demand into sprints, histories and tasks
+# Planning a demand into cards
 
-Turn an idea into well-formed work through collaborative dialogue, then materialize it as **cards in claude-organizer**. The artifact is the **cards in the MCP** — not a spec file. Execution happens afterwards via the **`implement`** skill, card by card, with the user validating.
+Turn a demand into well-formed work through dialogue with the user, then materialize it as **cards in claude-organizer**. The artifact is the cards in the MCP — not a spec file. Execution happens afterwards, card by card, via the **`implement`** skill.
 
-<SKILL-GATE>
-**Load the `claude-organizer` panorama first.** This skill assumes you are oriented on the board. If you have **not** already loaded the **`claude-organizer`** skill in this conversation, invoke it now (Skill tool) and run its start-of-session orientation **before** anything below. If it is already loaded in this conversation, don't reload it — just continue. Don't enter this skill cold.
-</SKILL-GATE>
-
-<HARD-GATE>
-Do NOT write code, scaffold, edit files, or take any implementation action until you have presented the organization (the plan) and the user has approved it. This applies to EVERY demand regardless of perceived simplicity — "too simple to plan" is exactly where wrong assumptions get baked in. The plan can be short, but you MUST present it and get approval.
-</HARD-GATE>
+**Hard rule:** do NOT write code, scaffold, or edit files until the user has approved the plan. Holds for every demand — "too simple to plan" is exactly where a wrong assumption gets baked in. The plan can be short, but you must present it and get approval.
 
 ## Flow
 
-Run these steps in order, none skipped — the approval, self-review, and user-look gates are not optional.
+Run in order; the never-assume, approval and self-review steps are not optional.
 
-1. **Orient.** Read the current state first: `list_projects` → `get_active_sprint` → `list_unhandled_comments` → `list_cards` (and, when planning the **inbox**, `list_inbox` for the pending demands you'll convert). Then scan the **docs tree** (Modules / Decisions / Notes) and read what's relevant to the demand's area — a past decision or a note can change the design, and modules tell you how the area already works. Don't read everything; glance and decide. Know what exists before proposing anything.
-2. **Understand & surface decisions.** Two kinds of unknown block a well-formed card; resolve both _with the user_ before creating anything. The **method** for surfacing them — ready-made options with trade-offs and a recommendation, one topic per message, chaining — lives in _Surfacing decisions, not assuming them_ below; in planning terms the two kinds are:
-   - **Ambiguities** — what the user actually wants: goal, scope, constraints, edge cases, what "done" looks like.
-   - **Decisions** — open choices with more than one reasonable path (runtime/language, which API or library, auth model, session strategy, storage…). Never pick one silently — surface each as **ready-made options** the user chooses from.
-   - **The brief is usually incomplete — hunt the gaps, don't fill them silently.** **Actively map** what's probably missing (goal edges, who/when, error and empty states, scale, permissions, what happens to existing data…) and surface each as a question. Keep the framing **general** — don't invent concrete specifics the user didn't raise (that biases the plan).
-   - **From the inbox** — when the demand(s) come from `list_inbox` (pending), treat **each demand as raw input** to this step: one may become a single task, a story, or several cards. The never-assume rule is unchanged.
+1. **Understand the demand.** If the user describes **several independent systems** (e.g. a chat platform + storage + billing + analytics), stop and tell them to plan **one module at a time** — propose a sequence and start with the first. Don't try to plan all of them at once.
+2. **Explore the context.** Find the project (binding in `CLAUDE.md` → `projectId`; `list_projects` only if missing). Then read what's relevant: `search_docs` / docs tree for decisions and module knowledge, `search_cards` and the `todo`/`backlog` cards, and project files. Know where this demand fits and what already exists before proposing anything.
+   - **Extend, don't stack.** If the demand only **extends a not-yet-started card** (`todo`/`backlog`), update that card (after approval) instead of creating a duplicate. Once a card is `in_progress` it's locked → the demand becomes its own card. Unsure it's the same deliverable? Ask.
+3. **Remove every doubt.** Make it unambiguous *what* is being built — goal, scope, constraints, acceptance criteria. Two things to resolve, both **with the user** (see _Never decide alone_):
+   - **Ambiguities** — what the user actually wants.
+   - **Missing pieces** — a brief is almost always incomplete (asks for login but never says which hash; asks for a list but never says empty/error states). **Hunt the gaps and raise them** — don't fill them silently.
+4. **Present the design for approval.** Once doubts are gone, lay out what will be built — section by section, organized. A direct demand: a few sentences. A complex one: ~200–300 words. Where there's a real fork, offer 2–3 approaches with their trade-offs, your **recommendation and why**. Be ready to go back and refine any section that doesn't land. Revise until the user approves — only then create anything.
+5. **Create the cards** (see _Writing a card_ and _Card mechanics_). Break the work into **deliverable, testable cards** and pick the shape: a **single card**, a **story + tasks**, or a **sprint + stories + tasks** — by size and cohesion (see _Where the work lives_); suggest one and say why.
+6. **Self-review** the cards with fresh eyes (see _Self-review_); fix inline.
+7. **Present the final set** — each card's key + one line, grouped by story — for a last look, then hand off: execution proceeds via **`implement`**, card by card, with the user validating each.
+8. **Close the inbox loop.** If you planned demands from the inbox, call `mark_inbox_planned(id, cardKeys[])` for each (a discarded demand isn't marked — drop it, asking the user to `archive_inbox` or `destroy_inbox`). Then **re-check `list_inbox` (pending) fresh** — the user may have dropped something while you planned; if a pending demand isn't covered, offer once to plan it now.
 
-   **One topic per message**; prefer multiple-choice (open-ended is fine for ambiguities). Keep going until nothing remains that would materially change what gets built. It's far cheaper to ask now than to bake a wrong assumption into a card executed blindly later.
-3. **Organize (propose).** Decide the shape of the work and present it with your reasoning (see _Where the work lives_):
-   - **single task** — one coherent, testable deliverable. May live on the board with no sprint (a standalone task) or sit in the backlog for later.
-   - **history (story) + tasks** — a cohesive feature split into a few testable deliverables.
-   - **sprint + histories + tasks** — a large, cohesive effort worth isolating.
+## Never decide alone
 
-   **Before materializing a new demand, sweep the `todo`/`backlog` cards for deliverable overlap** (on a large board, `search_cards` finds candidates instead of paging the whole list). If the new demand only **extends a not-yet-started card**, update it (in step 5, after approval) instead of stacking a separate "fix" card; once the card is `in_progress` it's locked, so the demand becomes its own card. If unsure it's the same deliverable, ask the user. _Example:_ "dark mode" then later "detect the system theme" — both the same deliverable, so fold the second into the dark-mode card while it's still in `todo`/`backlog`; if it has already left `todo`, open a new card.
-4. **Get approval.** Present the proposed structure (and, when useful, 2–3 approaches with a recommendation). Revise until the user approves. Only then create anything.
-5. **Create in the MCP.** Materialize the approved structure: `create_sprint` (if needed) → histories (cards) → tasks (cards, with `parentId` for a history's children). Create cards in **dependency order** — a task before the ones that depend on it — so a card you need to reference already has its key. Wire dependencies with blockers when one task must precede another. **Tag every task you create** (see the tagging rule in the `claude-organizer` skill): attach the tags that fit; if none fit, suggest new tag(s) and ask the user before creating them.
-   - **Tasks live only as cards — never as a list in prose.** A history's `descriptionMd` describes the _history_: its goal, scope and decisions. It does **not** enumerate its tasks. The tasks ARE the child cards (`parentId`), and the board already shows them nested under the history. Re-listing them in the body creates a second, drifting copy and invites positional references like `CO-46.1` ("task 1 of the history") instead of the card's real key.
-   - **No positional prefix in task titles.** Name each task by its **content alone** — never `T1`, `T1.1`, `CO-46.1`, `H3 ·`. The board already numbers and groups tasks under their story; a manual index drifts the moment order changes.
-   - **Cross-reference by the card's real key, written in full.** When one card points at another — a dependency, a follow-up — use the key the MCP assigned (e.g. `CO-51`, `CO-53, CO-54` not a range like `CO-53/54`), which auto-links. Never a positional alias (`CO-46.1`, "task 1"): it links to nothing. This is why you create in dependency order — so the real key exists when you write the reference.
-   - **Reference a doc as a link, never a bare id or a plain title.** When a card's description cites a doc, write it as `[Doc title](/docs?doc=<id>)` (the doc's `doc_…` id) — a doc id is opaque, so a bare id or an untitled/plain-text `[Title]` tells the reader nothing. The full rule lives in the **`claude-organizer`** skill (_Reference a doc as a link_).
-   - **Give every card a concise `summary` — it's required on creation.** Each `create_card` carries a one-line `summary` (~100 chars) saying _what_ the card is about, written with the signal-vs-noise criterion — no noise. `create_card` **rejects a missing/blank/whitespace-only summary** (and `write_doc` does the same on doc creation), so never leave it off: it's what shows on the board and in `list_cards`.
-   - **Set `priority` as the card's value — on every card.** `priority` (0–10) is value, not order; order is `position` (step 7). Assign it as you create each card instead of leaving the default `0`. Rough scale: **8–10** the core value the sprint exists for, **4–7** solid supporting work, **1–3** nice-to-have/polish — and **spread the cards across the range** rather than stamping them all the same number, or the signal is lost. (Board order is `position` ASC, then `priority` DESC as a tiebreak.)
-6. **Self-review the cards with fresh eyes** — see _Self-review_ below; fix inline.
-7. **Order the board (reorder).** Once the set of cards and their sequence are final, call **`reorder_cards`** once with **every created card id in reading order**; it writes `position = 0,1,2,…` so the board shows the cards top-to-bottom in execution order, independent of how or when each was created.
-   - **Reading order, grouped by story:** each story (parent card) immediately followed by its children in execution order, then the next story; standalone cards slotted at their right point. The board renders the parent as an envelope and ranks each story block by the **lowest `position` among its children**, so monotonic positions in reading order place every block correctly (the parent's own `position` is harmless — still pass its id).
-   - Worth running even for a single batch of standalone tasks — one call that makes the order explicit instead of leaning on the creation-time fallback.
-8. **Close the inbox loop (when planning from the inbox).** Once the cards exist and are ordered, call **`mark_inbox_planned(id, cardKeys[])`** for **each converted demand**, passing the **real keys** of the cards it produced (one demand may map to several keys; auto-linked in the web). A demand the user **discarded** — it became no card — is **not** marked planned; instead **drop it yourself**, asking the user whether to **archive** it (`archive_inbox` — recoverable, the suggested default) or **destroy** it (`destroy_inbox` — gone for good). Don't leave a discarded demand pending "for the user to handle from the web".
-9. **Re-check the inbox before handing off.** New demands can land **while you plan** — the user captures something after your step-1 orientation. So before the hand-off, re-run **`list_inbox`** (pending) and compare it against what this session planned (and, when planning from the inbox, the demands you marked in step 8). If a pending demand is left that this plan didn't cover, **surface it and offer to plan it now** — a single offer, don't nag. Applies to every planning flow, not only inbox-driven ones.
-10. **Present for review, then hand off.** Show the user the final card set (each card's key + one line, grouped by story) for a last look before execution — the cards are the artifact, so let the user catch a wrong call while it's still cheap to change. Apply any change inline. Then hand off: execution proceeds via the **`implement`** skill, card by card (`in_progress` → read comments → implement → review → commit → done), with the user validating each card, and the **`review`** skill's gate (per-task + story-level) before work closes.
+Any ambiguity or open choice goes to the **user** — never pick one silently. This is the core of planning.
 
-## Surfacing decisions, not assuming them
+- **Ambiguity → a direct question.** **Decision** (more than one defensible path: runtime, library, auth model, hashing, storage…) **→ ready-made options**, never "what do you think?": each option concrete, with its trade-offs.
+- Use `AskUserQuestion`: **one question at a time**, the **recommended option first** with `(Recommended)` in its label (in the user's language, e.g. `(Recomendado)`), 3+ options when useful.
+- **Chain** the unknowns — settle the earlier one first; it narrows the next.
+- **Research** when knowledge alone won't yield good options (which library, its free tier, trade-offs), then present what you found.
+- Before asking, **check what's already settled** (a doc decision, an existing card, the demand's text) — don't re-litigate it.
+- Stop at the choices that shape the **card** (the *what*). Decisions internal to the build belong to `implement`, not here.
 
-A demand almost always hides choices with more than one defensible answer. The wrong move — and the easy one — is to silently pick one and bake it into a card; that's a decision made _for_ the user instead of _by_ them. Surface it. This holds even for demands that look trivial: "too simple to have decisions" is exactly where a silent assumption slips in.
+## Record what's decided — card always, docs when durable
 
-The **method** for surfacing a decision:
+Don't let a decision live only in the chat — it's gone next session.
 
-- **Ambiguity → a direct question** (open-ended where that fits). **Decision → ready-made options**, never "what do you think?": each option concrete and worked out, with its **trade-offs**. Mark the recommended option in its label (the *why* may go in the description), list it first, in the user's language (e.g. `(Recommended)`, `(Recomendado)`) — what `AskUserQuestion` expects. That serves both the user who takes the recommendation and the one who knows enough to choose differently.
-- **One topic per message**; prefer multiple-choice via the `AskUserQuestion` tool.
-- **Unknowns chain** — settle the earlier one first; it narrows the next. Example chain: "get the current temperature" hides *how to access it* (Node/Python/shell) then *which weather API* (free tier, accuracy, rate limits); "build an auth system" hides OAuth-or-not, identity providers, session as token or cookie, hashing algorithm, and so on.
-- **Research when knowledge alone won't yield good options** (which library exists, its free tier, trade-offs), then present what you found.
-- **State the approach before building** — say in plain terms what you're about to do, so the user can catch a wrong assumption *before* it's baked into a card; don't disappear and return with the choices already made.
+- **Every decision the user settles goes into the originating card.** Fold each answer into the card it concerns — its **Decisions** section (or the story's body for a story-wide call) — *before* creating it, so the executor reads a card that's already decided. This is also how you save the user's decisions **upfront**: a choice settled during planning is baked into the card, not re-asked at execution time.
+- **A durable / architectural decision also becomes an `adr` doc.** When a choice has more than one defensible path and shapes how the system is built **beyond this one card** (a library/runtime, a data-model call, a naming/convention, a security/auth approach), write or update an `adr` (Context · Decision · Consequences, terse, with the *why*) under Decisions — not just the card. Prefer updating an existing doc over a duplicate; reference it as `[Doc title](/docs?doc=<id>)`. Card-local decisions stay only on the card; cross-cutting ones live in the docs so the next demand reuses them instead of re-deciding.
 
-Before you ask, **check what's already settled** — a past decision in the docs, an existing not-yet-started card, the demand's own text — and don't re-litigate a settled call.
+## Writing a card
 
-**What's specific to planning: these are the decisions that shape the _card_ — the _what_, not the _how_.** Stop at the choices needed to write a well-formed card, and fold each answer into the card before creating it. The implementation may surface further decisions later; those belong to execution (the `implement` skill), not here. Don't drift into designing the code.
-
-## Granularity — Scrum, adapted for full-IA execution
-
-This is executed **full-IA with the user's review and validation**. Think in real Scrum terms, adapted to "the AI defines and executes". **A task is a deliverable the user can test** — not a micro-step.
-
-Example — "CRUD for customers":
-
-- a **history**: "Customer registration"
-- **tasks**: list customers · create customer · edit customer · delete customer
-
-Each task is independently buildable and testable. If the whole thing is trivial, make it **a single task**. Don't over-split into "write the failing test" micro-steps (that's execution detail, not planning), and don't under-split "the whole feature" into one opaque blob. Judge by what delivers something the user can actually exercise.
-
-## Writing a task so it can be executed
-
-Write each task so a developer — or a fresh agent with **zero chat context** — can read it, understand it, and execute it correctly. Use sections as needed (not all are always required, but it must be clear how to execute):
+Write each card so a fresh agent with **zero chat context** can execute it from its contents alone. Describe **behavior and intent, not code** — never write the implementation (naming a real endpoint/table is fine; function bodies aren't), unless it's a real constraint or an already-diagnosed bug. Use the sections that fit:
 
 - **Objective** — what and why.
-- **Expected behavior** — user-visible behavior and rules.
-- **Acceptance criteria** — how to know it's done.
-- **Decisions** — what was settled during clarification.
-- _(as needed)_ constraints, out-of-scope, references, links.
+- **Acceptance criteria** — how to know it's done (concrete, testable — not "add validation").
+- **Expected behavior**, **Decisions** settled during clarification, and constraints / out-of-scope / references _as needed_.
 
-**An image in the source is carried into the card, not just described.** When the demand arrives with an image — an inbox item with a screenshot, a pasted mockup — open it (`ReadMcpResource attachment://<id>`; the `uri` and the `id` are in the payload's `attachments` array) to grasp what it shows, then **embed it in the card it belongs to**: write `![<short description>](/attachments/<id>)` into that card's `descriptionMd`, using the attachment's own `id` (`att_…`) and mapping each image to its right card/section (the editor screenshot on the editor card, the per-modal mockup on the modal card). You **reuse the file already stored in the project by reference** — the same `att_…` renders in the card. The **`alt` text is the searchable description** — make it specific (`![the misaligned toggle in the editor toolbar](…)`), so the card is found by words alone and a fresh executor knows what it depicts before opening the pixels. Embedding is the default; describing in prose without the image is not enough.
+The test: *could a fresh session build this from the card alone?* If not, it's underspecified — keep refining.
 
-Describe **behavior and intent, not code**. Do **not** write the implementation or hard-prescribe _how_ to build it — the executor decides that — **unless** it's a real constraint or an already-diagnosed bug (then being specific is correct). Naming a real endpoint/table/file is fine; writing function bodies is not.
+## Where the work lives — card, story, or sprint
 
-The test: _could a fresh session execute this task using only its contents?_ If not, it's underspecified — keep refining (go back to the user if needed).
+A card needs no sprint to be worked. Three independent calls:
 
-## Where the work lives — sprint, story, or a standalone task
+- **Sprint or not** — a large, cohesive effort worth isolating → its own **sprint**; a small one-off → **standalone card(s)** on the board; fits what's underway → the **active sprint**.
+- **Story or not** — a feature that splits into several testable deliverables → **story + tasks**; one coherent deliverable → **one card**.
+- **Now or later** — worked now → the board; parked → the `backlog`.
 
-A card doesn't need a sprint to be worked. A sprint-less card in a board status (`todo`…`done`) lives on the **board** on its own; a sprint-less card in the `backlog` status sits in the **backlog**. So choosing the shape is three independent questions:
+When in doubt, suggest a placement and say why; don't silently pick.
 
-- **Open a sprint, or not?** A large, cohesive effort worth isolating → its own **sprint**. A small, one-off demand (a handful of quick tasks) → **standalone task(s)** on the board, no sprint. Something that fits what's already underway → the **active sprint**.
-- **Group under a story, or not?** A cohesive feature that splits into several testable deliverables → a **story (history) + tasks**. A single coherent deliverable → **one task**.
-- **Now, or later?** Worked now → the board (active sprint or standalone). Parked for later → the **backlog** (status `backlog`) or a **future sprint**.
+## Card mechanics
 
-Judge by size and cohesion, not habit. **When in doubt, suggest** a placement — and say why — then confirm with the user; don't silently pick one.
+- **Create in dependency order** so a card's real key exists before another references it. Wire hard dependencies with **blockers**.
+- **`summary`** — required, one line (~100 chars), what the card is about, no noise.
+- **`priority`** — set it as the card's **value** (0–10) on every card: 8–10 core, 4–7 supporting, 1–3 polish; spread them, don't stamp the same number. (Board order is `position` then `priority`.)
+- **Tag every card** — area/layer (`web`, `api`, `mcp`) or type (`bug`). No fitting tag → suggest new one(s) and ask before creating.
+- **Title by content alone** — no positional prefix (`T1`, `CO-46.1`); the board numbers and groups for you.
+- **Cross-reference by the real key, in full** — `CO-53, CO-54` (auto-links), never a range `CO-53/54` or a positional alias.
+- **A story's body describes the story** — goal, scope, decisions. It does **not** list its tasks; the tasks are the child cards (`parentId`).
+- **Reference a doc as a link** — `[Doc title](/docs?doc=<id>)`, never a bare id.
+- **Carry images into the card** — when the demand arrives with an image (inbox screenshot, mockup), open it (`ReadMcpResource attachment://<id>`) to grasp it, then embed it in the right card: `![<specific description>](/attachments/<id>)` (reuse the existing `att_…` by reference). The `alt` is what search finds — make it specific.
+- **`reorder_cards` once at the end** — pass every created card id in reading order (each story followed by its children, standalones slotted in) so the board shows execution order.
 
-## A task from an external tracker is a planning input
+## Self-review
 
-When the user asks to **implement a task that lives in another tracker** — a company issue tracker, a board in a different tool — that request is a **planning input, not a trigger for `implement`**. The external board's granularity rarely matches ours: a "task" there may be a **story** here (several deliverables) or part of a **sprint**, and our flow (self-sufficient card, resolved decisions, review gate, lifecycle) needs a **local card** to run against — without one, `implement` runs blind. So the demand enters here, through `plan`:
+After creating, read the cards back as if you didn't write them — fix every issue inline (adjust, split, merge, drop), then move on. Light for one card; thorough for a large set. Check:
 
-- **Treat the external task as a raw demand** — like an inbox item or any new demand: understand it, then **dimension** it (single task, history + tasks, or a sprint — see _Where the work lives_), surface decisions, get approval, then create the card(s).
-- **Capture the origin reference.** Record the external id/title in the card's description or summary so the work traces back to its source; don't invent a positional alias for it.
-- **A restriction from the source is a constraint, not prescribed code.** The _behavior and intent, not code_ rule still holds (see _Writing a task_). But when the external task **imposes** something concrete — "use library X", "hit endpoint Y", "follow contract Z" — that isn't writing code in the description, it's a **real constraint**: fold it in as an **acceptance criterion / decision** (the same exception that lets a card be specific for a real constraint or an already-diagnosed bug). Outside such constraints, don't prescribe the _how_ — the executor decides.
-
-Keep the language **generic** — describe the mechanism (an external tracker), never name a specific product.
-
-## Self-review — read the cards back with fresh eyes
-
-After creating the cards, review them yourself before the user ever looks — a checklist **you** run (not a subagent dispatch), with fresh eyes, as if you were a reviewer who didn't write them. This is the gate step 6 enforces. Fix every issue **inline** — adjust, split, merge or drop cards — then tell the user what you changed; no need to re-review your own pass, just fix and move on to presenting the set to the user (step 10). Scale to scope: light for a single task; **mandatory and thorough for a large scope** (multiple sprints, dozens of cards), where a card most easily comes out thin.
-
-Run these checks card by card, then across the whole set:
-
-1. **Placeholder / red-flag scan** — no `TBD`/`TODO`, no half-written section, no vague acceptance that says nothing ("add validation", "handle edge cases", "appropriate error handling"). No "similar to CO-X" standing in for the actual constraint — write the constraint out. No reference to a card/key that doesn't exist.
-2. **Coverage** — walk the demand and point each part to a card that delivers it; list any gap and close it (add or adjust a card).
-3. **Self-sufficiency** — each card passes the memoryless-session test (_Writing a task_): a fresh agent with zero chat context could execute it from its contents alone, and it stays a **usable, testable deliverable** — not a micro-step.
-4. **Pending decisions** — did an open choice slip through unsettled? Surface it to the user, then fold the answer into the card.
-5. **Consistency & coherence** — cards don't contradict each other; dependency order holds (no card depends on one ordered after it); no gap or overlap between cards; every cross-reference uses the real card key; names and terms line up across cards (a table called `customer` in one card and `client` in another is a bug).
-6. **Scope & objective** — step back to the whole: does the set actually achieve the objective the user set? YAGNI — cut a card that doesn't serve the goal. Right granularity — neither over-split into micro-steps nor an opaque blob.
-7. **Order** — settle the intended top-to-bottom execution/reading order now; step 7 writes it to the board.
-
-## Key principles
-
-- **One question at a time** — don't overwhelm.
-- **Surface decisions, don't assume them** — every meaningful choice goes to the user as ready-made options with trade-offs and a recommendation, before the card exists.
-- **Assume the brief is incomplete — hunt the gaps** — a demand almost always omits things the user wanted but didn't think to state. Actively map the probable gaps and **ask**; never silently fill them in. The decision stays the user's.
-- **Extend, don't stack** — a new demand that extends a **not-yet-started** card (`todo`/`backlog`) updates that card instead of spawning a redundant "fix"; once the card is `in_progress` or beyond, it's locked and the demand becomes its own card.
-- **Remove ambiguity before creating** — a decision that lives only in chat is lost; bake it into the card.
-- **Approve before executing** — the hard gate above.
-- **Self-review with fresh eyes** — before handing off, read every card back as if you didn't write it (placeholders, coverage, self-sufficiency, pending decisions, consistency, scope) and fix inline; mandatory for large scopes. The cards are usable, testable deliverables — keep them that way.
-- **YAGNI** — cut features that don't serve the goal.
-- **Self-sufficient cards** — each must survive a memoryless future session.
+- **Coverage** — every part of the demand maps to a card; no gap.
+- **Self-sufficiency** — each card passes the memoryless-session test and stays a testable deliverable, not a micro-step. No placeholder / vague acceptance / reference to a card that doesn't exist.
+- **Pending decisions** — no open choice slipped through unsettled.
+- **Consistency** — cards don't contradict each other; dependency order holds; terms line up (a `customer` table in one card and `client` in another is a bug).
+- **Scope** — the set actually achieves the user's objective; YAGNI — cut a card that doesn't serve the goal.
