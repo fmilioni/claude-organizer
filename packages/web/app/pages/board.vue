@@ -1,14 +1,18 @@
 <script setup lang="ts">
 import { useProjectStore } from '~/stores/project'
-import type { CardStatus } from '~/types/card'
+import type { Card, CardStatus } from '~/types/card'
 
 type SprintFilter = 'all' | 'sprint' | 'loose'
 
 const store = useProjectStore()
 const { currentProject, currentProjectId } = storeToRefs(store)
 const api = useApi()
+const { capabilities, ensureCapabilities } = useAuth()
 
 useHead({ title: 'Board' })
+onMounted(() => {
+  ensureCapabilities()
+})
 
 const { data: activeSprint, refresh: refreshSprint } = useActiveSprint(
   () => currentProjectId.value
@@ -24,6 +28,7 @@ const { editing, saving, justSaved } = useSprintInlineEdit(
 const { cards, load: loadCards } = useBoardCards(currentProjectId, activeSprint)
 const selectedTagIds = ref<string[]>([])
 const sprintFilter = ref<SprintFilter>('all')
+const showHidden = ref(false)
 
 const sprintFilterOptions: { value: SprintFilter, label: string }[] = [
   { value: 'all', label: 'All' },
@@ -47,11 +52,22 @@ useProjectData(currentProjectId, loadCards, {
   }
 })
 
-// Cards shown in the status columns: sprint cards (any status) plus loose cards
-// in any board status, including `done` (a loose done card stays on the board
-// until archived). Only `backlog` (peek-only) is excluded. Narrowed by the
-// sprint-presence and tag filters. Story envelopes/grouping live in <BoardColumns>.
-const columnCards = computed(() => {
+const DAY_MS = 86_400_000
+
+// A loose (sprint-less, parent-less) done card past the configured age drops off
+// the board — view only, it stays active and visible to search/MCP. Sprint cards,
+// story sub-tasks and active loose cards are never affected. `days = 0` hides it
+// as soon as it's done.
+function isStaleLooseDone(c: Card): boolean {
+  if (!capabilities.value?.hideLooseDoneEnabled) return false
+  if (c.sprintId || c.parentId || c.status !== 'done' || !c.doneAt) return false
+  const days = capabilities.value.hideLooseDoneAfterDays
+  return Date.now() - new Date(c.doneAt).getTime() >= days * DAY_MS
+}
+
+// Status-column cards: everything but `backlog` (shown only in the peek below),
+// narrowed by the sprint and tag filters.
+const filteredCards = computed(() => {
   let list = cards.value.filter(c => c.status !== 'backlog')
   if (sprintFilter.value === 'sprint') list = list.filter(c => c.sprintId)
   else if (sprintFilter.value === 'loose') list = list.filter(c => !c.sprintId)
@@ -61,6 +77,18 @@ const columnCards = computed(() => {
   }
   return list
 })
+
+// Stale loose done cards among those that pass the other filters — so the toggle
+// count matches exactly what "Show hidden" reveals.
+const hiddenCount = computed(
+  () => filteredCards.value.filter(isStaleLooseDone).length
+)
+
+const columnCards = computed(() =>
+  showHidden.value
+    ? filteredCards.value
+    : filteredCards.value.filter(c => !isStaleLooseDone(c))
+)
 
 // The backlog peek: sprint-less cards still in the `backlog` status.
 const backlogCards = computed(() =>
@@ -160,6 +188,14 @@ async function onMoveToBacklog(cardId: string) {
           :ui="{ base: 'text-sm text-muted !px-0 resize-none' }"
         />
         <div class="flex items-center justify-end gap-2 shrink-0">
+          <UButton
+            v-if="hiddenCount > 0"
+            :label="`Show hidden (${hiddenCount})`"
+            :icon="showHidden ? 'i-lucide-eye-off' : 'i-lucide-eye'"
+            color="neutral"
+            :variant="showHidden ? 'subtle' : 'ghost'"
+            @click="showHidden = !showHidden"
+          />
           <USelectMenu
             v-if="activeSprint"
             :model-value="sprintFilter"
