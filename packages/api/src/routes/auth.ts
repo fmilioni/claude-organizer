@@ -111,6 +111,8 @@ export function registerAuthRoutes(
       keepDiffsOnArchive: settings.keepDiffsOnArchive,
       keepAttachmentsOnArchive: settings.keepAttachmentsOnArchive,
       includeAttachmentsInBackup: settings.includeAttachmentsInBackup,
+      hideLooseDoneEnabled: settings.hideLooseDoneEnabled,
+      hideLooseDoneAfterDays: settings.hideLooseDoneAfterDays,
       embedding: {
         model: embedding.model,
         dim: embedding.dim,

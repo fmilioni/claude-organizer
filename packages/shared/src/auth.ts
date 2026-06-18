@@ -27,6 +27,9 @@ export interface AuthCapabilities {
   keepAttachmentsOnArchive: boolean
   // true (default) = include attached image bytes in a backup envelope.
   includeAttachmentsInBackup: boolean
+  // true (default) = auto-hide loose done cards from the board (view only).
+  hideLooseDoneEnabled: boolean
+  hideLooseDoneAfterDays: number
   // Effective embedding config (persisted choice > env > default). `model: null`
   // ⇒ semantic search off (lexical-only); `dim`/`dtype` are always set.
   embedding: {

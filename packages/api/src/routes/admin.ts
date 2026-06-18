@@ -10,6 +10,7 @@ import {
   getSystemSettings,
   listAllUsers,
   setAuthEnabled,
+  setHideLooseDone,
   setIncludeAttachmentsInBackup,
   setKeepAttachmentsOnArchive,
   setKeepDiffsOnArchive
@@ -29,7 +30,9 @@ const settingsBody = z
     authEnabled: z.boolean().optional(),
     keepDiffsOnArchive: z.boolean().optional(),
     keepAttachmentsOnArchive: z.boolean().optional(),
-    includeAttachmentsInBackup: z.boolean().optional()
+    includeAttachmentsInBackup: z.boolean().optional(),
+    hideLooseDoneEnabled: z.boolean().optional(),
+    hideLooseDoneAfterDays: z.number().int().min(0).optional()
   })
   .refine(b => Object.values(b).some(v => v !== undefined), {
     message: 'No setting to update'
@@ -80,6 +83,15 @@ export function registerAdminRoutes(app: FastifyInstance, db: Database) {
     }
     if (body.includeAttachmentsInBackup !== undefined) {
       await setIncludeAttachmentsInBackup(db, body.includeAttachmentsInBackup)
+    }
+    if (
+      body.hideLooseDoneEnabled !== undefined
+      || body.hideLooseDoneAfterDays !== undefined
+    ) {
+      await setHideLooseDone(db, {
+        enabled: body.hideLooseDoneEnabled,
+        days: body.hideLooseDoneAfterDays
+      })
     }
     return getSystemSettings(db)
   })

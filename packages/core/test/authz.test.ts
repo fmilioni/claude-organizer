@@ -27,6 +27,7 @@ import {
   resolveEntityProjectId,
   setAuthEnabled,
   setEmbeddingModel,
+  setHideLooseDone,
   setKeepDiffsOnArchive,
   setUserAuthz
 } from '../src/index'
@@ -246,6 +247,32 @@ describe('system settings', () => {
     expect(await setKeepDiffsOnArchive(ctx.db, false)).toEqual({
       keepDiffsOnArchive: false
     })
+  })
+
+  it('persists hideLooseDone (default on @ 7d) with partial PATCH and validation', async () => {
+    expect(await getSystemSettings(ctx.db)).toMatchObject({
+      hideLooseDoneEnabled: true,
+      hideLooseDoneAfterDays: 7
+    })
+
+    // Days only — enabled stays untouched; 0 is accepted.
+    expect(await setHideLooseDone(ctx.db, { days: 0 })).toEqual({
+      hideLooseDoneEnabled: true,
+      hideLooseDoneAfterDays: 0
+    })
+
+    // Enabled only — the days (0) it doesn't mention stays put.
+    expect(await setHideLooseDone(ctx.db, { enabled: false })).toEqual({
+      hideLooseDoneEnabled: false,
+      hideLooseDoneAfterDays: 0
+    })
+    expect(await getSystemSettings(ctx.db)).toMatchObject({
+      hideLooseDoneEnabled: false,
+      hideLooseDoneAfterDays: 0
+    })
+
+    await expect(setHideLooseDone(ctx.db, { days: -1 })).rejects.toThrow(InputError)
+    await expect(setHideLooseDone(ctx.db, { days: 1.5 })).rejects.toThrow(InputError)
   })
 
   it('persists embeddingModel and resolves the effective config above env', async () => {

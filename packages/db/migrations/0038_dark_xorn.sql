@@ -1,0 +1,2 @@
+ALTER TABLE "system_settings" ADD COLUMN "hide_loose_done_enabled" boolean DEFAULT true NOT NULL;--> statement-breakpoint
+ALTER TABLE "system_settings" ADD COLUMN "hide_loose_done_after_days" integer DEFAULT 7 NOT NULL;

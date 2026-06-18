@@ -201,7 +201,9 @@ const DEFAULT_SYSTEM_SETTINGS = {
   embeddingModel: null,
   embeddingDtype: null,
   includeAttachmentsInBackup: true,
-  keepAttachmentsOnArchive: false
+  keepAttachmentsOnArchive: false,
+  hideLooseDoneEnabled: true,
+  hideLooseDoneAfterDays: 7
 } as const
 
 export async function getSystemSettings(
@@ -215,6 +217,8 @@ export async function getSystemSettings(
     | 'embeddingDtype'
     | 'includeAttachmentsInBackup'
     | 'keepAttachmentsOnArchive'
+    | 'hideLooseDoneEnabled'
+    | 'hideLooseDoneAfterDays'
   >
 > {
   const [row] = await db
@@ -224,7 +228,9 @@ export async function getSystemSettings(
       embeddingModel: schema.systemSettings.embeddingModel,
       embeddingDtype: schema.systemSettings.embeddingDtype,
       includeAttachmentsInBackup: schema.systemSettings.includeAttachmentsInBackup,
-      keepAttachmentsOnArchive: schema.systemSettings.keepAttachmentsOnArchive
+      keepAttachmentsOnArchive: schema.systemSettings.keepAttachmentsOnArchive,
+      hideLooseDoneEnabled: schema.systemSettings.hideLooseDoneEnabled,
+      hideLooseDoneAfterDays: schema.systemSettings.hideLooseDoneAfterDays
     })
     .from(schema.systemSettings)
     .where(eq(schema.systemSettings.id, SYSTEM_SETTINGS_ID))
@@ -292,6 +298,43 @@ export async function setKeepAttachmentsOnArchive(
     })
     .returning({
       keepAttachmentsOnArchive: schema.systemSettings.keepAttachmentsOnArchive
+    })
+  return row!
+}
+
+export interface SetHideLooseDoneInput {
+  enabled?: boolean
+  days?: number
+}
+
+// Partial PATCH: only the provided fields are written, the other stays as-is. On
+// the first-ever insert an omitted field takes its column default (true / 7).
+export async function setHideLooseDone(
+  db: Database,
+  input: SetHideLooseDoneInput
+) {
+  if (
+    input.days !== undefined
+    && (!Number.isInteger(input.days) || input.days < 0)
+  ) {
+    throw new InputError('hideLooseDoneAfterDays must be an integer >= 0')
+  }
+  // Conditional spreads (not a loose Record) so Drizzle still type-checks the
+  // column keys: only the provided fields land in both values and the conflict set.
+  const provided = {
+    ...(input.enabled !== undefined ? { hideLooseDoneEnabled: input.enabled } : {}),
+    ...(input.days !== undefined ? { hideLooseDoneAfterDays: input.days } : {})
+  }
+  const [row] = await db
+    .insert(schema.systemSettings)
+    .values({ id: SYSTEM_SETTINGS_ID, ...provided })
+    .onConflictDoUpdate({
+      target: schema.systemSettings.id,
+      set: { ...provided, updatedAt: sql`now()` }
+    })
+    .returning({
+      hideLooseDoneEnabled: schema.systemSettings.hideLooseDoneEnabled,
+      hideLooseDoneAfterDays: schema.systemSettings.hideLooseDoneAfterDays
     })
   return row!
 }

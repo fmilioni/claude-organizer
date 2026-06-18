@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm'
-import { boolean, pgTable, text, timestamp } from 'drizzle-orm/pg-core'
+import { boolean, integer, pgTable, text, timestamp } from 'drizzle-orm/pg-core'
 
 // Singleton row (id is always 'system'): system-wide config the admin controls.
 // `authEnabled=false` is the sem-auth mode — web/API run without sessions, as
@@ -19,6 +19,9 @@ import { boolean, pgTable, text, timestamp } from 'drizzle-orm/pg-core'
 // `keepAttachmentsOnArchive=false` (default) frees attachment bytes when their
 // owner is archived and nothing active still references them (mirrors
 // keepDiffsOnArchive); ON preserves the bytes.
+// `hideLooseDoneEnabled=true` (default) auto-hides loose done cards from the
+// board `hideLooseDoneAfterDays` (default 7, min 0 = immediately) after they
+// completed; the cards stay active and MCP/search-visible (board view only).
 export const systemSettings = pgTable('system_settings', {
   id: text('id').primaryKey(),
   authEnabled: boolean('auth_enabled').notNull().default(true),
@@ -31,6 +34,12 @@ export const systemSettings = pgTable('system_settings', {
   keepAttachmentsOnArchive: boolean('keep_attachments_on_archive')
     .notNull()
     .default(false),
+  hideLooseDoneEnabled: boolean('hide_loose_done_enabled')
+    .notNull()
+    .default(true),
+  hideLooseDoneAfterDays: integer('hide_loose_done_after_days')
+    .notNull()
+    .default(7),
   createdAt: timestamp('created_at', { withTimezone: true })
     .notNull()
     .default(sql`now()`),

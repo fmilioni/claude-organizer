@@ -179,6 +179,8 @@ export interface SystemSettingsRow {
   embeddingDtype: string | null
   includeAttachmentsInBackup: boolean
   keepAttachmentsOnArchive: boolean
+  hideLooseDoneEnabled: boolean
+  hideLooseDoneAfterDays: number
   createdAt: string
   updatedAt: string
 }
