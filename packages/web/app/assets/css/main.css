@@ -8,3 +8,41 @@
 :root {
   --ui-radius: 0.125rem;
 }
+
+/* GFM task lists — clickable checkboxes, two DOM shapes share the styling:
+   the rich editor emits `ul[data-type=taskList] > li` (each item is a `<label>`
+   with the checkbox + a content `<div>`; the `<li>` carries `data-checked`, NOT
+   a `data-type`); the markdown preview (marked) emits a plain `<li>` with a
+   direct `<input type=checkbox>` child. Lives here, not in PROSE: Tailwind drops
+   arbitrary variants whose selector nests `[data-type=…]` brackets. */
+ul[data-type="taskList"] {
+  list-style: none;
+}
+ul[data-type="taskList"] > li {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+ul[data-type="taskList"] > li > label {
+  flex: 0 0 auto;
+  margin-top: 0.25rem;
+  user-select: none;
+}
+ul[data-type="taskList"] > li > div {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+ul[data-type="taskList"] > li > div > p {
+  margin: 0;
+}
+
+/* Preview (marked): a task item is a list item containing a checkbox — tight
+   (`<li><input>`) or loose (`<li><p><input>`). The editor's items carry
+   `data-checked`, so exclude them here. Drop the bullet, keep the box inline. */
+li:not([data-checked]):has(input[type="checkbox"]) {
+  list-style: none;
+}
+li:not([data-checked]) input[type="checkbox"] {
+  margin-inline-end: 0.4rem;
+  vertical-align: middle;
+}

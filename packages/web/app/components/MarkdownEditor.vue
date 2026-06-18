@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { EditorToolbarItem } from '@nuxt/ui'
+import { TaskItem, TaskList } from '@tiptap/extension-list'
 
 // Reusable markdown editor (TipTap via UEditor): the standard toolbar + shared
 // PROSE typography, so the editor matches the rendered <AppMarkdown> preview.
@@ -123,6 +124,10 @@ const editorProps = {
   }
 }
 
+// StarterKit has no task-list node, so `- [ ]` would round-trip as escaped text
+// (`\[ \]`); TaskList/TaskItem add the node + their own GFM parse/serialize.
+const extensions = [TaskList, TaskItem.configure({ nested: true })]
+
 // Array-of-arrays: UEditorToolbar draws a separator between each group.
 const toolbarItems: EditorToolbarItem[][] = [
   [
@@ -141,7 +146,8 @@ const toolbarItems: EditorToolbarItem[][] = [
   ],
   [
     { kind: 'bulletList', icon: 'i-lucide-list' },
-    { kind: 'orderedList', icon: 'i-lucide-list-ordered' }
+    { kind: 'orderedList', icon: 'i-lucide-list-ordered' },
+    { kind: 'taskList', icon: 'i-lucide-list-todo' }
   ],
   [
     { kind: 'blockquote', icon: 'i-lucide-quote' },
@@ -199,6 +205,7 @@ function toggleSource() {
       v-slot="{ editor }"
       v-model="model"
       content-type="markdown"
+      :extensions="extensions"
       :autofocus="autofocus ? 'end' : false"
       :placeholder="placeholder"
       :editor-props="editorProps"
