@@ -1000,6 +1000,9 @@ const providerIcon = computed(() =>
             <div>
               <span class="font-semibold">Updated</span>: {{ formatDate(card.updatedAt) }}
             </div>
+            <div v-if="card.doneAt">
+              <span class="font-semibold">Completed</span>: {{ formatDate(card.doneAt) }}
+            </div>
             <div class="font-mono break-all">
               <span class="font-semibold font-sans">ID</span>: {{ card.id }}
             </div>
