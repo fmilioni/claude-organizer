@@ -86,17 +86,23 @@ const savingHideDays = ref(false)
 const boardFail = 'Failed to update board setting'
 const toggleHideLooseDone = (next: boolean) =>
   updateSetting({ hideLooseDoneEnabled: next }, togglingHideLooseDone, boardFail)
-// Debounced so typing/holding the stepper doesn't POST per keystroke; skips a
-// no-op or an invalid value. UInputNumber emits null when the field is cleared.
-const saveHideDays = useDebounceFn((value: number | null) => {
+
+// Local draft drives the stepper so +/- updates instantly, decoupled from the
+// save round-trip (POST + capabilities refetch). Re-syncs if the server value
+// changes (reload, another client).
+const daysDraft = ref(hideLooseDoneAfterDays.value)
+watch(hideLooseDoneAfterDays, (v) => {
+  daysDraft.value = v
+})
+// Debounced so holding the stepper doesn't POST per click. UInputNumber emits
+// null when the field is cleared.
+const persistHideDays = useDebounceFn((value: number) =>
+  updateSetting({ hideLooseDoneAfterDays: value }, savingHideDays, boardFail), 600)
+function onHideDaysInput(value: number | null) {
   if (value === null || !Number.isInteger(value) || value < 0) return
-  if (value === hideLooseDoneAfterDays.value) return
-  return updateSetting(
-    { hideLooseDoneAfterDays: value },
-    savingHideDays,
-    boardFail
-  )
-}, 600)
+  daysDraft.value = value
+  if (value !== hideLooseDoneAfterDays.value) persistHideDays(value)
+}
 
 const embedding = computed(() => capabilities.value?.embedding ?? null)
 const { modelItems: embeddingModelItems, dtypeItems: embeddingDtypeItems }
@@ -352,11 +358,11 @@ onUnmounted(() => {
                 </p>
               </div>
               <UInputNumber
-                :model-value="hideLooseDoneAfterDays"
+                :model-value="daysDraft"
                 :min="0"
                 :disabled="!hideLooseDoneEnabled"
                 class="w-32 shrink-0"
-                @update:model-value="saveHideDays"
+                @update:model-value="onHideDaysInput"
               />
             </div>
           </UPageCard>
