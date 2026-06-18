@@ -13,6 +13,7 @@ const props = withDefaults(
     bordered?: boolean // preview box gets a border (summary/markdown)
     inputClass?: string // typography for the input/textarea
     previewClass?: string // typography for the rendered preview
+    interactive?: boolean // markdown: clickable task-list checkboxes (opt-in — out of scope for inbox)
   }>(),
   {
     type: 'markdown',
@@ -23,7 +24,8 @@ const props = withDefaults(
     minHeight: '120px',
     bordered: false,
     inputClass: '',
-    previewClass: ''
+    previewClass: '',
+    interactive: false
   }
 )
 
@@ -37,7 +39,8 @@ const editing = ref(false)
 const root = ref<HTMLElement | null>(null)
 
 function enterEdit(e: MouseEvent) {
-  if ((e.target as HTMLElement).closest('a')) return // let card links navigate
+  // let card links navigate and task-list checkboxes toggle without opening the editor
+  if ((e.target as HTMLElement).closest('a, input[type="checkbox"]')) return
   editing.value = true
   emit('edit-start')
 }
@@ -72,7 +75,9 @@ onClickOutside(root, () => {
         <AppMarkdown
           v-if="model"
           :value="model"
+          :interactive="interactive"
           :class="previewClass || PROSE"
+          @update:value="model = $event"
         />
         <span v-else class="text-sm text-muted/50 italic">{{ placeholder }}</span>
       </div>

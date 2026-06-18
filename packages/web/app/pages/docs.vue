@@ -494,6 +494,7 @@ async function onDocRemoved() {
               v-model="editing.bodyMd"
               type="markdown"
               bordered
+              interactive
               min-height="400px"
               placeholder="Write documentation… (markdown supported)"
               editor-placeholder="Write documentation… (markdown supported)"

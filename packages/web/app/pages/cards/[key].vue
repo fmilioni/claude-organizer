@@ -569,6 +569,7 @@ const providerIcon = computed(() =>
               v-model="editing.descriptionMd"
               type="markdown"
               bordered
+              interactive
               min-height="200px"
               placeholder="No description. Click to edit."
               editor-placeholder="Write a description… (markdown supported)"

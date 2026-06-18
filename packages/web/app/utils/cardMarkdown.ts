@@ -28,6 +28,12 @@ function cleanUrl(href: string): string | null {
   }
 }
 
+// Render-time state for interactive task lists: `interactive` swaps the disabled
+// checkbox for a clickable one stamped with a sequential `data-task-index` that
+// AppMarkdown maps back to the Nth task marker in the source. parse() runs
+// synchronously (async:false), so one shared slot is safe — no interleaving.
+const activeRender = { interactive: false, taskIndex: 0 }
+
 function build(keyPrefix: string | null): Marked {
   const m = new Marked({ breaks: true, gfm: true })
   m.use({
@@ -42,6 +48,13 @@ function build(keyPrefix: string | null): Marked {
         // keeping the SPA from being navigated away.
         const attrs = href.startsWith('/') ? '' : ' target="_blank" rel="noopener noreferrer"'
         return `<a href="${href}"${title}${attrs}>${text}</a>`
+      },
+      checkbox({ checked }: Tokens.Checkbox) {
+        if (!activeRender.interactive) {
+          return `<input ${checked ? 'checked="" ' : ''}disabled="" type="checkbox"> `
+        }
+        const index = activeRender.taskIndex++
+        return `<input type="checkbox" data-task-index="${index}"${checked ? ' checked' : ''}> `
       }
     }
   })
@@ -90,7 +103,8 @@ export function linkifyKeys(text: string, keyPrefix: string | null): string {
 
 export function renderCardMarkdown(
   value: string,
-  keyPrefix: string | null
+  keyPrefix: string | null,
+  interactive = false
 ): string {
   const cacheKey = keyPrefix ?? ''
   let m = cache.get(cacheKey)
@@ -98,5 +112,40 @@ export function renderCardMarkdown(
     m = build(keyPrefix)
     cache.set(cacheKey, m)
   }
+  activeRender.interactive = interactive
+  activeRender.taskIndex = 0
   return m.parse(value, { async: false }) as string
+}
+
+// Flip the Nth task-list marker (`- [ ]` ↔ `- [x]`) in the source, counting in
+// document order. The predicate MUST match exactly what marked emits a checkbox
+// token for, or the index diverges and the wrong box flips: bullet (`-*+`) AND
+// ordered (`1.`/`1)`) lists, inside blockquotes (`>`) too, and — mirroring
+// marked's `listIsTask` (`/^\[[ xX]\] +\S/`) — only when content follows the
+// box (lookahead, so the content isn't consumed by the replace). The fence
+// guard skips `- [ ]` lines in code blocks, which marked doesn't tokenize.
+const TASK_LINE_RE = /^(\s*(?:>\s*)*(?:[-*+]|\d+[.)])\s+)\[([ xX])\](?= +\S)/
+const FENCE_RE = /^\s*(```|~~~)/
+
+export function toggleTaskMarker(markdown: string, index: number): string {
+  const lines = markdown.split('\n')
+  let inFence = false
+  let seen = -1
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]!
+    if (FENCE_RE.test(line)) {
+      inFence = !inFence
+      continue
+    }
+    if (inFence) continue
+    const match = TASK_LINE_RE.exec(line)
+    if (!match) continue
+    seen++
+    if (seen === index) {
+      const checked = match[2] !== ' '
+      lines[i] = line.replace(TASK_LINE_RE, `$1[${checked ? ' ' : 'x'}]`)
+      break
+    }
+  }
+  return lines.join('\n')
 }
