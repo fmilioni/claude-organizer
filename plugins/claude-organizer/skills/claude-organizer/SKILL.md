@@ -9,7 +9,12 @@ claude-organizer is a "Jira for Claude Code" exposed over MCP: a project's **car
 
 This skill only tells you **which skill to use** and **how to find the project**. The real workflow lives in the phase skills below — switch to one instead of working from memory.
 
-**Task lists are interactive.** Card descriptions and doc bodies render GitHub-style task lists (`- [ ]` / `- [x]`) as **clickable** checkboxes in the UI — the user ticks them off directly and the change is saved. Use them for checklists the user (or you) can tick over time.
+**Task lists are interactive — reach for them on purpose, not for every list.** Card descriptions and doc bodies render GitHub-style task lists (`- [ ]` / `- [x]`) as **clickable** checkboxes: the user ticks them off directly and it's saved. Use them only for **manual steps the user actually has to carry out and tick off** as they go:
+
+- **Test-plan / QA steps** — the steps to verify a card, ticked as each one passes (the primary case).
+- **Manual runbooks** — release/deploy/rollback, data migration, env setup, onboarding.
+
+Don't use them for prose or non-actionable lists (use plain bullets), for specs/conditions like acceptance criteria or a definition-of-done (those are descriptions, not things to do), or to track real units of work — that's what cards and sub-tasks are for.
 
 ## The skills — pick by what the user asks
 
