@@ -172,6 +172,77 @@ describe('reordering cards', () => {
   })
 })
 
+describe('doneAt timestamp', () => {
+  it('stamps doneAt entering done (updateCard) and clears it on leaving', async () => {
+    const project = await freshProject(ctx.db)
+    const card = await createCard(ctx.db, {
+      projectId: project.id,
+      title: 'd',
+      status: 'todo'
+    })
+    expect(card.doneAt ?? null).toBeNull()
+
+    const done = await updateCard(ctx.db, { id: card.id, status: 'done' })
+    expect(done?.doneAt).toBeInstanceOf(Date)
+
+    const reopened = await updateCard(ctx.db, { id: card.id, status: 'in_progress' })
+    expect(reopened?.doneAt ?? null).toBeNull()
+  })
+
+  it('preserves the stamp while done, re-stamps after leaving and returning', async () => {
+    const project = await freshProject(ctx.db)
+    const card = await createCard(ctx.db, {
+      projectId: project.id,
+      title: 'd',
+      status: 'todo'
+    })
+    const done = await updateCard(ctx.db, { id: card.id, status: 'done' })
+    const first = done?.doneAt as Date
+    expect(first).toBeInstanceOf(Date)
+
+    await updateCard(ctx.db, { id: card.id, title: 'renamed' })
+    expect((await getCard(ctx.db, card.id))?.doneAt?.getTime()).toBe(first.getTime())
+
+    await updateCard(ctx.db, { id: card.id, status: 'done' })
+    expect((await getCard(ctx.db, card.id))?.doneAt?.getTime()).toBe(first.getTime())
+
+    await updateCard(ctx.db, { id: card.id, status: 'todo' })
+    expect((await getCard(ctx.db, card.id))?.doneAt ?? null).toBeNull()
+    const again = await updateCard(ctx.db, { id: card.id, status: 'done' })
+    expect(again?.doneAt).toBeInstanceOf(Date)
+  })
+
+  it('stamps doneAt when a card is created straight into done', async () => {
+    const project = await freshProject(ctx.db)
+    const card = await createCard(ctx.db, {
+      projectId: project.id,
+      title: 'born-done',
+      status: 'done'
+    })
+    expect(card.doneAt).toBeInstanceOf(Date)
+  })
+
+  it('stamps and clears doneAt when reorderCards moves a card in and out of done', async () => {
+    const project = await freshProject(ctx.db)
+    const card = await createCard(ctx.db, {
+      projectId: project.id,
+      title: 'r',
+      status: 'todo'
+    })
+    await reorderCards(ctx.db, {
+      orderedIds: [card.id],
+      moved: { id: card.id, status: 'done' }
+    })
+    expect((await getCard(ctx.db, card.id))?.doneAt).toBeInstanceOf(Date)
+
+    await reorderCards(ctx.db, {
+      orderedIds: [card.id],
+      moved: { id: card.id, status: 'todo' }
+    })
+    expect((await getCard(ctx.db, card.id))?.doneAt ?? null).toBeNull()
+  })
+})
+
 describe('listCards focused filters', () => {
   it('filters by a list of statuses', async () => {
     const project = await freshProject(ctx.db)

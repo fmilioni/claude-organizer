@@ -48,7 +48,10 @@ export const cards = pgTable(
     updatedAt: timestamp('updated_at', { withTimezone: true })
       .notNull()
       .default(sql`now()`),
-    archivedAt: timestamp('archived_at', { withTimezone: true })
+    archivedAt: timestamp('archived_at', { withTimezone: true }),
+    // Stamped on the transition into `done`, cleared on leaving it — a stable
+    // "when completed" that `updatedAt` can't give (it moves on any edit).
+    doneAt: timestamp('done_at', { withTimezone: true })
   },
   t => [
     index('cards_project_idx').on(t.projectId),

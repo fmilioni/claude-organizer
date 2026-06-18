@@ -115,7 +115,8 @@ const cardSummaryColumns = {
   dueDate: schema.cards.dueDate,
   position: schema.cards.position,
   createdAt: schema.cards.createdAt,
-  updatedAt: schema.cards.updatedAt
+  updatedAt: schema.cards.updatedAt,
+  doneAt: schema.cards.doneAt
 }
 
 // Allow-list, not a bare select: searchTsv (or any future column) can't leak
@@ -123,6 +124,17 @@ const cardSummaryColumns = {
 const cardDetailColumns = {
   ...cardSummaryColumns,
   descriptionMd: schema.cards.descriptionMd
+}
+
+// `doneAt` write for a status change: stamp `now()` on the transition INTO `done`
+// (a card already in `done` keeps its original stamp — re-entering `done` only
+// re-stamps because leaving cleared it first); any other status clears it. The
+// `cards.status` reference resolves to the row's pre-update value (SQL evaluates
+// SET right-hand sides against the old row).
+function doneAtWrite(status: CardStatus): SQL {
+  return status === 'done'
+    ? sql`case when ${schema.cards.status} <> 'done' then now() else ${schema.cards.doneAt} end`
+    : sql`null`
 }
 
 /** Text embedded for a card — key + title + summary + description (e5 `passage:`). */
@@ -620,6 +632,9 @@ export async function createCard(db: Database, input: CreateCardInput) {
         // A card with no sprint lands in the backlog (its own status); one
         // created straight into a sprint starts on the board instead.
         status: parsed.status ?? (parsed.sprintId ? 'todo' : 'backlog'),
+        // Keep the "a done card carries a doneAt" invariant the auto-hide relies
+        // on even for the rare card created straight into done.
+        doneAt: parsed.status === 'done' ? sql`now()` : null,
         priority: parsed.priority ?? 0,
         dueDate: parsed.dueDate
       })
@@ -659,9 +674,11 @@ export async function updateCard(db: Database, input: UpdateCardInput) {
     await assertValidParent(db, id, rest.parentId)
   }
   const [row] = await db.transaction(async (tx) => {
+    const set: Record<string, unknown> = { ...rest, updatedAt: sql`now()` }
+    if (rest.status !== undefined) set.doneAt = doneAtWrite(rest.status)
     const updated = await tx
       .update(schema.cards)
-      .set({ ...rest, updatedAt: sql`now()` })
+      .set(set)
       .where(eq(schema.cards.id, id))
       .returning(cardDetailColumns)
     // Auto-release the claim atomically with the status write (a done card never
@@ -701,7 +718,8 @@ export async function reorderCards(db: Database, input: ReorderCardsInput) {
     if (moved) {
       const set: Record<string, unknown> = {
         status: moved.status,
-        updatedAt: sql`now()`
+        updatedAt: sql`now()`,
+        doneAt: doneAtWrite(moved.status)
       }
       if (moved.sprintId !== undefined) set.sprintId = moved.sprintId
       await tx.update(schema.cards).set(set).where(eq(schema.cards.id, moved.id))

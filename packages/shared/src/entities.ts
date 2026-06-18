@@ -36,6 +36,7 @@ export interface CardRow {
   createdAt: string
   updatedAt: string
   archivedAt: string | null
+  doneAt: string | null
 }
 
 export interface SprintRow {
