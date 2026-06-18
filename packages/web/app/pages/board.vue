@@ -54,17 +54,6 @@ useProjectData(currentProjectId, loadCards, {
 
 const DAY_MS = 86_400_000
 
-// A loose (sprint-less, parent-less) done card past the configured age drops off
-// the board — view only, it stays active and visible to search/MCP. Sprint cards,
-// story sub-tasks and active loose cards are never affected. `days = 0` hides it
-// as soon as it's done.
-function isStaleLooseDone(c: Card): boolean {
-  if (!capabilities.value?.hideLooseDoneEnabled) return false
-  if (c.sprintId || c.parentId || c.status !== 'done' || !c.doneAt) return false
-  const days = capabilities.value.hideLooseDoneAfterDays
-  return Date.now() - new Date(c.doneAt).getTime() >= days * DAY_MS
-}
-
 // Status-column cards: everything but `backlog` (shown only in the peek below),
 // narrowed by the sprint and tag filters.
 const filteredCards = computed(() => {
@@ -77,6 +66,30 @@ const filteredCards = computed(() => {
   }
   return list
 })
+
+// Ids of cards that parent another shown card — i.e. story envelopes. They give
+// the group its title in <BoardColumns>, so hiding one (it's a loose done card
+// too) would strip the name off a group whose children are still on the board.
+const storyParentIds = computed(
+  () =>
+    new Set(
+      filteredCards.value
+        .map(c => c.parentId)
+        .filter((id): id is string => !!id)
+    )
+)
+
+// A loose (sprint-less, parent-less) done card past the configured age drops off
+// the board — view only, it stays active and visible to search/MCP. Sprint cards,
+// story sub-tasks, story envelopes and active loose cards are never affected.
+// `days = 0` hides it as soon as it's done.
+function isStaleLooseDone(c: Card): boolean {
+  if (!capabilities.value?.hideLooseDoneEnabled) return false
+  if (storyParentIds.value.has(c.id)) return false
+  if (c.sprintId || c.parentId || c.status !== 'done' || !c.doneAt) return false
+  const days = capabilities.value.hideLooseDoneAfterDays
+  return Date.now() - new Date(c.doneAt).getTime() >= days * DAY_MS
+}
 
 // Stale loose done cards among those that pass the other filters — so the toggle
 // count matches exactly what "Show hidden" reveals.
