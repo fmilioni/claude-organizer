@@ -1,7 +1,8 @@
 <script setup lang="ts">
 const props = defineProps<{ id: string, label: string }>()
+const emit = defineEmits<{ loaded: [{ bytes: number }] }>()
 
-const { resolveDisplaySrc } = useAttachments()
+const { resolveDisplay } = useAttachments()
 
 type State = 'loading' | 'ok' | 'gone' | 'missing'
 const state = ref<State>('loading')
@@ -14,9 +15,9 @@ const src = ref<string | null>(null)
 async function load() {
   state.value = 'loading'
   src.value = null
-  let url: string
+  let meta: Awaited<ReturnType<typeof resolveDisplay>>
   try {
-    url = await resolveDisplaySrc(props.id)
+    meta = await resolveDisplay(props.id)
   } catch (err) {
     // The url-minting endpoint 404s only when the row is gone; anything else is
     // transient — stay in loading rather than mislabel it.
@@ -25,13 +26,14 @@ async function load() {
   }
   let res: Response
   try {
-    res = await fetch(url, { method: 'HEAD', credentials: 'include' })
+    res = await fetch(meta.url, { method: 'HEAD', credentials: 'include' })
   } catch {
     return
   }
   if (res.ok) {
-    src.value = url
+    src.value = meta.url
     state.value = 'ok'
+    if (meta.byteSize != null) emit('loaded', { bytes: meta.byteSize })
   } else if (res.status === 410) {
     state.value = 'gone'
   } else if (res.status === 404) {

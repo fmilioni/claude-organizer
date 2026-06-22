@@ -55,13 +55,19 @@ export function registerAttachmentRoutes(app: FastifyInstance, db: Database) {
   // markdown only ever holds the tokenless `/attachments/:id` path.
   app.get<{ Params: { id: string } }>('/attachments/:id/url', async (req, reply) => {
     const id = req.params.id
-    if (!(await getAttachmentMeta(db, id))) {
+    const meta = await getAttachmentMeta(db, id)
+    if (!meta) {
       return reply.code(404).send({ error: 'not_found' })
     }
+    const size = { byteSize: meta.byteSize, width: meta.width, height: meta.height }
     const { authEnabled } = await getSystemSettings(db)
     const secret = authEnabled ? resolveCommitTokenSecret() : null
-    if (!secret) return { url: `/attachments/${id}`, expiresAt: null }
+    if (!secret) return { url: `/attachments/${id}`, expiresAt: null, ...size }
     const signed = signAttachmentToken(id, secret)
-    return { url: `/attachments/${id}?sig=${signed.token}`, expiresAt: signed.expiresAt }
+    return {
+      url: `/attachments/${id}?sig=${signed.token}`,
+      expiresAt: signed.expiresAt,
+      ...size
+    }
   })
 }

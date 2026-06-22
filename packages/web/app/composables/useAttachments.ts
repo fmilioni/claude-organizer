@@ -23,13 +23,25 @@ export function useAttachments() {
   // Stored markdown holds the portable relative path `/attachments/att_X`; the
   // browser needs an absolute, auth-aware src. Mint a serve URL (signed when auth
   // is on, bare path otherwise) and prefix the API origin since web and API are
-  // different origins. A src without an attachment id (external image) passes through.
-  async function resolveDisplaySrc(stored: string): Promise<string> {
+  // different origins. A src without an attachment id (external image) passes
+  // through with no metadata.
+  async function resolveDisplay(
+    stored: string
+  ): Promise<{ url: string, byteSize?: number, width?: number, height?: number }> {
     const match = ATTACHMENT_ID.exec(stored)
-    if (!match) return stored
-    const { url } = await api<{ url: string }>(`/attachments/${match[0]}/url`)
-    return `${base}${url}`
+    if (!match) return { url: stored }
+    const { url, byteSize, width, height } = await api<{
+      url: string
+      byteSize?: number
+      width?: number
+      height?: number
+    }>(`/attachments/${match[0]}/url`)
+    return { url: `${base}${url}`, byteSize, width, height }
   }
 
-  return { uploadImage, resolveDisplaySrc }
+  async function resolveDisplaySrc(stored: string): Promise<string> {
+    return (await resolveDisplay(stored)).url
+  }
+
+  return { uploadImage, resolveDisplay, resolveDisplaySrc }
 }

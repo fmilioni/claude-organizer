@@ -25,14 +25,26 @@ const signatures = computed(() => diffFileSignatures(props.diff))
 // shifted position when the same instance gets a new diff.
 const collapseOverride = ref<Record<number, boolean>>({})
 
+// Byte size of each image file's representative image (new side, else old),
+// reported by DiffImage once resolved — shown in the file header. Survives a
+// collapse, so the size stays visible after the block is folded.
+const imageSizes = ref<Record<number, number>>({})
+
 watch(
   signatures,
   (sigs) => {
     reconcile(props.cardId, props.sha, sigs)
     collapseOverride.value = {}
+    imageSizes.value = {}
   },
   { immediate: true }
 )
+
+function humanBytes(n: number): string {
+  if (n < 1024) return `${n} B`
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`
+  return `${(n / 1024 / 1024).toFixed(1)} MB`
+}
 
 function fileViewed(i: number): boolean {
   const sig = signatures.value[i]
@@ -301,6 +313,10 @@ function hunkContext(text: string): string {
             v-if="file.deletions"
             class="text-error bg-error/10 rounded px-1"
           >-{{ file.deletions }}</span>
+          <span
+            v-if="imageSizes[fi] != null"
+            class="text-muted"
+          >{{ humanBytes(imageSizes[fi]!) }}</span>
           <UCheckbox
             :model-value="fileViewed(fi)"
             label="Viewed"
@@ -314,17 +330,19 @@ function hunkContext(text: string): string {
       <div v-if="!isCollapsed(fi)" class="overflow-hidden rounded-b-md">
         <div
           v-if="file.image"
-          class="flex flex-wrap items-start gap-4 p-3"
+          class="flex flex-wrap items-start justify-center gap-4 p-4"
         >
           <DiffImage
             v-if="file.image.old"
             :id="file.image.old"
             :label="file.image.new ? 'Before' : 'Deleted'"
+            @loaded="!file.image.new && (imageSizes[fi] = $event.bytes)"
           />
           <DiffImage
             v-if="file.image.new"
             :id="file.image.new"
             :label="file.image.old ? 'After' : 'Added'"
+            @loaded="imageSizes[fi] = $event.bytes"
           />
         </div>
         <div
