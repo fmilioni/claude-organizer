@@ -7,6 +7,8 @@
 // (lockfiles/truncated/binary) surface as a muted note on the file block.
 import { diffWordsWithSpace } from 'diff'
 
+import { parseDiffImageSentinel } from '@claude-organizer/shared'
+
 import { diffFileSignatures } from '~/utils/diffFiles'
 
 const props = defineProps<{ diff: string, cardId: string, sha: string }>()
@@ -102,6 +104,8 @@ interface DiffFile {
   additions: number
   deletions: number
   note: string | null
+  // Each side is null when absent: added → no old, deleted → no new.
+  image: { old: string | null, new: string | null } | null
   lines: DiffLine[]
 }
 
@@ -138,6 +142,7 @@ const files = computed<DiffFile[]>(() => {
         additions: 0,
         deletions: 0,
         note: null,
+        image: null,
         lines: []
       }
       oldNo = 0
@@ -155,9 +160,12 @@ const files = computed<DiffFile[]>(() => {
       cur.note = 'Binary file — diff not shown'
       continue
     }
-    // Notes the capture script wrote in place of a pruned/truncated body.
+    // Notes the capture script wrote in place of a pruned/truncated body; an
+    // image sentinel is parsed out instead of shown as a note.
     if (raw.startsWith('# ')) {
-      cur.note = raw.slice(2)
+      const refs = parseDiffImageSentinel(raw)
+      if (refs) cur.image = { old: refs.old ?? null, new: refs.new ?? null }
+      else cur.note = raw.slice(2)
       continue
     }
     if (raw.startsWith('@@')) {
@@ -305,7 +313,22 @@ function hunkContext(text: string): string {
 
       <div v-if="!isCollapsed(fi)" class="overflow-hidden rounded-b-md">
         <div
-          v-if="file.lines.length"
+          v-if="file.image"
+          class="flex flex-wrap items-start gap-4 p-3"
+        >
+          <DiffImage
+            v-if="file.image.old"
+            :id="file.image.old"
+            :label="file.image.new ? 'Before' : 'Deleted'"
+          />
+          <DiffImage
+            v-if="file.image.new"
+            :id="file.image.new"
+            :label="file.image.old ? 'After' : 'Added'"
+          />
+        </div>
+        <div
+          v-else-if="file.lines.length"
           class="text-xs font-mono leading-relaxed"
         >
           <template v-for="(line, li) in file.lines" :key="li">
