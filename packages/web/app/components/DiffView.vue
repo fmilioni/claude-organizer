@@ -317,13 +317,18 @@ function hunkContext(text: string): string {
             v-if="imageSizes[fi] != null"
             class="text-muted"
           >{{ humanBytes(imageSizes[fi]!) }}</span>
-          <UCheckbox
-            :model-value="fileViewed(fi)"
-            label="Viewed"
-            size="sm"
-            :ui="{ label: 'text-muted' }"
-            @update:model-value="toggleViewed(fi, $event === true)"
-          />
+          <button
+            type="button"
+            class="flex items-center gap-1.5 -my-1 px-1.5 py-1 rounded-md cursor-pointer text-muted hover:bg-default hover:text-default transition-colors"
+            @click="toggleViewed(fi, !fileViewed(fi))"
+          >
+            <UIcon
+              :name="fileViewed(fi) ? 'i-lucide-square-check' : 'i-lucide-square'"
+              class="size-4 shrink-0"
+              :class="fileViewed(fi) ? 'text-primary' : 'text-dimmed'"
+            />
+            <span class="leading-none">Viewed</span>
+          </button>
         </span>
       </div>
 
