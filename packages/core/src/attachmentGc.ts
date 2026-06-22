@@ -62,6 +62,14 @@ async function scopeLinkConditions(db: Database, scope: GcScope) {
         inArray(schema.attachmentLinks.itemId, cardIds)
       )
     )
+    // Diff images are linked to their card under the 'commit' item type; they
+    // share the card's lifecycle, so archive/destroy reclaim them alongside it.
+    conds.push(
+      and(
+        eq(schema.attachmentLinks.itemType, 'commit'),
+        inArray(schema.attachmentLinks.itemId, cardIds)
+      )
+    )
     const commentIds = (
       await db
         .select({ id: schema.comments.id })

@@ -49,6 +49,7 @@ const PUBLIC_EXACT = new Set([
 // the pending diff). Everything else stays session-only.
 const COMMIT_TOKEN_ROUTES = new Set([
   'POST /cards/:key/commits',
+  'POST /cards/:key/commit-images',
   'DELETE /cards/:key/commits/working'
 ])
 
@@ -157,6 +158,7 @@ async function resolveProjectIds(
       return entity('card', params.id!)
     case '/cards/by-key/:key':
     case '/cards/:key/commits':
+    case '/cards/:key/commit-images':
     case '/cards/:key/commits/working':
       return entity('cardKey', params.key!)
     case '/cards/:cardId/comments':

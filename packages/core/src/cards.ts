@@ -22,6 +22,7 @@ import { reconcileAttachmentLinks, relinkCardsAndComments } from './attachmentLi
 import { getSystemSettings } from './authz'
 import { listBlockedBy, listBlocking, pendingBlockerCounts } from './blockers'
 import { claimsByCardIds, getClaim, releaseClaimOnDone } from './cardClaims'
+import { relinkCommitImages } from './cardCommits'
 import { applyChunks, backfillChunks, embed, embedChunks } from './embedding'
 import { InputError } from './errors'
 import { notify } from './events'
@@ -809,6 +810,7 @@ export async function restoreCard(db: Database, id: string) {
     // the derived index doesn't drift (and the sweep can't collect an image the
     // restored card still references). Bytes stay null — restore never recovers them.
     await relinkCardsAndComments(db, [id])
+    await relinkCommitImages(db, [id])
     await syncIntakeForCard(db, row.projectId, row.key)
     await notify(db, {
       type: 'card.changed',

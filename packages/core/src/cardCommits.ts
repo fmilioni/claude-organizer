@@ -2,10 +2,61 @@ import { and, asc, eq, sql } from 'drizzle-orm'
 import { z } from 'zod'
 
 import { createId, type Database, schema } from '@claude-organizer/db'
-import { WORKING_TREE_SHA } from '@claude-organizer/shared'
+import { parseDiffImageSentinel, WORKING_TREE_SHA } from '@claude-organizer/shared'
 
+import { reconcileAttachmentLinks } from './attachmentLinks'
 import { InputError } from './errors'
 import { notify } from './events'
+
+// The att ids a set of diffs reference via image sentinels — scoped to the
+// sentinel lines so an `att_`-shaped token elsewhere in the patch content can't
+// wrongly link an attachment. Joined into a space-separated "body" so it feeds
+// straight into reconcileAttachmentLinks (which extracts att tokens from a body).
+export function commitImageLinkBody(
+  diffs: Array<string | null | undefined>
+): string {
+  const ids: string[] = []
+  for (const diff of diffs) {
+    if (!diff) continue
+    for (const line of diff.split('\n')) {
+      const refs = parseDiffImageSentinel(line)
+      if (refs?.old) ids.push(refs.old)
+      if (refs?.new) ids.push(refs.new)
+    }
+  }
+  return ids.join(' ')
+}
+
+// Re-derives the card's diff-image links from the att ids cited across ALL its
+// stored diffs (the diffs are the source of truth, reconciled like a markdown
+// body). Run after every diff write/clear so replacing or dropping a diff frees
+// the images it no longer references (their ref-count can then reach zero and the
+// orphan sweep collects them); a re-capture of the same commit re-links the fresh
+// ids. Uses the 'commit' item type, which the body reconcile never touches.
+async function reconcileCommitImages(tx: Database, cardId: string): Promise<void> {
+  const rows = await tx
+    .select({ diff: schema.cardCommits.diff })
+    .from(schema.cardCommits)
+    .where(eq(schema.cardCommits.cardId, cardId))
+  await reconcileAttachmentLinks(
+    tx,
+    'commit',
+    cardId,
+    commitImageLinkBody(rows.map(r => r.diff))
+  )
+}
+
+// Re-establishes the 'commit' links for a set of cards from their kept diffs —
+// the restore counterpart to relinkCardsAndComments. Archive unlinked them; with
+// keepDiffsOnArchive on the diff (and its sentinel) survives, so the link must be
+// rebuilt or the derived index drifts. Bytes stay null when keepAttachmentsOnArchive
+// is off (restore never recovers bytes — same as a body image).
+export async function relinkCommitImages(
+  db: Database,
+  cardIds: string[]
+): Promise<void> {
+  for (const cardId of cardIds) await reconcileCommitImages(db, cardId)
+}
 
 // Server-side safeguards. The capture script already prunes lockfiles/binaries
 // and truncates huge files, but cap the payload here too so a misbehaving
@@ -82,6 +133,7 @@ export async function attachCardCommit(
           )
         )
     }
+    await reconcileCommitImages(tx, card.id)
     return inserted
   })
 
@@ -105,15 +157,20 @@ export async function clearWorkingTreeCommit(db: Database, cardKey: string) {
   if (!card) {
     throw new InputError(`Card ${cardKey} not found`)
   }
-  const [row] = await db
-    .delete(schema.cardCommits)
-    .where(
-      and(
-        eq(schema.cardCommits.cardId, card.id),
-        eq(schema.cardCommits.sha, WORKING_TREE_SHA)
+  const row = await db.transaction(async (tx) => {
+    const [deleted] = await tx
+      .delete(schema.cardCommits)
+      .where(
+        and(
+          eq(schema.cardCommits.cardId, card.id),
+          eq(schema.cardCommits.sha, WORKING_TREE_SHA)
+        )
       )
-    )
-    .returning()
+      .returning()
+    // Dropping the pending diff frees the images only it referenced.
+    if (deleted) await reconcileCommitImages(tx, card.id)
+    return deleted ?? null
+  })
   if (row) {
     await notify(db, {
       type: 'commit.changed',
@@ -122,7 +179,7 @@ export async function clearWorkingTreeCommit(db: Database, cardKey: string) {
       commitId: row.id
     })
   }
-  return row ?? null
+  return row
 }
 
 export async function listCardCommits(db: Database, cardId: string) {

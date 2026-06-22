@@ -43,7 +43,8 @@ export const attachmentOwnerTypeEnum = pgEnum('attachment_owner_type', [
   'card',
   'comment',
   'doc',
-  'inbox'
+  'inbox',
+  'commit'
 ])
 
 export const userRoleEnum = pgEnum('user_role', ['admin', 'user'])

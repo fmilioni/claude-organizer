@@ -23,6 +23,7 @@ import {
 import { reconcileAttachmentLinks } from './attachmentLinks'
 import { rewriteAttachmentIds } from './attachments'
 import { getSystemSettings } from './authz'
+import { commitImageLinkBody } from './cardCommits'
 import { InputError } from './errors'
 
 // Project-domain tables, parents before children (FK-safe order for the
@@ -653,6 +654,37 @@ async function restoreAsNew(db: Database, data: BackupData): Promise<string[]> {
             .where(eq(schema.intakeItems.id, IT[it.id]!))
         }
         await reconcileAttachmentLinks(tx, 'inbox', IT[it.id]!, next)
+      }
+
+      // Diff images: a stored diff carries att ids in its image sentinels, so
+      // rewrite them like a body and rebuild the per-card 'commit' links from the
+      // (rewritten) diffs — otherwise the imported diff images would point at the
+      // old ids and, having no link, get swept as orphans.
+      for (const c of cards) {
+        const ccs = rows<CardCommitRow>('card_commits').filter(
+          cc => cc.cardId === c.id
+        )
+        if (!ccs.length) continue
+        const diffs = ccs.map(cc => ({
+          sha: cc.sha,
+          prev: cc.diff,
+          next: rewriteAttachmentIds(cc.diff, A)
+        }))
+        for (const { sha, prev, next } of diffs) {
+          if (next === prev) continue
+          await tx.update(schema.cardCommits)
+            .set({ diff: next })
+            .where(and(
+              eq(schema.cardCommits.cardId, C[c.id]!),
+              eq(schema.cardCommits.sha, sha)
+            ))
+        }
+        await reconcileAttachmentLinks(
+          tx,
+          'commit',
+          C[c.id]!,
+          commitImageLinkBody(diffs.map(d => d.next))
+        )
       }
 
       // Any imported attachment still unreferenced after the rebuild starts its

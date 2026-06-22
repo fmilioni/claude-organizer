@@ -1,62 +1,20 @@
-import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
-import sharp from 'sharp'
+import type { FastifyInstance, FastifyReply } from 'fastify'
 import { z } from 'zod'
 
 import {
-  createAttachment,
   getAttachment,
   getAttachmentMeta,
   getSystemSettings,
-  InputError,
   resolveCommitTokenSecret,
   signAttachmentToken
 } from '@claude-organizer/core'
 import type { Database } from '@claude-organizer/db'
-import { ATTACHMENT_MIME_TYPES } from '@claude-organizer/shared'
 
-// Accept ceiling before optimization; the route's multipart fileSize limit
-// mirrors the elevated bodyLimit the backup import uses.
-export const MAX_UPLOAD_BYTES = 10 * 1024 * 1024
-// Above this the model gains nothing from the extra pixels and the bytes just
-// pile up; the longest edge is clamped here.
-const MAX_EDGE = 1568
-const WEBP_QUALITY = 80
+import { storeImageUpload } from '../lib/imageUpload'
+
+export { MAX_UPLOAD_BYTES } from '../lib/imageUpload'
 
 const uploadQuery = z.object({ projectId: z.string().min(1) })
-
-interface ParsedUpload {
-  file?: { mime: string, filename: string | null, data: Buffer }
-  fields: Record<string, string>
-}
-
-// Stream the multipart body once, in part order, so field/file ordering doesn't
-// matter; keep only the first file and drain any extras.
-async function readUpload(req: FastifyRequest): Promise<ParsedUpload> {
-  const fields: Record<string, string> = {}
-  let file: ParsedUpload['file']
-  for await (const part of req.parts()) {
-    if (part.type === 'file') {
-      const data = await part.toBuffer()
-      if (!file) file = { mime: part.mimetype, filename: part.filename ?? null, data }
-    } else {
-      fields[part.fieldname] = String(part.value)
-    }
-  }
-  return { file, fields }
-}
-
-async function optimize(input: Buffer, mime: string) {
-  // Animated GIFs keep their frames as an animated WebP; everything else is a
-  // single frame. `.rotate()` bakes EXIF orientation in before sharp drops all
-  // metadata (the default — no `.withMetadata()`), so the image stays upright
-  // without leaking EXIF.
-  const pipeline = sharp(input, { animated: mime === 'image/gif', failOn: 'none' })
-    .rotate()
-    .resize({ width: MAX_EDGE, height: MAX_EDGE, fit: 'inside', withoutEnlargement: true })
-    .webp({ quality: WEBP_QUALITY })
-  const { data, info } = await pipeline.toBuffer({ resolveWithObject: true })
-  return { data, width: info.width, height: info.height }
-}
 
 function serveAttachment(reply: FastifyReply, mime: string, data: Buffer) {
   reply.header('Content-Type', mime)
@@ -71,49 +29,7 @@ export function registerAttachmentRoutes(app: FastifyInstance, db: Database) {
     '/attachments',
     async (req) => {
       const { projectId } = uploadQuery.parse(req.query)
-
-      let upload: ParsedUpload
-      try {
-        upload = await readUpload(req)
-      } catch (err) {
-        const code = (err as { code?: string }).code
-        if (code === 'FST_REQ_FILE_TOO_LARGE') {
-          throw new InputError('Image exceeds the 10 MB upload limit')
-        }
-        // Any other `FST_*` (wrong content-type, too many parts/files…) is a
-        // malformed request from the client → 400, not a server fault.
-        if (typeof code === 'string' && code.startsWith('FST_')) {
-          throw new InputError((err as Error).message)
-        }
-        throw err
-      }
-
-      const file = upload.file
-      if (!file) throw new InputError('No image file in the upload')
-      if (!(ATTACHMENT_MIME_TYPES as readonly string[]).includes(file.mime)) {
-        throw new InputError(
-          `Unsupported image type "${file.mime}". Allowed: ${ATTACHMENT_MIME_TYPES.join(', ')}.`
-        )
-      }
-
-      let optimized
-      try {
-        optimized = await optimize(file.data, file.mime)
-      } catch {
-        throw new InputError('The file is not a valid image or could not be processed')
-      }
-      const { data, width, height } = optimized
-
-      const row = await createAttachment(db, {
-        projectId,
-        mime: 'image/webp',
-        data: new Uint8Array(data),
-        width,
-        height,
-        filename: file.filename,
-        description: upload.fields.description ?? null
-      })
-
+      const row = await storeImageUpload(db, req, projectId)
       return {
         id: row.id,
         url: `/attachments/${row.id}`,

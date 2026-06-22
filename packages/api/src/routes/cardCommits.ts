@@ -4,9 +4,13 @@ import { z } from 'zod'
 import {
   attachCardCommit,
   clearWorkingTreeCommit,
-  listCardCommits
+  InputError,
+  listCardCommits,
+  resolveEntityProjectId
 } from '@claude-organizer/core'
 import type { Database } from '@claude-organizer/db'
+
+import { storeImageUpload } from '../lib/imageUpload'
 
 // `committedAt` arrives as an ISO string on the wire; the core coerces it.
 const attachCommitBody = z.object({
@@ -33,6 +37,21 @@ export function registerCardCommitRoutes(app: FastifyInstance, db: Database) {
   app.get<{ Params: { cardId: string } }>(
     '/cards/:cardId/commits',
     async req => listCardCommits(db, req.params.cardId)
+  )
+
+  // Store one image blob of a card's diff (multipart). The capture script posts
+  // each changed image's before/after bytes here, gets back an `att_` id, and
+  // writes it into the stored diff as the image sentinel; the diff write then
+  // links these images to the card. Same card-scoped commit-token auth as the
+  // diff POST — no browser session.
+  app.post<{ Params: { key: string } }>(
+    '/cards/:key/commit-images',
+    async (req) => {
+      const projectId = await resolveEntityProjectId(db, 'cardKey', req.params.key)
+      if (!projectId) throw new InputError(`Card ${req.params.key} not found`)
+      const row = await storeImageUpload(db, req, projectId)
+      return { id: row.id }
+    }
   )
 
   // Clear the pending working-tree diff (sentinel) when the tree is clean.

@@ -274,6 +274,13 @@
       "when": 1781816620486,
       "tag": "0038_dark_xorn",
       "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1782147129843,
+      "tag": "0039_freezing_the_watchers",
+      "breakpoints": true
     }
   ]
 }

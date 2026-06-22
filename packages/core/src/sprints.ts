@@ -7,6 +7,7 @@ import { archivedCondition, type ArchiveFilter } from './archive'
 import { gcAttachmentsOnArchive, gcAttachmentsOnDestroy } from './attachmentGc'
 import { relinkCardsAndComments } from './attachmentLinks'
 import { getSystemSettings } from './authz'
+import { relinkCommitImages } from './cardCommits'
 import { notify } from './events'
 import { syncIntakeForSprint } from './intake'
 import { paginate } from './pagination'
@@ -187,6 +188,7 @@ export async function restoreSprint(db: Database, id: string) {
         .where(eq(schema.cards.sprintId, id))
     ).map(c => c.id)
     await relinkCardsAndComments(db, sprintCardIds)
+    await relinkCommitImages(db, sprintCardIds)
     await syncIntakeForSprint(db, row.projectId, row.id)
     await notify(db, {
       type: 'sprint.changed',
@@ -298,6 +300,7 @@ export async function reopenSprint(db: Database, sprintId: string) {
         .where(eq(schema.cards.sprintId, sprintId))
     ).map(c => c.id)
     await relinkCardsAndComments(db, sprintCardIds)
+    await relinkCommitImages(db, sprintCardIds)
     await syncIntakeForSprint(db, row.projectId, row.id)
     await notify(db, {
       type: 'sprint.changed',

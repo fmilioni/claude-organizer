@@ -1,0 +1,1 @@
+ALTER TYPE "public"."attachment_owner_type" ADD VALUE 'commit';
