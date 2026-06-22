@@ -43,9 +43,72 @@ const LOCKFILES = new Set([
 // Per-file line cap; beyond it the patch is truncated with a note.
 const MAX_LINES_PER_FILE = 1000
 
+// Raster images are captured as before/after attachments and rendered in the web
+// diff (CO-392); other binaries keep the plain note. Mirrors the attachment
+// allow-list in @claude-organizer/shared.
+const IMAGE_EXT_MIME = {
+  png: 'image/png',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  gif: 'image/gif',
+  webp: 'image/webp'
+}
+// Skip the upload above this and keep the binary note; aligned with the API's
+// 10 MB upload ceiling so we never ship a blob the server would reject.
+const MAX_IMAGE_BYTES = 10 * 1024 * 1024
+
 function fail(msg) {
   console.error(`✗ ${msg}`)
   process.exit(1)
+}
+
+function imageMime(path) {
+  return IMAGE_EXT_MIME[(path.split('.').pop() || '').toLowerCase()] || null
+}
+
+// The sentinel that replaces `Binary files … differ` so the web can render the
+// image. Must match buildDiffImageSentinel / DIFF_IMAGE_SENTINEL_PREFIX in
+// @claude-organizer/shared (a side is omitted when absent).
+function imageSentinel(oldId, newId) {
+  let line = '# image'
+  if (oldId) line += ` old=${oldId}`
+  if (newId) line += ` new=${newId}`
+  return line
+}
+
+// Binary-safe git read (no utf8 decode); null when the path is absent at that ref
+// (an added file has no parent blob; a deleted file has none at the commit).
+// stderr is ignored — a missing blob is an expected miss, not an error to print.
+function gitBlob(args) {
+  try {
+    return execFileSync('git', args, {
+      maxBuffer: 256 * 1024 * 1024,
+      stdio: ['ignore', 'pipe', 'ignore']
+    })
+  } catch {
+    return null
+  }
+}
+
+// Upload one image side to the CO-393 endpoint; returns its att id, or null when
+// the blob is missing/over the cap, OR the upload errored — a per-image failure
+// degrades to the plain binary note for that section, never discarding the whole
+// diff (the diff POST below stays the hard gate on a down API).
+async function uploadImage(buf, path, key) {
+  if (!buf || !buf.length || buf.length > MAX_IMAGE_BYTES) return null
+  const mime = imageMime(path)
+  if (!mime) return null
+  const form = new FormData()
+  form.append('file', new Blob([buf], { type: mime }), path.split('/').pop() || 'image')
+  try {
+    const res = await fetch(
+      `${API_URL}/cards/${encodeURIComponent(key)}/commit-images`,
+      { method: 'POST', headers: withToken(), body: form }
+    )
+    return res.ok ? (await res.json()).id : null
+  } catch {
+    return null
+  }
 }
 
 function git(args) {
@@ -87,8 +150,22 @@ function sectionPath(lines) {
   return m ? m[2] : ''
 }
 
+// Capture an image binary section: upload its old/new blobs and replace the
+// binary marker (and any GIT binary patch body) with the image sentinel. Falls
+// back to the original lines (plain note) when neither side could be uploaded.
+async function captureImageSection(lines, path, key, sha) {
+  const oldId = await uploadImage(gitBlob(['show', `${sha}^:${path}`]), path, key)
+  const newId = await uploadImage(gitBlob(['show', `${sha}:${path}`]), path, key)
+  if (!oldId && !newId) return lines.join('\n')
+  const binIdx = lines.findIndex(
+    l => /^Binary files .* differ$/.test(l) || l.startsWith('GIT binary patch')
+  )
+  const head = binIdx >= 0 ? lines.slice(0, binIdx) : lines
+  return [...head, imageSentinel(oldId, newId)].join('\n')
+}
+
 // Split the unified patch per file and apply the safeguards.
-function pruneDiff(patch) {
+async function pruneDiff(patch, key, sha) {
   if (!patch.trim()) return ''
   const sections = []
   let current = null
@@ -102,14 +179,18 @@ function pruneDiff(patch) {
   }
   if (current) sections.push(current)
 
-  return sections
-    .map((lines) => {
+  return (await Promise.all(sections
+    .map(async (lines) => {
       const path = sectionPath(lines)
       const isBinary = lines.some(
         l => /^Binary files .* differ$/.test(l) || l.startsWith('GIT binary patch')
       )
-      // Keep binary marker as-is (already a one-liner).
-      if (isBinary) return lines.join('\n')
+      if (isBinary) {
+        if (!isIgnored(path) && imageMime(path)) {
+          return captureImageSection(lines, path, key, sha)
+        }
+        return lines.join('\n')
+      }
       if (isIgnored(path)) {
         return `${lines[0]}\n# diff omitted (lockfile/generated)`
       }
@@ -121,8 +202,7 @@ function pruneDiff(patch) {
         )
       }
       return lines.join('\n')
-    })
-    .join('\n')
+    }))).join('\n')
 }
 
 function humanBytes(n) {
@@ -153,7 +233,7 @@ async function main() {
 
   const stat = git(['show', sha, '--stat', '--format=']).replace(/^\n+/, '').replace(/\n+$/, '')
   const rawDiff = git(['show', sha, '--format=', '--patch'])
-  const diff = pruneDiff(rawDiff)
+  const diff = await pruneDiff(rawDiff, key, sha)
 
   const fileCount = (rawDiff.match(/^diff --git /gm) || []).length
 

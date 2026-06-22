@@ -58,6 +58,20 @@ LOCKFILES = {
 # Per-file line cap; beyond it the patch is truncated with a note.
 MAX_LINES_PER_FILE = 1000
 
+# Raster images are captured as before/after attachments and rendered in the web
+# diff (CO-392); other binaries keep the plain note. Mirrors the attachment
+# allow-list in @claude-organizer/shared.
+IMAGE_EXT_MIME = {
+    "png": "image/png",
+    "jpg": "image/jpeg",
+    "jpeg": "image/jpeg",
+    "gif": "image/gif",
+    "webp": "image/webp",
+}
+# Skip the upload above this and keep the binary note; aligned with the API's
+# 10 MB upload ceiling so we never ship a blob the server would reject.
+MAX_IMAGE_BYTES = 10 * 1024 * 1024
+
 
 def fail(msg):
     print(f"✗ {msg}", file=sys.stderr)
@@ -108,7 +122,95 @@ def section_path(lines):
     return m.group(2) if m else ""
 
 
-def prune_diff(patch):
+def image_mime(path):
+    ext = path.rsplit(".", 1)[-1].lower() if "." in path else ""
+    return IMAGE_EXT_MIME.get(ext)
+
+
+# The sentinel that replaces `Binary files … differ` so the web can render the
+# image. Must match buildDiffImageSentinel / DIFF_IMAGE_SENTINEL_PREFIX in
+# @claude-organizer/shared (a side is omitted when absent).
+def image_sentinel(old_id, new_id):
+    line = "# image"
+    if old_id:
+        line += f" old={old_id}"
+    if new_id:
+        line += f" new={new_id}"
+    return line
+
+
+# Binary-safe git read (bytes, no decode); None when the path is absent at that
+# ref (e.g. an untracked file isn't in HEAD).
+def git_blob(args):
+    try:
+        return subprocess.run(["git", *args], capture_output=True, check=True).stdout
+    except subprocess.CalledProcessError:
+        return None
+
+
+# Working-tree file bytes; None when the file is gone (a deleted image).
+def read_worktree(path):
+    try:
+        with open(path, "rb") as fh:
+            return fh.read()
+    except OSError:
+        return None
+
+
+# Upload one image side to the CO-393 endpoint; returns its att id, or None when
+# the blob is missing/over the cap, OR the upload errored — a per-image failure
+# degrades to the plain binary note for that section, never discarding the whole
+# diff (the diff POST stays the hard gate on a down API).
+def upload_image(buf, path, key):
+    if not buf or len(buf) > MAX_IMAGE_BYTES:
+        return None
+    mime = image_mime(path)
+    if not mime:
+        return None
+    boundary = "----co-image-boundary"
+    filename = path.rsplit("/", 1)[-1] or "image"
+    body = (
+        f"--{boundary}\r\n"
+        f'Content-Disposition: form-data; name="file"; filename="{filename}"\r\n'
+        f"Content-Type: {mime}\r\n\r\n"
+    ).encode("utf-8") + buf + f"\r\n--{boundary}--\r\n".encode("utf-8")
+    req = urllib.request.Request(
+        f"{API_URL}/cards/{key}/commit-images",
+        data=body,
+        headers=with_token(
+            {"Content-Type": f"multipart/form-data; boundary={boundary}"}
+        ),
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req) as res:
+            return json.loads(res.read()).get("id")
+    except (urllib.error.HTTPError, urllib.error.URLError):
+        return None
+
+
+# Capture an image binary section: old blob from HEAD, new from the working tree;
+# replace the binary marker with the image sentinel. Falls back to the original
+# lines (plain note) when neither side could be uploaded.
+def capture_image_section(lines, path, key):
+    old_id = upload_image(git_blob(["show", f"HEAD:{path}"]), path, key)
+    new_id = upload_image(read_worktree(path), path, key)
+    if not old_id and not new_id:
+        return "\n".join(lines)
+    bin_idx = next(
+        (
+            i
+            for i, l in enumerate(lines)
+            if re.match(r"^Binary files .* differ$", l)
+            or l.startswith("GIT binary patch")
+        ),
+        -1,
+    )
+    head = lines[:bin_idx] if bin_idx >= 0 else lines
+    return "\n".join([*head, image_sentinel(old_id, new_id)])
+
+
+def prune_diff(patch, key):
     """Split the unified patch per file and apply the safeguards."""
     if not patch.strip():
         return ""
@@ -131,8 +233,11 @@ def prune_diff(patch):
             re.match(r"^Binary files .* differ$", l) or l.startswith("GIT binary patch")
             for l in lines
         )
-        if is_binary:  # keep binary marker as-is (already a one-liner)
-            out.append("\n".join(lines))
+        if is_binary:
+            if not is_ignored(path) and image_mime(path):
+                out.append(capture_image_section(lines, path, key))
+            else:
+                out.append("\n".join(lines))
         elif is_ignored(path):
             out.append(f"{lines[0]}\n# diff omitted (lockfile/generated)")
         elif len(lines) > MAX_LINES_PER_FILE:
@@ -212,7 +317,7 @@ def main():
     raw = tracked
     for file in untracked:
         raw += git_diff_no_index(["diff", "--no-index", "--", "/dev/null", file])
-    diff = prune_diff(raw)
+    diff = prune_diff(raw, key)
 
     if not diff.strip():
         clear_pending(key)
