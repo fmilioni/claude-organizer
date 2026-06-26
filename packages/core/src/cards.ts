@@ -49,7 +49,8 @@ export const createCardInput = z.object({
   status: cardStatus.optional(),
   priority: z.number().int().min(0).max(10).optional(),
   dueDate: z.coerce.date().optional(),
-  parentId: z.string().optional()
+  parentId: z.string().optional(),
+  tagIds: z.array(z.string()).optional()
 })
 export type CreateCardInput = z.infer<typeof createCardInput>
 
@@ -640,8 +641,33 @@ export async function createCard(db: Database, input: CreateCardInput) {
         dueDate: parsed.dueDate
       })
       .returning(cardDetailColumns)
-    if (created)
+    if (created) {
       await reconcileAttachmentLinks(tx, 'card', created.id, parsed.descriptionMd)
+      if (parsed.tagIds?.length) {
+        const wanted = [...new Set(parsed.tagIds)]
+        const found = await tx
+          .select({ id: schema.tags.id })
+          .from(schema.tags)
+          .where(
+            and(
+              eq(schema.tags.projectId, parsed.projectId),
+              inArray(schema.tags.id, wanted)
+            )
+          )
+        // throw inside the txn rolls back the card too — no half-tagged card.
+        if (found.length !== wanted.length) {
+          const ok = new Set(found.map(t => t.id))
+          const missing = wanted.filter(id => !ok.has(id))
+          throw new InputError(
+            `tagIds not found in project ${parsed.projectId}: ${missing.join(', ')}`
+          )
+        }
+        await tx
+          .insert(schema.cardTags)
+          .values(wanted.map(tagId => ({ cardId: created.id, tagId })))
+          .onConflictDoNothing()
+      }
+    }
     return created
   })
   if (row) {

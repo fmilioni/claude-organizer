@@ -362,3 +362,86 @@ describe('getCardsByIds batch read', () => {
     expect(await getCardsByIds(ctx.db, [])).toEqual([])
   })
 })
+
+describe('createCard with tagIds', () => {
+  it('attaches valid project tags at creation', async () => {
+    const project = await freshProject(ctx.db)
+    const bug = await createTag(ctx.db, {
+      projectId: project.id,
+      name: 'bug',
+      color: '#ef4444'
+    })
+    const web = await createTag(ctx.db, {
+      projectId: project.id,
+      name: 'web',
+      color: '#3b82f6'
+    })
+    const card = await createCard(ctx.db, {
+      projectId: project.id,
+      title: 'tagged on create',
+      tagIds: [bug!.id, web!.id]
+    })
+    const reloaded = await getCard(ctx.db, card.id)
+    expect(reloaded?.tags.map(t => t.name).sort()).toEqual(['bug', 'web'])
+    const [listed] = await listCards(ctx.db, { projectId: project.id })
+    expect(listed.tags.map(t => t.name).sort()).toEqual(['bug', 'web'])
+  })
+
+  it('dedups repeated tagIds into a single association', async () => {
+    const project = await freshProject(ctx.db)
+    const bug = await createTag(ctx.db, {
+      projectId: project.id,
+      name: 'bug',
+      color: '#ef4444'
+    })
+    const card = await createCard(ctx.db, {
+      projectId: project.id,
+      title: 'dup tags',
+      tagIds: [bug!.id, bug!.id, bug!.id]
+    })
+    const reloaded = await getCard(ctx.db, card.id)
+    expect(reloaded?.tags.map(t => t.id)).toEqual([bug!.id])
+  })
+
+  it('rejects an unknown tagId and creates no card', async () => {
+    const project = await freshProject(ctx.db)
+    const before = await listCards(ctx.db, { projectId: project.id })
+    await expect(
+      createCard(ctx.db, {
+        projectId: project.id,
+        title: 'bad tag',
+        tagIds: ['tag_does_not_exist']
+      })
+    ).rejects.toThrow()
+    const after = await listCards(ctx.db, { projectId: project.id })
+    expect(after).toHaveLength(before.length)
+  })
+
+  it('rejects a tag from another project and creates no card', async () => {
+    const a = await freshProject(ctx.db)
+    const b = await freshProject(ctx.db)
+    const foreign = await createTag(ctx.db, {
+      projectId: b.id,
+      name: 'foreign',
+      color: '#22c55e'
+    })
+    await expect(
+      createCard(ctx.db, {
+        projectId: a.id,
+        title: 'cross-project tag',
+        tagIds: [foreign!.id]
+      })
+    ).rejects.toThrow()
+    expect(await listCards(ctx.db, { projectId: a.id })).toHaveLength(0)
+  })
+
+  it('creates an untagged card when tagIds is omitted', async () => {
+    const project = await freshProject(ctx.db)
+    const card = await createCard(ctx.db, {
+      projectId: project.id,
+      title: 'no tags'
+    })
+    const reloaded = await getCard(ctx.db, card.id)
+    expect(reloaded?.tags).toEqual([])
+  })
+})

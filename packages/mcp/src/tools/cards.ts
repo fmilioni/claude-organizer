@@ -232,7 +232,7 @@ export function registerCardTools(server: McpServer, db: Database) {
     'create_card',
     {
       description:
-        'Create a card in the backlog (default) or a specific sprint. `summary` (one short sentence, what the card is about — shown on the board and in list_cards) and `descriptionMd` (the full markdown body — objective, expected behavior, acceptance criteria) are BOTH REQUIRED; a blank/whitespace-only value is rejected.',
+        'Create a card in the backlog (default) or a specific sprint. `summary` (one short sentence, what the card is about — shown on the board and in list_cards) and `descriptionMd` (the full markdown body — objective, expected behavior, acceptance criteria) are BOTH REQUIRED; a blank/whitespace-only value is rejected. Pass `tagIds` to attach existing tags to the card at creation.',
       inputSchema: {
         projectId: z.string(),
         sprintId: z.string().optional(),
@@ -258,7 +258,13 @@ export function registerCardTools(server: McpServer, db: Database) {
         parentId: z
           .string()
           .optional()
-          .describe('Parent story card id (crd_xxx) to make this a sub-task.')
+          .describe('Parent story card id (crd_xxx) to make this a sub-task.'),
+        tagIds: z
+          .array(z.string())
+          .optional()
+          .describe(
+            'Existing tag ids (tag_xxx) of THIS project to attach at creation. Any unknown or cross-project id rejects the whole creation (atomic — no card is created); duplicates collapse to one. Omit for an untagged card.'
+          )
       }
     },
     async input =>
