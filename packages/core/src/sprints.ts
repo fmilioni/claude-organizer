@@ -65,8 +65,13 @@ export async function listSprints(
   )
 }
 
-export async function getActiveSprint(db: Database, projectId: string) {
-  const [row] = await db
+/**
+ * All active sprints of a project (a project may have several at once — the
+ * single-active invariant was dropped in CO-399). Ordered stably by start date
+ * then creation so the board and any consumer render them in a consistent order.
+ */
+export async function getActiveSprints(db: Database, projectId: string) {
+  return db
     .select(sprintColumns)
     .from(schema.sprints)
     .where(
@@ -76,8 +81,7 @@ export async function getActiveSprint(db: Database, projectId: string) {
         isNull(schema.sprints.archivedAt)
       )
     )
-    .limit(1)
-  return row ?? null
+    .orderBy(schema.sprints.startsAt, schema.sprints.createdAt)
 }
 
 export async function getSprint(db: Database, id: string) {
@@ -242,16 +246,8 @@ export async function startSprint(db: Database, sprintId: string) {
       .limit(1)
     if (!sprint) return null
 
-    await tx
-      .update(schema.sprints)
-      .set({ status: 'completed', updatedAt: sql`now()` })
-      .where(
-        and(
-          eq(schema.sprints.projectId, sprint.projectId),
-          eq(schema.sprints.status, 'active')
-        )
-      )
-
+    // Starting a sprint no longer touches the others — a project may have
+    // several active at once (CO-399).
     const [activated] = await tx
       .update(schema.sprints)
       .set({
@@ -276,8 +272,8 @@ export async function startSprint(db: Database, sprintId: string) {
 /**
  * Reopen a completed (or archived) sprint back to `planned` so work can resume
  * or missing cards can be added. Clears `endsAt` and unarchives it in one move.
- * Never activates — there can be only one active sprint, so reopening goes to
- * `planned` and the user starts it explicitly.
+ * Never activates — reopening goes to `planned` and the user starts it
+ * explicitly (a project may then hold several active sprints; CO-399).
  */
 export async function reopenSprint(db: Database, sprintId: string) {
   const [row] = await db
