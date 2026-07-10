@@ -19,14 +19,6 @@ const props = withDefaults(
 const claimHint = computed(() =>
   props.card.claim ? formatClaimHint(props.card.claim) : ''
 )
-
-// The multi-active board provides the sprintId → name map so a tile can show
-// which active sprint it belongs to. Absent (e.g. sprint detail) → no badge.
-const sprintNames = inject(boardSprintNamesKey, null)
-const sprintName = computed(() => {
-  const id = props.card.sprintId
-  return id ? (sprintNames?.value[id] ?? null) : null
-})
 </script>
 
 <template>
@@ -87,7 +79,7 @@ const sprintName = computed(() => {
       {{ card.summary }}
     </p>
     <div
-      v-if="card.claim || sprintName || card.tags?.length"
+      v-if="card.claim || card.tags?.length"
       class="flex flex-wrap items-center gap-1 mt-1.5"
     >
       <UTooltip v-if="card.claim" :text="claimHint">
@@ -95,15 +87,6 @@ const sprintName = computed(() => {
           <UIcon name="i-lucide-hourglass" class="size-3.5 shrink-0" />
         </span>
       </UTooltip>
-      <UBadge
-        v-if="sprintName"
-        size="xs"
-        variant="soft"
-        color="info"
-        icon="i-lucide-timer"
-      >
-        {{ sprintName }}
-      </UBadge>
       <TagBadge
         v-for="t in card.tags"
         :key="t.id"

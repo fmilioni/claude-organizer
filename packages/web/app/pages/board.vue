@@ -32,13 +32,6 @@ const { editing, saving, justSaved } = useSprintInlineEdit(
   }
 )
 
-const sprintNames = computed<Record<string, string>>(() => {
-  const m: Record<string, string> = {}
-  for (const s of activeSprints.value) m[s.id] = s.name
-  return m
-})
-provide(boardSprintNamesKey, sprintNames)
-
 // Story-collapse toggle on the board's story envelopes (persisted per project).
 provide(boardCollapseKey, useCollapsedStories(currentProjectId))
 
