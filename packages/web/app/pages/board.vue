@@ -39,6 +39,9 @@ const sprintNames = computed<Record<string, string>>(() => {
 })
 provide(boardSprintNamesKey, sprintNames)
 
+// Story-collapse toggle on the board's story envelopes (persisted per project).
+provide(boardCollapseKey, useCollapsedStories(currentProjectId))
+
 const { cards, load: loadCards } = useBoardCards(currentProjectId, activeSprints)
 const selectedTagIds = ref<string[]>([])
 // The sprint filter focuses a single active sprint by id; `all` shows every
