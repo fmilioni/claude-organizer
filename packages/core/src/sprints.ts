@@ -307,6 +307,36 @@ export async function reopenSprint(db: Database, sprintId: string) {
   return row ?? null
 }
 
+/**
+ * Move an ACTIVE sprint back to `planned` — the inverse of starting it, without
+ * completing it. The cards stay assigned (`sprintId` untouched); the sprint just
+ * stops counting as active, so it drops off the board (which shows only active
+ * sprints). Nothing is concluded: `endsAt` is left alone, and `startsAt` is
+ * preserved so restarting keeps its original start. Distinct from `reopenSprint`
+ * (completed/archived → planned, unarchives + relinks) and `completeSprint`.
+ * No-op (returns null) unless the sprint is currently active.
+ */
+export async function deactivateSprint(db: Database, sprintId: string) {
+  const [row] = await db
+    .update(schema.sprints)
+    .set({ status: 'planned', updatedAt: sql`now()` })
+    .where(
+      and(
+        eq(schema.sprints.id, sprintId),
+        eq(schema.sprints.status, 'active')
+      )
+    )
+    .returning(sprintColumns)
+  if (row) {
+    await notify(db, {
+      type: 'sprint.changed',
+      projectId: row.projectId,
+      sprintId: row.id
+    })
+  }
+  return row ?? null
+}
+
 export async function completeSprint(db: Database, sprintId: string) {
   const [row] = await db
     .update(schema.sprints)

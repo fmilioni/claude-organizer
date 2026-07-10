@@ -5,6 +5,7 @@ import {
   archiveSprint,
   completeSprint,
   createSprint,
+  deactivateSprint,
   destroySprint,
   getActiveSprints,
   listSprints,
@@ -120,6 +121,16 @@ export function registerSprintTools(server: McpServer, db: Database) {
       inputSchema: { id: z.string() }
     },
     async ({ id }) => asJson(sprintAck(await completeSprint(db, id)))
+  )
+
+  server.registerTool(
+    'deactivate_sprint',
+    {
+      description:
+        'Move an ACTIVE sprint back to `planned` (the inverse of start) WITHOUT completing it. Its cards stay assigned but drop off the board (which shows only active sprints); endsAt is not set. No-op if the sprint is not active. Use start_sprint to make it active again.',
+      inputSchema: { id: z.string() }
+    },
+    async ({ id }) => asJson(sprintAck(await deactivateSprint(db, id)))
   )
 
   server.registerTool(

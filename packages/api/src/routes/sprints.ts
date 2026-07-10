@@ -5,6 +5,7 @@ import {
   archiveSprint,
   completeSprint,
   createSprint,
+  deactivateSprint,
   destroySprint,
   getActiveSprints,
   getSprint,
@@ -60,6 +61,11 @@ export function registerSprintRoutes(app: FastifyInstance, db: Database) {
   app.post<{ Params: { id: string } }>(
     '/sprints/:id/complete',
     async req => completeSprint(db, req.params.id)
+  )
+
+  app.post<{ Params: { id: string } }>(
+    '/sprints/:id/deactivate',
+    async req => deactivateSprint(db, req.params.id)
   )
 
   app.post<{ Params: { id: string } }>(

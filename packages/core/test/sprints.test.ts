@@ -4,6 +4,7 @@ import {
   archiveSprint,
   completeSprint,
   createSprint,
+  deactivateSprint,
   getActiveSprints,
   getSprint,
   listSprints,
@@ -61,6 +62,50 @@ describe('sprint lifecycle', () => {
     expect((await getActiveSprints(ctx.db, p1.id)).map(s => s.id)).toEqual([
       s1.id
     ])
+  })
+})
+
+describe('deactivating a sprint (active → planned)', () => {
+  it('moves an active sprint back to planned without completing it', async () => {
+    const project = await freshProject(ctx.db)
+    const sprint = await createSprint(ctx.db, { projectId: project.id, name: 'D' })
+    const started = await startSprint(ctx.db, sprint.id)
+    expect(started?.status).toBe('active')
+    expect(started?.startsAt).toBeInstanceOf(Date)
+
+    const deactivated = await deactivateSprint(ctx.db, sprint.id)
+    expect(deactivated?.status).toBe('planned')
+    // Not completed: endsAt stays empty; startsAt is preserved for a restart.
+    expect(deactivated?.endsAt).toBeNull()
+    expect(deactivated?.startsAt).toBeInstanceOf(Date)
+    expect(await getActiveSprints(ctx.db, project.id)).toEqual([])
+
+    // Restarting works and keeps its original start.
+    const restarted = await startSprint(ctx.db, sprint.id)
+    expect(restarted?.status).toBe('active')
+  })
+
+  it('is a no-op on a sprint that is not active', async () => {
+    const project = await freshProject(ctx.db)
+    const sprint = await createSprint(ctx.db, { projectId: project.id, name: 'P' })
+    expect(sprint.status).toBe('planned')
+
+    expect(await deactivateSprint(ctx.db, sprint.id)).toBeNull()
+    expect((await getSprint(ctx.db, sprint.id))?.status).toBe('planned')
+  })
+
+  it('leaves the other active sprints untouched', async () => {
+    const project = await freshProject(ctx.db)
+    const s1 = await createSprint(ctx.db, { projectId: project.id, name: 'S1' })
+    const s2 = await createSprint(ctx.db, { projectId: project.id, name: 'S2' })
+    await startSprint(ctx.db, s1.id)
+    await startSprint(ctx.db, s2.id)
+
+    await deactivateSprint(ctx.db, s1.id)
+    expect((await getActiveSprints(ctx.db, project.id)).map(s => s.id)).toEqual([
+      s2.id
+    ])
+    expect((await getSprint(ctx.db, s1.id))?.status).toBe('planned')
   })
 })
 
