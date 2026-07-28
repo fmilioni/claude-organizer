@@ -19,6 +19,7 @@ import {
   restoreIntakeItem,
   restoreSprint,
   startSprint,
+  syncIntakeForCard,
   updateCard,
   updateIntakeItem
 } from '../src/index'
@@ -140,6 +141,67 @@ describe('restoring an archived demand', () => {
   it('returns null for an id that does not exist', async () => {
     expect(await restoreIntakeItem(ctx.db, 'itk_missing')).toBeNull()
   })
+
+  it('lands on pending when every card it points at is archived', async () => {
+    const project = await freshProject(ctx.db)
+    const { item, cards } = await plannedItemWithCards(project.id, ['a', 'b'])
+    for (const c of cards) await archiveCard(ctx.db, c.id)
+
+    const restored = await restoreIntakeItem(ctx.db, item.id)
+
+    expect(restored?.status).toBe('pending')
+    expect(restored?.plannedCardKeys).toBe(cards.map(c => c.key).join(','))
+  })
+
+  it('is not archived again by the next card event', async () => {
+    const project = await freshProject(ctx.db)
+    const { item, cards } = await plannedItemWithCards(project.id, ['a'])
+    await archiveCard(ctx.db, cards[0]!.id)
+    await restoreIntakeItem(ctx.db, item.id)
+
+    await syncIntakeForCard(ctx.db, project.id, cards[0]!.key)
+
+    const [row] = await ctx.db
+      .select()
+      .from(schema.intakeItems)
+      .where(eq(schema.intakeItems.id, item.id))
+    expect(row?.status).toBe('pending')
+  })
+
+  it('lands on pending when its card is alive but its sprint is archived', async () => {
+    const project = await freshProject(ctx.db)
+    const sprint = await createSprint(ctx.db, { projectId: project.id, name: 's' })
+    const card = await createCard(ctx.db, {
+      projectId: project.id,
+      title: 'in an archived sprint',
+      sprintId: sprint.id
+    })
+    const item = await createIntakeItem(ctx.db, {
+      projectId: project.id,
+      bodyMd: 'demand'
+    })
+    await markIntakePlanned(ctx.db, item.id, [card.key])
+    await archiveSprint(ctx.db, sprint.id)
+
+    const restored = await restoreIntakeItem(ctx.db, item.id)
+
+    expect(restored?.status).toBe('pending')
+  })
+
+  it('is promoted back to planned when one of its cards returns', async () => {
+    const project = await freshProject(ctx.db)
+    const { item, cards } = await plannedItemWithCards(project.id, ['a'])
+    await archiveCard(ctx.db, cards[0]!.id)
+    await restoreIntakeItem(ctx.db, item.id)
+
+    await restoreCard(ctx.db, cards[0]!.id)
+
+    const [row] = await ctx.db
+      .select()
+      .from(schema.intakeItems)
+      .where(eq(schema.intakeItems.id, item.id))
+    expect(row?.status).toBe('planned')
+  })
 })
 
 describe('intake completion derived from card status', () => {
@@ -192,6 +254,39 @@ async function findItem(projectId: string, itemId: string) {
 }
 
 describe('intake cascade on card archive/restore/destroy', () => {
+  it('survives the destroy of the last card it pointed at', async () => {
+    const project = await freshProject(ctx.db)
+    const { item, cards } = await plannedItemWithCards(project.id, ['a'])
+    await archiveCard(ctx.db, cards[0]!.id)
+    await restoreIntakeItem(ctx.db, item.id)
+
+    await destroyCard(ctx.db, cards[0]!.id)
+
+    const [row] = await ctx.db
+      .select()
+      .from(schema.intakeItems)
+      .where(eq(schema.intakeItems.id, item.id))
+    expect(row?.status).toBe('pending')
+    expect(row?.plannedCardKeys).toBeNull()
+  })
+
+  it('is not archived when a destroy leaves it with inactive keys', async () => {
+    const project = await freshProject(ctx.db)
+    const { item, cards } = await plannedItemWithCards(project.id, ['a', 'b'])
+    for (const c of cards) await archiveCard(ctx.db, c.id)
+    await restoreIntakeItem(ctx.db, item.id)
+
+    await destroyCard(ctx.db, cards[0]!.id)
+
+    const [row] = await ctx.db
+      .select()
+      .from(schema.intakeItems)
+      .where(eq(schema.intakeItems.id, item.id))
+    expect(row?.status).toBe('pending')
+    expect(row?.archivedAt).toBeNull()
+    expect(row?.plannedCardKeys).toBe(cards[1]!.key)
+  })
+
   it('archives the item when its last active card is archived, restores on undo', async () => {
     const project = await freshProject(ctx.db)
     const { item, cards } = await plannedItemWithCards(project.id, ['a', 'b'])

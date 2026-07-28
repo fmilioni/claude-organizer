@@ -112,7 +112,7 @@ export function registerIntakeTools(server: McpServer, db: Database) {
     'restore_inbox',
     {
       description:
-        'Bring an archived inbox demand back. The status it lands in is derived, not chosen: `planned` when it carries card keys, `pending` otherwise. Returns null when no demand has that id.',
+        'Bring an archived inbox demand back. The status it lands in is derived, not chosen: `planned` only while at least one card it points at is still active, `pending` otherwise (the keys are kept either way, so a demand whose cards were all archived comes back waiting to be planned again). Returns null when no demand has that id.',
       inputSchema: {
         id: z.string()
       }
